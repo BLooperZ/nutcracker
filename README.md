@@ -25,4 +25,4 @@ Available codecs:
 nutcracker.py -e FONT3.NUT.PNG 44 -f 21
 ```
 
-see more examples in cmds.txt
+see more examples in [cmds.txt](cmds.txt)
