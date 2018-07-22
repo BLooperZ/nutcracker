@@ -1,3 +1,5 @@
+#!/usr/bin/env python2
+
 import sys
 from itertools import cycle, chain, izip
 from modules.smush import encode_frames, decode_frames
