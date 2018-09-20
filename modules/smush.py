@@ -31,6 +31,39 @@ def untag(stream, force=None):
     size = struct.unpack('>I', stream.read(4))[0]
     return io.BytesIO(stream.read(size))
 
+def untag2(stream):
+    while True:
+        tag = stream.read(4)
+        if not tag:
+            break
+        size = struct.unpack('>I', stream.read(4))[0]
+        yield tag, stream.read(size)
+
+def unframe2(data):
+    stream = io.BytesIO(data)
+    frame = []
+    for tag, chunk in untag2(stream):
+        frame.append((tag, chunk))
+        if len(chunk) % 2 != 0 and stream.read(1) != '\00':
+            raise ValueError('non-zero padding between frame chunks')
+    print [fr[0] for fr in frame]
+    return frame
+
+def unframe(data):
+    stream = io.BytesIO(data)
+    frame = []
+    while True:
+        tag = stream.read(4)
+        if not tag:
+            break
+        size = struct.unpack('>I', stream.read(4))[0]
+        data = stream.read(size)
+        frame.append((tag, data))
+        if len(data) % 2 != 0 and stream.read(1) != '\00':
+            raise ValueError('non-zero padding between frame chunks')
+    print [fr[0] for fr in frame]
+    return frame
+
 def unobj(data):
     stream = io.BytesIO(data)
     stream = untag(stream, force='FOBJ')
@@ -45,15 +78,20 @@ def unobj(data):
     return width, height, decode(width, height, data), codec
 
 def read_nut_file(filename):
-    def read_chunk():
-        for _ in range(numChars):
-            yield untag(stream, force='FRME').read()
+    def read_frame():
+        for idx, (tag, frame) in enumerate(untag2(stream)):
+            if tag != 'FRME':
+                raise ValueError('tag should be FRME')
+            if idx > numChars:
+                raise ValueError('WHAT!!!!???')
+            yield frame
+        print idx
 
     with open (filename, 'rb') as fontFile:
         stream = untag(fontFile, force='ANIM')
     header = mktag('AHDR', untag(stream, force='AHDR').read())
     numChars = struct.unpack('<H', header[10:12])[0]
-    return header, numChars, read_chunk()
+    return header, numChars, read_frame()
 
 def write_nut_file(header, numChars, chars, filename):
     chars = (mktag('FRME', char) for char in chars)
@@ -68,7 +106,8 @@ def write_nut_file(header, numChars, chars, filename):
         fontFile.write(nutFile)
 
 def decode_frames(chars):
-    return (unobj(char)[:-1] for char in chars)
+    a = [unframe2(char) for char in chars]
+    exit()
 
 def encode_frames(chars, codec, force=None):
     return (mkobj(w, he, lines, codec, force=force) for w, he, lines in chars)
