@@ -5,7 +5,6 @@ import struct
 def read_le_uint16(f):
     return struct.unpack('<H', f[:2])[0]
 
-
 def unidecoder(width, height, f):
     BG = 39
 

@@ -4,7 +4,7 @@ from smush import read_smush_file, read_chunks
 from fobj import unobj, mkobj
 from ahdr import parse_header
 from codex import get_decoder
-from image import save_image
+from image import save_image, save_image_grid
 
 def cor_manager(cors):
     def parse_chunks(chunks):
@@ -38,6 +38,9 @@ def image_cor(frames, palette):
 
     save_image('chars.png', frames, palette, max_height, max_width, transparency=39)
 
+def image_cor2(frames, palette):
+    save_image_grid('chars.png', frames, palette, transparency=39)
+
 if __name__=='__main__':
     import argparse
 
@@ -63,5 +66,4 @@ if __name__=='__main__':
         parsed = parse_chunks(chunks)
         fframes += [frame for frame in parsed if frame != None]
 
-    print(fframes)
-    image_cor(fframes, header['palette'])
+    image_cor2(fframes, header['palette'])
