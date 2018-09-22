@@ -7,13 +7,15 @@ from codex import get_decoder
 from image import save_image, save_image_grid
 
 def cor_manager(cors):
-    def parse_chunks(chunks):
-        return (cors[t](chunk) for t, chunk in chunks if t in cors_map)
+    def parse_chunks(frame_idx, chunks):
+        return (cors[t](frame_idx, chunk) for t, chunk in chunks if t in cors_map)
 
     return parse_chunks
 
-def convert_fobj(datam):
+def convert_fobj(idx, datam):
     meta, data = unobj(datam)
+    # if meta['codec'] in (1, 3):
+    #     print((idx, 'FOUND'))
     width = meta['x2'] - meta['x1']
     height = meta['y2'] - meta['y1']
     decode = get_decoder(meta['codec'])
@@ -56,14 +58,20 @@ if __name__=='__main__':
 
     header, *frames = read_smush_file(args.filename)
     header = parse_header(header)
+    print(header['palette'][39])
 
     fframes = []
 
     for idx, frame in enumerate(frames):
         if idx > header['nframes']:
             raise ValueError('too many frames')
-        chunks = read_chunks(frame)
-        parsed = parse_chunks(chunks)
-        fframes += [frame for frame in parsed if frame != None]
+        chunks = list(read_chunks(frame))
+
+        # print((idx, [t for t, c in chunks]))
+
+        parsed = parse_chunks(idx, chunks)
+
+        rel = [frame for frame in parsed if frame != None]
+        fframes += [(loc, frame) for loc, frame in rel if frame != None]
 
     image_cor2(fframes, header['palette'])

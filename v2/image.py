@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from PIL import Image, TiffImagePlugin, ImageChops
+from PIL import Image
 import numpy as np
 
 def get_bg_color(row_size, f):
