@@ -55,7 +55,6 @@ if __name__=="__main__":
     #         print(frame)
 
     header, *frames = read_smush_file(args.filename)
-    # print(header)
+    print(header)
     for frame in frames:
         print(frame)
-        exit()
