@@ -18,17 +18,17 @@ def read_palette(strip):
     return palette
 
 def parse_header(header):
-    stream = io.BytesIO(header)
-    primary = primary_struct.unpack(stream.read(primary_struct.size))
-    primary = dict(zip(primary_fields, primary))
-    primary['palette'] = read_palette(stream.read(palette_struct.size))
+    with io.BytesIO(header) as stream:
+        primary = primary_struct.unpack(stream.read(primary_struct.size))
+        primary = dict(zip(primary_fields, primary))
+        primary['palette'] = read_palette(stream.read(palette_struct.size))
 
-    secondary = {}
-    if primary['version'] == 2:
-        secondary = secondary_struct.unpack(stream.read(secondary_struct.size))
-        secondary = dict(zip(secondary_fields, secondary))
-    if stream.read():
-        raise ValueError('got extra trailing data')
+        secondary = {}
+        if primary['version'] == 2:
+            secondary = secondary_struct.unpack(stream.read(secondary_struct.size))
+            secondary = dict(zip(secondary_fields, secondary))
+        if stream.read():
+            raise ValueError('got extra trailing data')
     
     return {**primary, **secondary}
 

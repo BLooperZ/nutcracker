@@ -15,8 +15,9 @@ def untag(stream):
         yield tag.decode(), data
 
 def read_chunks(data):
-    stream = io.BytesIO(data)
-    return untag(stream)
+    with io.BytesIO(data) as stream:
+        for chunk in untag(stream):
+            yield chunk
 
 def assert_tag(tag, target):
     if tag != target:
