@@ -21,7 +21,7 @@ def read_image_grid(filename):
 
     color_mode, palette = bim.palette.getdata()
     palette = palette_struct.unpack(palette)
-    palette = [palette[3*i:3*i+3] for i in range(256)]
+    palette = list(zip(*[iter(palette)]*3)) #[palette[3*i:3*i+3] for i in range(256)]
 
     for row in range(16):
         for col in range(16):

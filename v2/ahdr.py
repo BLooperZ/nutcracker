@@ -14,7 +14,7 @@ secondary_struct = Struct('<{}I'.format(len(secondary_fields)))
 
 def read_palette(strip):
     palette = palette_struct.unpack(strip)
-    palette = [palette[3*i:3*i+3] for i in range(256)]
+    palette = list(zip(*[iter(palette)]*3)) #[palette[3*i:3*i+3] for i in range(256)]
     return palette
 
 def parse_header(header):
