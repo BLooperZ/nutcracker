@@ -1,46 +1,71 @@
 #!/usr/bin/env python3
 
+from contextlib import contextmanager
 import io
 import struct
+import shutil
 
 def untag(stream):
-    while True:
-        tag = stream.read(4)
-        if not tag:
-            break
-        size = struct.unpack('>I', stream.read(4))[0]
-        data = stream.read(size)
-        if len(data) % 2 != 0 and stream.read(1) != b'\00':
-            raise ValueError('non-zero padding between chunks')
-        yield tag.decode(), data
+    tag = stream.read(4)
+    if not tag:
+        return None
+    size = struct.unpack('>I', stream.read(4))[0]
+    data = stream.read(size)
+    if len(data) % 2 != 0 and stream.read(1) != b'\00':
+        raise ValueError('non-zero padding between chunks')
+    return tag.decode(), data
 
 def read_chunks(data):
     with io.BytesIO(data) as stream:
-        for chunk in untag(stream):
+        chunks = iter(lambda: untag(stream), None)
+        for chunk in chunks:
             yield chunk
 
-def assert_tag(tag, target):
+def get_chunk_offset(stream, off):
+    stream.seek(off)
+    return untag(stream)
+
+def assert_tag(target, chunk):
+    tag, data = chunk
     if tag != target:
         raise ValueError('expected tag to be {target} but got {tag}'.format(target=target,tag=tag))
+    return data
+
+def assert_frame(chunk):
+    return assert_tag('FRME', chunk)
 
 def read_animations(filename):
     with open(filename, 'rb') as smush_file:
-        for tag, anim in untag(smush_file):
-            assert_tag(tag, 'ANIM')
-            yield read_chunks(anim)
+        anim = assert_tag('ANIM', untag(smush_file))
+        return io.BytesIO(anim)
 
-def read_frames(anim):
-    (htag, header), *frames = anim
-    assert_tag(htag, 'AHDR')
-    yield header
-    for tag, frame in frames:
-        assert_tag(tag, 'FRME')
-        yield frame
+class SmushFile:
+    def __init__(self, filename):
+        self.filename = filename
+        self._stream = read_animations(self.filename)
+        self.index = [self._stream.tell() for _ in iter(lambda: untag(self._stream), None)][:-1]
+        self.header = assert_tag('AHDR', get_chunk_offset(self._stream, 0))
 
-def read_smush_file(filename):
-    for anim in read_animations(filename):
-        # yield read_frames(anim)
-        return read_frames(anim)
+    def __enter__(self):
+        return self
+
+    # def __next__(self):
+    #     tag, frame = untag(self._stream)
+    #     assert_tag(tag, 'FRME')
+    #     return frame
+
+    def __getitem__(self, i):
+        if isinstance(i, slice):
+            return [assert_frame(get_chunk_offset(self._stream, off)) for off in self.index[i]]
+        return assert_frame(get_chunk_offset(self._stream, self.index[i]))
+
+    def __iter__(self):
+        with read_animations(self.filename) as stream:
+            for off in self.index:
+                yield assert_frame(get_chunk_offset(stream, off))
+
+    def __exit__(self, type, value, traceback):
+        return self._stream.close()
 
 if __name__=="__main__":
     import argparse
@@ -49,13 +74,12 @@ if __name__=="__main__":
     parser.add_argument('filename', help='filename to read from')
     args = parser.parse_args()
 
-    # for anim in read_smush_file(args.filename):
-    #     header, *frames = anim
-    #     print(header)
-    #     for frame in frames:
-    #         print(frame)
+    from ahdr import parse_header
+    with SmushFile(args.filename) as smush_file:
+        print(parse_header(smush_file.header))
+        # for frame in smush_file:
+        #     print(frame)
 
-    header, *frames = read_smush_file(args.filename)
-    print(header)
-    for frame in frames:
-        print(frame)
+        # print(next(smush_file))
+        print(smush_file[-1])
+        print(smush_file[-1:])

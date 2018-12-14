@@ -17,11 +17,14 @@ def read_image_grid(filename):
     # mode = bim.mode
     # print((mode))
     # if mode != 'P':
-    #     bim.convert('P')
+    #      bim.convert('P')
+
+    print(list(np.asarray(bim))[0])
 
     color_mode, palette = bim.palette.getdata()
     palette = palette_struct.unpack(palette)
     palette = list(zip(*[iter(palette)]*3)) #[palette[3*i:3*i+3] for i in range(256)]
+    print(palette)
 
     for row in range(16):
         for col in range(16):

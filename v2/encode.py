@@ -4,6 +4,21 @@ from image_reader import read_image_grid, resize_frame
 from fobj import mkobj
 from codex import get_encoder
 from smush_writer import mktag
+from smush import read_smush_file
+
+# LEGACY
+def write_nut_file(header, numChars, chars, filename):
+    import struct
+    chars = (mktag('FRME', char) for char in chars)
+
+    header = struct.pack('<H', 2) + struct.pack('<H', numChars) + header[4:]
+    header = mktag('AHDR', header)
+
+    nutFile = mktag('ANIM', header + b''.join(chars))
+
+    with open(filename, 'wb') as fontFile:
+        fontFile.write(nutFile)
+
 
 if __name__=="__main__":
     import argparse
@@ -24,6 +39,8 @@ if __name__=="__main__":
     numFrames = len(frames)
     print(numFrames)
 
+    teste = []
+
     for loc, frame in frames:
         meta = {'codec': args.fake, **loc, 'unk1': 0, 'unk2': 0}
         # print(meta)
@@ -37,3 +54,10 @@ if __name__=="__main__":
 
         fobj = mkobj(meta, encoded_frame)
         # print(mktag('FOBJ', fobj))
+
+        teste.append(mktag('FOBJ', fobj))
+
+
+    header, *_ = read_smush_file('../../../try-fonts/FONT1.NUT')
+
+    write_nut_file(header, len(teste), teste, 'FONT-NEW.NUT')

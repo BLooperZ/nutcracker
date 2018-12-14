@@ -59,5 +59,8 @@ def save_image_grid(filename, frames, palette, transparency=None):
     for idx, frame in enumerate(stack):
         bim.paste(frame, box=((idx % 16) * w, int(idx / 16) * h))
 
+    palette[39*3] = 109
+    palette[39*3+1] = 109
+    palette[39*3+1] = 109
     bim.putpalette(palette)
-    bim.save(filename, transparency=transparency)
+    bim.save(filename) #, transparency=transparency)

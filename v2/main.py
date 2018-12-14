@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from smush import read_smush_file, read_chunks
+from smush import SmushFile, read_chunks
 from fobj import unobj, mkobj
 from ahdr import parse_header
 from codex import get_decoder
@@ -56,22 +56,23 @@ if __name__=='__main__':
 
     parse_chunks = cor_manager(cors_map)
 
-    header, *frames = read_smush_file(args.filename)
-    header = parse_header(header)
-    print(header['palette'][39])
+    with SmushFile(args.filename) as smush_file:
+        # header, *frames = read_smush_file(args.filename)
+        header = parse_header(smush_file.header)
+        print(header['palette'][39])
 
-    fframes = []
+        fframes = []
 
-    for idx, frame in enumerate(frames):
-        if idx > header['nframes']:
-            raise ValueError('too many frames')
-        chunks = list(read_chunks(frame))
+        for idx, frame in enumerate(smush_file):
+            if idx > header['nframes']:
+                raise ValueError('too many frames')
+            chunks = list(read_chunks(frame))
 
-        # print((idx, [t for t, c in chunks]))
+            # print((idx, [t for t, c in chunks]))
 
-        parsed = parse_chunks(idx, chunks)
+            parsed = parse_chunks(idx, chunks)
 
-        rel = [frame for frame in parsed if frame != None]
-        fframes += [(loc, frame) for loc, frame in rel if frame != None]
+            rel = [frame for frame in parsed if frame != None]
+            fframes += [(loc, frame) for loc, frame in rel if frame != None]
 
-    image_cor2(fframes, header['palette'])
+        image_cor2(fframes, header['palette'])

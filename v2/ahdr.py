@@ -29,6 +29,4 @@ def parse_header(header):
             secondary = dict(zip(secondary_fields, secondary))
         if stream.read():
             raise ValueError('got extra trailing data')
-    
     return {**primary, **secondary}
-
