@@ -4,7 +4,8 @@ from image_reader import read_image_grid, resize_frame
 from fobj import mkobj
 from codex import get_encoder
 from smush_writer import mktag
-from smush import read_smush_file
+from smush import SmushFile
+from ahdr import parse_header
 
 # LEGACY
 def write_nut_file(header, numChars, chars, filename):
@@ -57,7 +58,8 @@ if __name__=="__main__":
 
         teste.append(mktag('FOBJ', fobj))
 
+    with SmushFile('../../../try-fonts/DIG/FONT0.NUT') as smush_file:
+        # header, *frames = read_smush_file(args.filename)
+        header = smush_file.header
 
-    header, *_ = read_smush_file('../../../try-fonts/FONT1.NUT')
-
-    write_nut_file(header, len(teste), teste, 'FONT-NEW.NUT')
+    write_nut_file(header, len(teste), teste, 'FONT0-NEW.NUT')
