@@ -2,5 +2,6 @@ tr.txt
 *.png
 *.pyc
 *.nut
+*.san
 *.xcf
 .vscode

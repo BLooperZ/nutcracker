@@ -4,12 +4,10 @@ from smush import SmushFile, read_chunks
 from fobj import unobj, mkobj
 from ahdr import parse_header
 from codex import get_decoder
-from image import save_image, save_image_grid
+from image import save_image_grid
 
-def convert_fobj(idx, datam):
+def convert_fobj(datam):
     meta, data = unobj(datam)
-    # if meta['codec'] in (1, 3):
-    #     print((idx, 'FOUND'))
     width = meta['x2'] - meta['x1']
     height = meta['y2'] - meta['y1']
     decode = get_decoder(meta['codec'])
@@ -22,7 +20,23 @@ def convert_fobj(idx, datam):
     locs = {'x1': meta['x1'], 'y1': meta['y1'], 'x2': meta['x2'], 'y2': meta['y2']}
     return locs, decode(width, height, data)
 
-if __name__=='__main__':
+def non_parser(chunk):
+    return chunk
+
+def parse_frame(frame, parsers):
+    chunks = list(read_chunks(frame))
+    return [(tag, parsers.get(tag, non_parser)(chunk)) for tag, chunk in chunks]
+
+def verify_nframes(frames, nframes):
+    for idx, frame in enumerate(frames):
+        if nframes and idx > nframes:
+            raise ValueError('too many frames')
+        yield frame
+
+def filter_chunk_once(chunks, target):
+    return next((frame for tag, frame in chunks if tag == target), None)
+
+if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(description='read smush file')
@@ -33,16 +47,18 @@ if __name__=='__main__':
         header = parse_header(smush_file.header)
         print(header['palette'][39])
 
-        for idx, frame in enumerate(smush_file):
-            if idx > header['nframes']:
-                raise ValueError('too many frames')
-            chunks = list(read_chunks(frame))
+        frames = verify_nframes(smush_file, header['nframes'])
 
-            # print((idx, [t for t, c in chunks]))
+        parsers = {
+            'FOBJ': convert_fobj
+        }
 
-            parsed = convert_fobj(idx, chunks)
+        parsed_frames = [parse_frame(frame, parsers) for frame in frames]
 
-            rel = [frame for frame in parsed if frame != None]
-            frames = [(loc, frame) for loc, frame in rel if frame != None]
+        for idx, frame in enumerate(parsed_frames):
+            print((idx, [tag for tag, chunk in frame]))
 
-        save_image_grid('chars.png', frames, header['palette'], transparency=39)
+        image_frames = [filter_chunk_once(parsed, 'FOBJ') for parsed in parsed_frames]
+        image_frames = [frame for frame in image_frames if frame != None]
+
+        save_image_grid('chars.png', image_frames, header['palette'], transparency=39)
