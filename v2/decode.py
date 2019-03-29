@@ -53,12 +53,12 @@ if __name__ == '__main__':
             'FOBJ': convert_fobj
         }
 
-        parsed_frames = [parse_frame(frame, parsers) for frame in frames]
+        parsed_frames = (parse_frame(frame, parsers) for frame in frames)
 
-        for idx, frame in enumerate(parsed_frames):
-            print((idx, [tag for tag, chunk in frame]))
+        # for idx, frame in enumerate(parsed_frames):
+        #     print((idx, [tag for tag, chunk in frame]))
 
-        image_frames = [filter_chunk_once(parsed, 'FOBJ') for parsed in parsed_frames]
+        image_frames = (filter_chunk_once(parsed, 'FOBJ') for parsed in parsed_frames)
         image_frames = [frame for frame in image_frames if frame != None]
 
         save_image_grid('chars.png', image_frames, header['palette'], transparency=39)

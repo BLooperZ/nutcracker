@@ -47,13 +47,27 @@ def decode47(width, height, f):
         if None in a:
             print('Ooof')
             return None
-        return to_matrix(width, height, out)
-    return None
+    return to_matrix(width, height, out)
+
+
+def decode37(width, height, f):
+    BG = 39
+
+    a = [b for b in f]
+    out = [BG for _ in range(width * height)]
+    if len(a) == len(out):
+        out = a
+        print('Yay')
+        if None in a:
+            print('Ooof')
+            return None
+    return to_matrix(width, height, out)
 
 decoders = {
     21: unidecoder,
     44: unidecoder,
-    47: decode47
+    47: decode47,
+    37: decode37
 }
 
 def get_decoder(codec):
