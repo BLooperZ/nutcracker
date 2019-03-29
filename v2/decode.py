@@ -4,7 +4,7 @@ from smush import SmushFile, read_chunks
 from fobj import unobj, mkobj
 from ahdr import parse_header
 from codex import get_decoder
-from image import save_image_grid
+from image import save_image_grid, save_frame_image
 
 def convert_fobj(datam):
     meta, data = unobj(datam)
@@ -53,12 +53,19 @@ if __name__ == '__main__':
             'FOBJ': convert_fobj
         }
 
+        # frames = (frame for idx, frame in enumerate(frames) if idx < 10)
         parsed_frames = (parse_frame(frame, parsers) for frame in frames)
 
         # for idx, frame in enumerate(parsed_frames):
         #     print((idx, [tag for tag, chunk in frame]))
 
         image_frames = (filter_chunk_once(parsed, 'FOBJ') for parsed in parsed_frames)
-        image_frames = [frame for frame in image_frames if frame != None]
+        image_frames = (frame for frame in image_frames if frame != None)
 
-        save_image_grid('chars.png', image_frames, header['palette'], transparency=39)
+        save_as_grid = False
+        if save_as_grid:
+            save_image_grid('chars.png', image_frames, header['palette'], transparency=39)
+        else:
+            frames_pil = save_frame_image(image_frames, header['palette'], transparency=39)
+            for idx, im in enumerate(frames_pil):
+                im.save(f'out/FRME_{idx:05d}.png')

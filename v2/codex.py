@@ -2,6 +2,8 @@
 
 import struct
 
+from codex37 import decode37
+
 # DECODE
 
 def read_le_uint16(f):
@@ -37,20 +39,6 @@ def unidecoder(width, height, f):
     return to_matrix(width, height, out)
 
 def decode47(width, height, f):
-    BG = 39
-
-    a = [b for b in f]
-    out = [BG for _ in range(width * height)]
-    if len(a) == len(out):
-        out = a
-        print('Yay')
-        if None in a:
-            print('Ooof')
-            return None
-    return to_matrix(width, height, out)
-
-
-def decode37(width, height, f):
     BG = 39
 
     a = [b for b in f]
