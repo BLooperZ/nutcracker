@@ -111,6 +111,7 @@ if __name__ == '__main__':
                     screen = convert_fobj(chunk)
                     continue
                 else:
+                    # print(f'TAG {tag} not implemented yet')
                     continue
             im = save_single_frame_image(screen)
             im.putpalette(palette)

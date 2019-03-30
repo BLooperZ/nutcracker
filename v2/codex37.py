@@ -212,17 +212,21 @@ def bomp_decode_line(src, decoded_size):
 
 def action2(delta_bufs, decoded_size, src, seq_nb, mask_flags, bw, bh, pitch, offset_table, delta_size):
     global delta_buf
+    global scene_num
+
+    print(f'SCENE {scene_num}')
+    scene_num += 1
 
     dst = delta_bufs[curtable]
     delta_buf[dst:dst+decoded_size] = bomp_decode_line(src, decoded_size)
 
     if dst > 0:
-        print(f'{frme_num}-DST')
+        # print(f'{frme_num}-DST')
         delta_buf[:dst] = [0] * dst
 
     tmp = delta_size - dst - decoded_size
     if tmp > 0:
-        print(f'{frme_num}-TMP')
+        # print(f'{frme_num}-TMP')
         delta_buf[dst + decoded_size:dst + decoded_size + tmp] = [0] * tmp
 
 def proc3_with_FDFE(out, dst, src, decoded_size, next_offs, bw, bh, pitch, offset_table):
@@ -430,6 +434,7 @@ action_switch = [
 delta_buf = None
 delta_bufs = None
 frme_num = 0
+scene_num = 0
 
 def decode37(width, height, f):
 
@@ -471,6 +476,8 @@ def decode37(width, height, f):
     decoded_size = read_le_uint32(f[4:])
     mask_flags = f[12]
     offset_table = list(maketable(pitch, f[1]))
+
+    print(f'DECODING FRAME {frme_num} USING {f[0]}, with FDFE: {mask_flags & 4}')
     # print(offset_table)
 
     # changes globals :/
