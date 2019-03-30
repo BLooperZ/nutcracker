@@ -213,9 +213,14 @@ def bomp_decode_line(src, decoded_size):
 def action2(delta_bufs, decoded_size, src, seq_nb, mask_flags, bw, bh, pitch, offset_table, delta_size):
     global delta_buf
     global scene_num
+    global scene_config
 
     print(f'SCENE {scene_num}')
+    scene_config = mask_flags
     scene_num += 1
+
+    # check if used only on first frame of sequence
+    assert seq_nb == 0
 
     dst = delta_bufs[curtable]
     delta_buf[dst:dst+decoded_size] = bomp_decode_line(src, decoded_size)
@@ -304,6 +309,8 @@ def proc3_without_FDFE(out, dst, src, decoded_size, next_offs, bw, bh, pitch, of
 def action3(delta_bufs, decoded_size, src, seq_nb, mask_flags, bw, bh, pitch, offset_table, delta_size):
     global delta_buf
     global curtable
+
+    assert mask_flags == scene_config
 
     if (seq_nb & 1) or not (mask_flags & 1):
 	    curtable ^= 1
@@ -410,6 +417,8 @@ def action4(delta_bufs, decoded_size, src, seq_nb, mask_flags, bw, bh, pitch, of
     global delta_buf
     global curtable
 
+    assert mask_flags == scene_config
+
     if (seq_nb & 1) or not (mask_flags & 1):
 	    curtable ^= 1
 
@@ -435,6 +444,7 @@ delta_buf = None
 delta_bufs = None
 frme_num = 0
 scene_num = 0
+scene_config = None
 
 def decode37(width, height, f):
 
@@ -443,8 +453,8 @@ def decode37(width, height, f):
     global last_frame
     global frme_num
 
-    width = 320
-    height = 200
+    # width = 320
+    # height = 200
 
     # with open('FIRST_FOBJ.DAT', 'wb') as aside:
     #     aside.write(f)
@@ -453,10 +463,6 @@ def decode37(width, height, f):
 
     delta_size = frame_size * 3 + 0x13600
 
-    if not delta_buf:
-        # print('HERE1')
-        delta_buf = [0 for _ in range(delta_size)]
-        delta_bufs = [0x4D80, 0xE880 + frame_size]
     # else:
     #     print('HERE2')
         # print(delta_buf[delta_bufs[curtable]:delta_bufs[curtable]+frame_size])
@@ -473,18 +479,26 @@ def decode37(width, height, f):
     pitch = bw * 4
 
     seq_nb = read_le_uint16(f[2:])
+
+    if not seq_nb:
+        # print('HERE1')
+        delta_buf = [0 for _ in range(delta_size)]
+        delta_bufs = [0x4D80, 0xE880 + frame_size]
+
     decoded_size = read_le_uint32(f[4:])
     mask_flags = f[12]
     offset_table = list(maketable(pitch, f[1]))
 
-    print(f'DECODING FRAME {frme_num} USING {f[0]}, with FDFE: {mask_flags & 4}')
     # print(offset_table)
 
     # changes globals :/
     action_switch[f[0]](delta_bufs, decoded_size, f[16:], seq_nb, mask_flags, bw, bh, pitch, offset_table, delta_size)
+    
+    print(f'DECODED FRAME {frme_num}: SEQUENCE: {seq_nb}: USING {f[0]}, with FDFE: {mask_flags & 4}')
 
     dst = delta_bufs[curtable]
     out = delta_buf[dst:dst+frame_size]
     frme_num += 1
 
+    # return to_matrix(width, len(delta_buf) // width, delta_buf)
     return to_matrix(width, height, out)

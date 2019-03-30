@@ -105,7 +105,7 @@ if __name__ == '__main__':
 
                         print(f'{idx} - XPAL 6 {chunk}')
                         palette = [delta_color(palette[i], delta_pal[i]) for i in range(0x300)]
-                        print(f'NEW PALETTE: {palette}')
+                        # print(f'NEW PALETTE: {palette}')
 
                 elif tag == 'FOBJ':
                     screen = convert_fobj(chunk)
@@ -114,5 +114,6 @@ if __name__ == '__main__':
                     # print(f'TAG {tag} not implemented yet')
                     continue
             im = save_single_frame_image(screen)
+            im = im.crop(box=(0,0,320,200))
             im.putpalette(palette)
             im.save(f'out/FRME_{idx:05d}.png')           
