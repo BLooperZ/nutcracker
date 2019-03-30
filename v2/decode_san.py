@@ -6,8 +6,13 @@ from ahdr import parse_header
 from codex import get_decoder
 from image import save_single_frame_image
 
-
 import struct
+from functools import partial
+
+def clip(lower, upper, value):
+    return lower if value < lower else upper if value > upper else value
+
+clip_byte = partial(clip, 0, 255)
 
 def convert_fobj(datam):
     meta, data = unobj(datam)
@@ -40,10 +45,7 @@ def filter_chunk_once(chunks, target):
     return next((frame for tag, frame in chunks if tag == target), None)
 
 def delta_color(org_color, delta_color):
-    t = (org_color * 129 + delta_color) // 128
-    t = max(0, t)
-    t = min(255, t)
-    return t
+    return clip_byte((org_color * 129 + delta_color) // 128)
 
 if __name__ == '__main__':
     import argparse
