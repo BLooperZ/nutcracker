@@ -173,8 +173,8 @@ def maketable(pitch, index):
         yield maketable_bytes[j + 1] * pitch + maketable_bytes[j]
 
 def print_nothing(code):
-    def func(delta_bufs, decoded_size, f):
-        # print(f'nothing {code}')
+    def func(*args):
+        print(f'nothing {code}')
         return None
     return func
 
@@ -190,7 +190,7 @@ def bomp_decode_line(src, decoded_size):
     sidx = 0
     didx = 0
 
-    out = [39 for _ in range(decoded_size)]
+    out = [0 for _ in range(decoded_size)]
 
     while ln > 0:
         code = src[sidx]
@@ -210,38 +210,254 @@ def bomp_decode_line(src, decoded_size):
     
     return out
 
-def action2(delta_bufs, decoded_size, f):
-    # print('action 2!')
-    delta_bufs[curtable] = bomp_decode_line(f[16:], decoded_size)
-    # if ((_deltaBufs[_curtable] - _deltaBuf) > 0):
-    #     memset(_deltaBuf, 0, _deltaBufs[_curtable] - _deltaBuf)
-    # tmp = (_deltaBuf + _deltaSize) - _deltaBufs[_curtable] - decoded_size
-    # if (tmp > 0):
-    #     memset(_deltaBufs[_curtable] + decoded_size, 0, tmp)
-    # print(delta_bufs[curtable])
-    return delta_bufs[curtable]
+def action2(delta_bufs, decoded_size, src, seq_nb, mask_flags, bw, bh, pitch, offset_table, delta_size):
+    global delta_buf
 
+    dst = delta_bufs[curtable]
+    delta_buf[dst:dst+decoded_size] = bomp_decode_line(src, decoded_size)
+
+    if dst > 0:
+        print(f'{frme_num}-DST')
+        delta_buf[:dst] = [0] * dst
+
+    tmp = delta_size - dst - decoded_size
+    if tmp > 0:
+        print(f'{frme_num}-TMP')
+        delta_buf[dst + decoded_size:dst + decoded_size + tmp] = [0] * tmp
+
+def proc3_with_FDFE(out, dst, src, decoded_size, next_offs, bw, bh, pitch, offset_table):
+
+    sidx = 0
+    didx = dst
+
+    # had_fdfe = False
+
+    for i in range(bh):
+        for j in range(bw):
+            code = src[sidx]
+            sidx += 1
+            if code == 0xFD:
+                t = src[sidx]
+                sidx += 1
+                tmax = 2 ** 32
+                t += ((t << 8) % tmax) + ((t << 16) % tmax) + ((t << 24) % tmax)
+                for x in range(4):
+                    dpp = didx + pitch * x
+                    out[dpp:dpp + 4] = struct.pack('<I', t)
+                # had_fdfe = True
+            elif code == 0xFE:
+                for x in range(4):
+                    t = src[sidx]
+                    sidx += 1
+                    tmax = 2 ** 32
+                    t += ((t << 8) % tmax) + ((t << 16) % tmax) + ((t << 24) % tmax)
+                    dpp = didx + pitch * x
+                    out[dpp:dpp + 4] = struct.pack('<I', t)
+                # had_fdfe = True
+            elif code == 0xFF:
+                for x in range(4):
+                    dpp = didx + pitch * x
+                    out[dpp:dpp + 4] = src[sidx:sidx + 4]
+                    sidx += 4
+            else:
+                didx2 = didx + offset_table[code] + next_offs
+                for x in range(4):
+                    dpp = didx + pitch * x
+                    spp = didx2 + pitch * x
+                    out[dpp:dpp + 4] = out[spp:spp + 4]
+            didx += 4
+        didx += pitch * 3
+    # if not had_fdfe:
+    #     print(f'flag raised: no FDFE found in proc3_with_FDFE')
+    return out[dst:]
+
+def proc3_without_FDFE(out, dst, src, decoded_size, next_offs, bw, bh, pitch, offset_table):
+
+    sidx = 0
+    didx = dst
+
+    for i in range(bh):
+        for j in range(bw):
+            code = src[sidx]
+            # if code in [0xFD, 0xFE]:
+            #     print(f'flag raised: code {code} in proc3_without_FDFE')
+            sidx += 1
+            if code == 0xFF:
+                for x in range(4):
+                    dpp = didx + pitch * x
+                    out[dpp:dpp + 4] = src[sidx:sidx + 4]
+                    sidx += 4
+            else:
+                didx2 = didx + offset_table[code] + next_offs
+                for x in range(4):
+                    dpp = didx + pitch * x
+                    spp = didx2 + pitch * x
+                    out[dpp:dpp + 4] = out[spp:spp + 4]
+            didx += 4
+        didx += pitch * 3
+    return out[dst:]
+
+def action3(delta_bufs, decoded_size, src, seq_nb, mask_flags, bw, bh, pitch, offset_table, delta_size):
+    global delta_buf
+    global curtable
+
+    if (seq_nb & 1) or not (mask_flags & 1):
+	    curtable ^= 1
+
+    dst = delta_bufs[curtable]
+
+    proc3 = proc3_with_FDFE if (mask_flags & 4) != 0 else proc3_without_FDFE
+    delta_buf[dst:] = proc3(
+        delta_buf, dst,
+        src, decoded_size,
+        delta_bufs[curtable ^ 1] - delta_bufs[curtable], bw, bh,
+        pitch, offset_table
+    )
+
+def proc4_without_FDFE(out, dst, src, decoded_size, next_offs, bw, bh, pitch, offset_table):
+
+    sidx = 0
+    didx = dst
+    l = 0
+
+    for i in range(bh):
+        for j in range(bw):
+            if not l:
+                code = src[sidx]
+                # if code in [0xFD, 0xFE]:
+                #     print(f'flag raised: code {code} in proc4_without_FDFE')
+                sidx += 1
+            if l == 0 and code == 0xFF:
+                for x in range(4):
+                    dpp = didx + pitch * x
+                    out[dpp:dpp + 4] = src[sidx:sidx + 4]
+                    sidx += 4
+            else:
+                if l == 0 and code == 0x00:
+                    l = src[sidx]
+                    sidx += 1
+                elif l != 0:
+                    l -= 1
+                didx2 = didx + offset_table[code] + next_offs
+                for x in range(4):
+                    dpp = didx + pitch * x
+                    spp = didx2 + pitch * x
+                    out[dpp:dpp + 4] = out[spp:spp + 4]
+            didx += 4
+        didx += pitch * 3
+    return out[dst:]
+
+
+def proc4_with_FDFE(out, dst, src, decoded_size, next_offs, bw, bh, pitch, offset_table):
+
+    sidx = 0
+    didx = dst
+    l = 0
+
+    # had_fdfe = False
+
+    for i in range(bh):
+        for j in range(bw):
+            if not l:
+                code = src[sidx]
+                sidx += 1
+            if l == 0 and code == 0xFD:
+                t = src[sidx]
+                sidx += 1
+                tmax = 2 ** 32
+                t += ((t << 8) % tmax) + ((t << 16) % tmax) + ((t << 24) % tmax)
+                for x in range(4):
+                    dpp = didx + pitch * x
+                    out[dpp:dpp + 4] = struct.pack('<I', t)
+                # had_fdfe = True
+            elif l == 0 and code == 0xFE:
+                for x in range(4):
+                    t = src[sidx]
+                    sidx += 1
+                    tmax = 2 ** 32
+                    t += ((t << 8) % tmax) + ((t << 16) % tmax) + ((t << 24) % tmax)
+                    dpp = didx + pitch * x
+                    out[dpp:dpp + 4] = struct.pack('<I', t)
+                # had_fdfe = True
+            elif l == 0 and code == 0xFF:
+                for x in range(4):
+                    dpp = didx + pitch * x
+                    out[dpp:dpp + 4] = src[sidx:sidx + 4]
+                    sidx += 4
+            else:
+                if l == 0 and code == 0x00:
+                    l = src[sidx]
+                    sidx += 1
+                elif l != 0:
+                    l -= 1
+                didx2 = didx + offset_table[code] + next_offs
+                for x in range(4):
+                    dpp = didx + pitch * x
+                    spp = didx2 + pitch * x
+                    out[dpp:dpp + 4] = out[spp:spp + 4]
+            didx += 4
+        didx += pitch * 3
+    
+    # if not had_fdfe:
+    #     print(f'flag raised: no FDFE found in proc4_with_FDFE')
+    return out[dst:]
+
+def action4(delta_bufs, decoded_size, src, seq_nb, mask_flags, bw, bh, pitch, offset_table, delta_size):
+    global delta_buf
+    global curtable
+
+    if (seq_nb & 1) or not (mask_flags & 1):
+	    curtable ^= 1
+
+    dst = delta_bufs[curtable]
+
+    proc4 = proc4_with_FDFE if (mask_flags & 4) != 0 else proc4_without_FDFE
+    delta_buf[dst:] = proc4(
+        delta_buf, dst,
+        src, decoded_size,
+        delta_bufs[curtable ^ 1] - delta_bufs[curtable], bw, bh,
+        pitch, offset_table
+    )
 
 action_switch = [
     print_nothing(0),
     print_nothing(1),
     action2,
-    print_nothing(3),
-    print_nothing(4)
+    action3,
+    action4
 ]
 
-def decode37(width, height, f):
-    BG = 39
+delta_buf = None
+delta_bufs = None
+frme_num = 0
 
-    a = [b for b in f]
-    out = [BG for _ in range(width * height)]
+def decode37(width, height, f):
+
+    global delta_buf
+    global delta_bufs
+    global last_frame
+    global frme_num
+
+    width = 320
+    height = 200
 
     # with open('FIRST_FOBJ.DAT', 'wb') as aside:
     #     aside.write(f)
 
     frame_size = width * height
-    deltaSize = frame_size * 3 + 0x13600
-    delta_bufs = [0x4D80, 0xE880 + frame_size]
+
+    delta_size = frame_size * 3 + 0x13600
+
+    if not delta_buf:
+        # print('HERE1')
+        delta_buf = [0 for _ in range(delta_size)]
+        delta_bufs = [0x4D80, 0xE880 + frame_size]
+    # else:
+    #     print('HERE2')
+        # print(delta_buf[delta_bufs[curtable]:delta_bufs[curtable]+frame_size])
+
+
+    # print(delta_bufs)
     # _prevSeqNb = 0;
     # _tableLastPitch = -1;
     # _tableLastIndex = -1;
@@ -257,15 +473,11 @@ def decode37(width, height, f):
     offset_table = list(maketable(pitch, f[1]))
     # print(offset_table)
 
-    out2 = action_switch[f[0]](delta_bufs, decoded_size, f)
+    # changes globals :/
+    action_switch[f[0]](delta_bufs, decoded_size, f[16:], seq_nb, mask_flags, bw, bh, pitch, offset_table, delta_size)
 
-    out = out2 if out2 else out
-    # exit(0)
+    dst = delta_bufs[curtable]
+    out = delta_buf[dst:dst+frame_size]
+    frme_num += 1
 
-    if len(a) == len(out):
-        out = a
-        print('Yay')
-        if None in a:
-            print('Ooof')
-            return None
     return to_matrix(width, height, out)

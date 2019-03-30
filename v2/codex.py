@@ -30,8 +30,7 @@ def unidecoder(width, height, f):
             lens -= w
             if lens < 0:
                 w += lens
-            for i in range(w):
-                out[dst+i] = struct.unpack('<B', f[src + i:src + i + 1])[0]
+            out[dst:dst + w] = f[src:src + w]
             dst += w
             src += w
         dst = dstPtrNext

@@ -46,6 +46,7 @@ if __name__ == '__main__':
     with SmushFile(args.filename) as smush_file:
         header = parse_header(smush_file.header)
         print(header['palette'][39])
+        palette = header['palette']
 
         frames = verify_nframes(smush_file, header['nframes'])
 
@@ -53,7 +54,7 @@ if __name__ == '__main__':
             'FOBJ': convert_fobj
         }
 
-        # frames = (frame for idx, frame in enumerate(frames) if idx < 10)
+        frames = (frame for idx, frame in enumerate(frames) if 940 > idx)
         parsed_frames = (parse_frame(frame, parsers) for frame in frames)
 
         # for idx, frame in enumerate(parsed_frames):
@@ -62,10 +63,18 @@ if __name__ == '__main__':
         image_frames = (filter_chunk_once(parsed, 'FOBJ') for parsed in parsed_frames)
         image_frames = (frame for frame in image_frames if frame != None)
 
-        save_as_grid = False
+        save_as_grid = True
         if save_as_grid:
-            save_image_grid('chars.png', image_frames, header['palette'], transparency=39)
+            save_image_grid('chars.png', image_frames, palette, transparency=39)
         else:
-            frames_pil = save_frame_image(image_frames, header['palette'], transparency=39)
+            frames_pil = save_frame_image(image_frames)
+
+            palette = [x for l in palette for x in l]
+            palette[39*3] = 109
+            palette[39*3+1] = 109
+            palette[39*3+1] = 109
+
             for idx, im in enumerate(frames_pil):
+                im.putpalette(palette)
+                print(idx)
                 im.save(f'out/FRME_{idx:05d}.png')

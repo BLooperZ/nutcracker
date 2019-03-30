@@ -2,6 +2,7 @@
 
 from PIL import Image
 import numpy as np
+from operator import itemgetter
 
 def get_bg_color(row_size, f):
     BGS = [5, 4]
@@ -11,13 +12,17 @@ def get_bg_color(row_size, f):
     return get_bg
 
 def convert_to_pil_image(frame):
-    npp = np.array(frame, dtype=np.uint8)
-    im = Image.fromarray(npp, mode='P')
-    return im
+    try:
+        npp = np.array(frame, dtype=np.uint8)
+        im = Image.fromarray(npp, mode='P')
+        return im
+    except Exception as e:
+        print(frame)
 
 def resize_pil_image(w, h, bg, im, loc):
     nbase = convert_to_pil_image([[bg] * w] * h)
-    nbase.paste(im, box=(loc['x1'], loc['y1'], loc['x2'], loc['y2']))
+    # nbase.paste(im, box=itemgetter('x1', 'y1', 'x2', 'y2')(loc))
+    nbase.paste(im, box=itemgetter('x1', 'y1')(loc))
     return nbase
 
 def save_image(filename, frames, palette, h, w, transparency=None):
@@ -66,8 +71,7 @@ def save_image_grid(filename, frames, palette, transparency=None):
     bim.putpalette(palette)
     bim.save(filename) #, transparency=transparency)
 
-def save_frame_image(frames, palette, transparency=None):
-    palette = [x for l in palette for x in l]
+def save_frame_image(frames):
 
     locs, frames = zip(*frames)
     im_frames = (convert_to_pil_image(frame) for frame in frames)
@@ -75,16 +79,33 @@ def save_frame_image(frames, palette, transparency=None):
     get_bg = get_bg_color(1, lambda idx: idx + int(idx))
 
     locs = list(locs)
-    for loc in locs:
-        print(f"x1: {loc['x1']}, x2: {loc['x2']}")
+    for idx, loc in enumerate(locs):
+        print(f"FRAME {idx} - x1: {loc['x1']}, x2: {loc['x2']}")
+
     w = max(loc['x1'] + loc['x2'] for loc in locs)
     h = max(loc['y1'] + loc['y2'] for loc in locs)
 
+    w = next(loc['x1'] + loc['x2'] for loc in locs)
+    h = next(loc['y1'] + loc['y2'] for loc in locs)
+    print((w, h))
+
     stack = (resize_pil_image(w, h, get_bg(idx), frame, loc) for idx, (frame, loc) in enumerate(zip(im_frames, locs)))
 
-    palette[39*3] = 109
-    palette[39*3+1] = 109
-    palette[39*3+1] = 109
     for frame in stack:
-        frame.putpalette(palette)
         yield frame
+
+def save_single_frame_image(frame):
+
+    loc, frame = frame
+    return convert_to_pil_image(frame)
+    # idx = 0
+
+    # get_bg = get_bg_color(1, lambda idx: idx + int(idx))
+
+    # w = loc['x1'] + loc['x2']
+    # h = loc['y1'] + loc['y2']
+
+    # w = 320
+    # h = 200
+
+    # return resize_pil_image(w, h, get_bg(idx), frame, loc)
