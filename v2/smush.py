@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
-from contextlib import contextmanager
 import io
 import struct
-import shutil
+
+from contextlib import contextmanager
+from functools import partial
 
 def untag(stream):
     tag = stream.read(4)
@@ -31,8 +32,7 @@ def assert_tag(target, chunk):
         raise ValueError('expected tag to be {target} but got {tag}'.format(target=target,tag=tag))
     return data
 
-def assert_frame(chunk):
-    return assert_tag('FRME', chunk)
+assert_frame = partial(assert_tag, 'FRME')
 
 def read_animations(filename):
     with open(filename, 'rb') as smush_file:

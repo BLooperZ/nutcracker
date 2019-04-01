@@ -25,6 +25,8 @@ def convert_fobj(datam):
     if meta['x1'] != 0 or meta['y1'] != 0:
         print('TELL ME')
 
+    print(meta)
+
     locs = {'x1': meta['x1'], 'y1': meta['y1'], 'x2': meta['x2'], 'y2': meta['y2']}
     return locs, decode(width, height, data)
 
