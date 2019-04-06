@@ -20,6 +20,7 @@ def convert_fobj(datam):
     height = meta['y2'] - meta['y1']
     decode = get_decoder(meta['codec'])
     if decode == NotImplemented:
+        print(f"Codec not implemented: {meta['codec']}")
         return None
 
     if meta['x1'] != 0 or meta['y1'] != 0:
@@ -116,6 +117,6 @@ if __name__ == '__main__':
                     # print(f'TAG {tag} not implemented yet')
                     continue
             im = save_single_frame_image(screen)
-            im = im.crop(box=(0,0,320,200))
+            # im = im.crop(box=(0,0,320,200))
             im.putpalette(palette)
             im.save(f'out/FRME_{idx:05d}.png')           
