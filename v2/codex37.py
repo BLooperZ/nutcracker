@@ -471,22 +471,27 @@ def decode37(width, height, f):
 
     # print(f[1], f[12], f[8:10])
 
+    size = 0
+
     act = f[0]
     if act & 5:
         assert seq_nb != 0
         assert mask_flags == scene_config
         if (seq_nb & 1) or not (mask_flags & 1):
             curtable ^= 1
+        size = frame_size
     else:
         scene_num += 1
         scene_config = mask_flags
         assert seq_nb == 0
+        # TODO: check if ok to assign frame_size instead
+        size = decoded_size
         # assert decoded_size == frame_size, f'{decoded_size} != {frame_size}'
 
     dst = delta_bufs[curtable]
     ref = delta_bufs[1 - curtable]
 
-    delta_buf[dst:dst+frame_size] = action_switch[act](frame_size, f[16:], delta_buf[ref:ref+frame_size], mask_flags, bw, bh, pitch, offset_table)
+    delta_buf[dst:dst+size] = action_switch[act](size, f[16:], delta_buf[ref:ref+size], mask_flags, bw, bh, pitch, offset_table)
 
     print(f'DECODED FRAME {frme_num}: SEQUENCE: {seq_nb}: USING {f[0]}, with FDFE: {mask_flags & 4}')
 
