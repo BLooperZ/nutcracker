@@ -184,10 +184,10 @@ def print_nothing(code):
         return None
     return func
 
-def action2(decoded_size, src, ref, mask_flags, bw, bh, pitch, offset_table):
+def action2(decoded_size, src, delta_buf, ref, mask_flags, bw, bh, pitch, offset_table):
     return bomb.decode_line(src, decoded_size)
 
-def proc3_with_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
+def proc3_with_FDFE(decoded_size, src, next_offs, ref, bw, bh, pitch, offset_table):
 
     sidx = 0
     didx = 0
@@ -227,7 +227,7 @@ def proc3_with_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
             else:
                 for x in range(4):
                     dpp = didx + pitch * x
-                    spp = dpp + offset_table[code]
+                    spp = dpp + ref + offset_table[code]
                     out[dpp:dpp + 4] = next_offs[spp:spp + 4]
             didx += 4
         didx += pitch * 3
@@ -236,7 +236,7 @@ def proc3_with_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
     assert len(out) == decoded_size, (len(out), decoded_size)
     return out
 
-def proc3_without_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
+def proc3_without_FDFE(decoded_size, src, next_offs, ref, bw, bh, pitch, offset_table):
 
     sidx = 0
     didx = 0
@@ -258,10 +258,10 @@ def proc3_without_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table
             else:
                 for x in range(4):
                     dpp = didx + pitch * x
-                    spp = dpp + offset_table[code]
-                    # if spp < 0 or spp > decoded_size:
-                    #     print(spp)
-                    #     exit(1)
+                    spp = dpp + ref + offset_table[code]
+                    if spp < ref or spp > ref + decoded_size:
+                        print(spp - decoded_size, dpp)
+                        # exit(1)
                     out[dpp:dpp + 4] = next_offs[spp:spp + 4] #or b'\0\0\0\0'
             didx += 4
         didx += pitch * 3
@@ -269,11 +269,11 @@ def proc3_without_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table
     assert len(out) == decoded_size, (len(out), decoded_size)
     return out
 
-def action3(decoded_size, src, ref, mask_flags, bw, bh, pitch, offset_table):
+def action3(decoded_size, src, delta_buf, ref, mask_flags, bw, bh, pitch, offset_table):
     proc3 = proc3_with_FDFE if (mask_flags & 4) != 0 else proc3_without_FDFE
-    return proc3(decoded_size, src, ref, bw, bh, pitch, offset_table)
+    return proc3(decoded_size, src, delta_buf, ref, bw, bh, pitch, offset_table)
 
-def proc4_without_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
+def proc4_without_FDFE(decoded_size, src, next_offs, ref, bw, bh, pitch, offset_table):
 
     sidx = 0
     didx = 0
@@ -301,7 +301,7 @@ def proc4_without_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table
                     l -= 1
                 for x in range(4):
                     dpp = didx + pitch * x
-                    spp = dpp + offset_table[code]
+                    spp = dpp + ref + offset_table[code]
                     out[dpp:dpp + 4] = next_offs[spp:spp + 4]
             didx += 4
         didx += pitch * 3
@@ -309,7 +309,7 @@ def proc4_without_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table
     return out
 
 
-def proc4_with_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
+def proc4_with_FDFE(decoded_size, src, next_offs, ref, bw, bh, pitch, offset_table):
 
     sidx = 0
     didx = 0
@@ -355,7 +355,7 @@ def proc4_with_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
                     l -= 1
                 for x in range(4):
                     dpp = didx + pitch * x
-                    spp = dpp + offset_table[code]
+                    spp = dpp + ref + offset_table[code]
                     out[dpp:dpp + 4] = next_offs[spp:spp + 4]
             didx += 4
         didx += pitch * 3
@@ -365,12 +365,12 @@ def proc4_with_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
     assert len(out) == decoded_size
     return out
 
-def action4(decoded_size, src, ref, mask_flags, bw, bh, pitch, offset_table):
+def action4(decoded_size, src, delta_buf, ref, mask_flags, bw, bh, pitch, offset_table):
     proc4 = proc4_with_FDFE if (mask_flags & 4) != 0 else proc4_without_FDFE
-    return proc4(decoded_size, src, ref, bw, bh, pitch, offset_table)
+    return proc4(decoded_size, src, delta_buf, ref, bw, bh, pitch, offset_table)
 
 
-def proc1(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
+def proc1(decoded_size, src, next_offs, ref, bw, bh, pitch, offset_table):
 
     sidx = 0
     didx = 0
@@ -416,7 +416,7 @@ def proc1(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
                     continue
             for x in range(4):
                 dpp = didx + pitch * x
-                spp = dpp + offset_table[code]
+                spp = dpp + ref + offset_table[code]
                 out[dpp:dpp + 4] = next_offs[spp:spp + 4]
             didx += 4
             ln -= 1
@@ -424,11 +424,11 @@ def proc1(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
     assert len(out) == decoded_size
     return out
 
-def action1(decoded_size, src, ref, mask_flags, bw, bh, pitch, offset_table):
+def action1(decoded_size, src, delta_buf, ref, mask_flags, bw, bh, pitch, offset_table):
     return proc1(decoded_size, src, ref, bw, bh, pitch, offset_table)
 
 
-def action0(decoded_size, src, ref, mask_flags, bw, bh, pitch, offset_table):
+def action0(decoded_size, src, delta_buf, ref, mask_flags, bw, bh, pitch, offset_table):
     return src[:decoded_size]
 
 
@@ -501,7 +501,7 @@ def decode37(width, height, f):
     ref = delta_bufs[1 - curtable]
 
 
-    mid = action_switch[act](size, f[16:], delta_buf[ref:ref+frame_size], mask_flags, bw, bh, pitch, offset_table)
+    mid = action_switch[act](size, f[16:], delta_buf, ref, mask_flags, bw, bh, pitch, offset_table)
     # assert len(mid) == size, (len(mid), size, decoded_size, frame_size)
     delta_buf[dst:dst+size] = mid # + [0] * (size - len(mid))
 
