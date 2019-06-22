@@ -493,6 +493,7 @@ def decode37(width, height, f):
         scene_num += 1
         scene_config = mask_flags
         assert seq_nb == 0
+        print('=====================', f[:16])
         # TODO: check if ok to assign frame_size instead
         size = decoded_size
         # assert decoded_size == frame_size, f'{decoded_size} != {frame_size}'
@@ -502,8 +503,8 @@ def decode37(width, height, f):
 
 
     mid = action_switch[act](size, f[16:], delta_buf, ref, mask_flags, bw, bh, pitch, offset_table)
-    # assert len(mid) == size, (len(mid), size, decoded_size, frame_size)
-    delta_buf[dst:dst+size] = mid # + [0] * (size - len(mid))
+    assert len(mid) == size, (len(mid), size, decoded_size, frame_size)
+    delta_buf[dst:dst+size] = mid
 
     print(f'DECODED FRAME {frme_num}: SEQUENCE: {seq_nb}: USING {f[0]}, with FDFE: {mask_flags & 4}')
 
@@ -516,5 +517,14 @@ def decode37(width, height, f):
 
 
 
-def fake_encode37(width, height, out):
-    return b'\0' * 12 + struct.pack('<H', width * height) + b'\0\0' + out
+def fake_encode37(out):
+
+    width = len(out[0])
+    height = len(out)
+    print(width, height)
+    encoding = b'\0\1'
+    seq_nb = b'\0\0'
+    decoded_size = struct.pack('<I', width * height)
+    unknown = b'\0\0\0'
+    mask_flags = b'\1'
+    return encoding + seq_nb + decoded_size + unknown + mask_flags + b'\0\0\0' + b''.join(out)

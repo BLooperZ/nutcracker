@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
+from PIL import Image
+import numpy as np
 
 import smush
 from fobj import unobj, mkobj
 from ahdr import parse_header
-from codex import get_decoder
+from codex import get_decoder, get_encoder
 from image import save_single_frame_image
+from smush_writer import mktag
 
 import struct
 from functools import partial
@@ -59,9 +62,9 @@ if __name__ == '__main__':
 
     with smush.open(args.filename) as smush_file:
         header = parse_header(smush_file.header)
-        print(header['palette'][39])
+        # print(header['palette'][39])
 
-        palette = header['palette']
+        # palette = header['palette']
 
         frames = verify_nframes(smush_file, header['nframes'])
         frames = (list(smush.read_chunks(frame)) for frame in frames)
@@ -80,23 +83,40 @@ if __name__ == '__main__':
         # image_frames, pal_frames = zip(*image_frames)
         # frames_pil = save_frame_image(image_frames)
 
-        palette = [x for l in palette for x in l]
-        screen = []
+        # palette = [x for l in palette for x in l]
+        # screen = []
 
-        delta_pal = []
+        # delta_pal = []
+
+        chars = []
+
+        def get_frame_image(idx):
+            im = Image.open(f'out/FRME_{idx:05d}.png')
+            return list(np.asarray(im))
+
+        def encode_fake(image):
+            encode = get_encoder(37)
+            loc = {'x1': 0, 'y1': 0, 'x2': len(image[0]), 'y2': len(image)}
+            meta = {'codec': 37, **loc, 'unk1': 0, 'unk2': 0}
+            return mkobj(meta, encode(image))
 
         for idx, frame in enumerate(frames):
             print(f'{idx} - {[tag for tag, _ in frame]}')
             fdata = b''
             for tag, chunk in frame:
                 if tag == 'FOBJ':
-                    image = get_frame_image()
+                    image = get_frame_image(idx)
                     fdata += mktag('FOBJ', encode_fake(image))
                     continue
                 else:
                     fdata += mktag(tag, chunk)
                     continue
-            im = save_single_frame_image(screen)
-            # im = im.crop(box=(0,0,320,200))
-            im.putpalette(palette)
-            im.save(f'out/FRME_{idx:05d}.png')           
+
+            chars.append(mktag('FRME', fdata))
+            # im = save_single_frame_image(screen)
+            # # im = im.crop(box=(0,0,320,200))
+            # im.putpalette(palette)
+            # im.save(f'out/FRME_{idx:05d}.png')
+        with open('NEW-VIDEO.SAN', 'wb') as output_file:
+            header = mktag('AHDR', smush_file.header)
+            output_file.write(mktag('ANIM', header + b''.join(chars)))
