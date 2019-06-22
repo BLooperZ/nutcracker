@@ -2,7 +2,8 @@
 
 import struct
 
-from codex37 import decode37
+from codex37 import fake_encode37, decode37
+# from codex37_old import decode37
 
 # DECODE
 
@@ -49,6 +50,9 @@ def decode47(width, height, f):
             print('Ooof')
             return None
     return to_matrix(width, height, out)
+
+def unidecoder_factory(width, height):
+    return unidecoder
 
 decoders = {
     21: unidecoder,
@@ -129,7 +133,8 @@ def codec21(width, height, out):
 
 encoders = {
     21: codec21,
-    44: codec44
+    44: codec44,
+    37: fake_encode37
 }
 
 def get_encoder(codec):

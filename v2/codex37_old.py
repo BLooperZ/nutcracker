@@ -184,18 +184,36 @@ def print_nothing(code):
         return None
     return func
 
-def action2(decoded_size, src, ref, mask_flags, bw, bh, pitch, offset_table):
-    return bomb.decode_line(src, decoded_size)
+curtable = 0
 
-def proc3_with_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
+def action2(delta_bufs, decoded_size, src, seq_nb, mask_flags, bw, bh, pitch, offset_table):
+    global delta_buf
+    global scene_num
+    global scene_config
+
+    print(f'SCENE {scene_num}')
+    scene_config = mask_flags
+    scene_num += 1
+
+    # check if used only on first frame of sequence
+    assert seq_nb == 0
+
+    dst = delta_bufs[curtable]
+    delta_buf[dst:dst+decoded_size] = bomb.decode_line(src, decoded_size)
+
+    assert dst > 0
+    for i in delta_buf[:dst]:
+        assert i == 0
+
+    for i in delta_buf[dst+decoded_size:]:
+        assert i == 0
+
+def proc3_with_FDFE(out, src, next_offs, bw, bh, pitch, offset_table):
 
     sidx = 0
     didx = 0
 
     # had_fdfe = False
-
-    out = [0 for _ in range(decoded_size)]
-    assert len(out) == decoded_size, (len(out), decoded_size)
 
     for i in range(bh):
         for j in range(bw):
@@ -233,16 +251,12 @@ def proc3_with_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
         didx += pitch * 3
     # if not had_fdfe:
     #     print(f'flag raised: no FDFE found in proc3_with_FDFE')
-    assert len(out) == decoded_size, (len(out), decoded_size)
     return out
 
-def proc3_without_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
+def proc3_without_FDFE(out, src, next_offs, bw, bh, pitch, offset_table):
 
     sidx = 0
     didx = 0
-
-    out = [0 for _ in range(decoded_size)]
-    assert len(out) == decoded_size, (len(out), decoded_size)
 
     for i in range(bh):
         for j in range(bw):
@@ -253,33 +267,41 @@ def proc3_without_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table
             if code == 0xFF:
                 for x in range(4):
                     dpp = didx + pitch * x
-                    out[dpp:dpp + 4] = src[sidx:sidx + 4] # or b'\0\0\0\0'
+                    out[dpp:dpp + 4] = src[sidx:sidx + 4]
                     sidx += 4
             else:
                 for x in range(4):
                     dpp = didx + pitch * x
                     spp = dpp + offset_table[code]
-                    # if spp < 0 or spp > decoded_size:
-                    #     print(spp)
-                    #     exit(1)
-                    out[dpp:dpp + 4] = next_offs[spp:spp + 4] #or b'\0\0\0\0'
+                    out[dpp:dpp + 4] = next_offs[spp:spp + 4]
             didx += 4
         didx += pitch * 3
-
-    assert len(out) == decoded_size, (len(out), decoded_size)
     return out
 
-def action3(decoded_size, src, ref, mask_flags, bw, bh, pitch, offset_table):
-    proc3 = proc3_with_FDFE if (mask_flags & 4) != 0 else proc3_without_FDFE
-    return proc3(decoded_size, src, ref, bw, bh, pitch, offset_table)
+def action3(delta_bufs, decoded_size, src, seq_nb, mask_flags, bw, bh, pitch, offset_table):
+    global delta_buf
+    global curtable
 
-def proc4_without_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
+    assert mask_flags == scene_config
+
+    if (seq_nb & 1) or not (mask_flags & 1):
+	    curtable ^= 1
+
+    dst = delta_bufs[curtable]
+
+    proc3 = proc3_with_FDFE if (mask_flags & 4) != 0 else proc3_without_FDFE
+    delta_buf[dst:] = proc3(
+        delta_buf[dst:],
+        src,
+        delta_buf[delta_bufs[curtable ^ 1]:], bw, bh,
+        pitch, offset_table
+    )
+
+def proc4_without_FDFE(out, src, next_offs, bw, bh, pitch, offset_table):
 
     sidx = 0
     didx = 0
     l = 0
-
-    out = [0 for _ in range(decoded_size)]
 
     for i in range(bh):
         for j in range(bw):
@@ -305,17 +327,14 @@ def proc4_without_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table
                     out[dpp:dpp + 4] = next_offs[spp:spp + 4]
             didx += 4
         didx += pitch * 3
-    assert len(out) == decoded_size
     return out
 
 
-def proc4_with_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
+def proc4_with_FDFE(out, src, next_offs, bw, bh, pitch, offset_table):
 
     sidx = 0
     didx = 0
     l = 0
-
-    out = [0 for _ in range(decoded_size)]
 
     # had_fdfe = False
 
@@ -362,15 +381,29 @@ def proc4_with_FDFE(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
 
     # if not had_fdfe:
     #     print(f'flag raised: no FDFE found in proc4_with_FDFE')
-    assert len(out) == decoded_size
     return out
 
-def action4(decoded_size, src, ref, mask_flags, bw, bh, pitch, offset_table):
+def action4(delta_bufs, decoded_size, src, seq_nb, mask_flags, bw, bh, pitch, offset_table):
+    global delta_buf
+    global curtable
+
+    assert mask_flags == scene_config
+
+    if (seq_nb & 1) or not (mask_flags & 1):
+	    curtable ^= 1
+
+    dst = delta_bufs[curtable]
+
     proc4 = proc4_with_FDFE if (mask_flags & 4) != 0 else proc4_without_FDFE
-    return proc4(decoded_size, src, ref, bw, bh, pitch, offset_table)
+    delta_buf[dst:] = proc4(
+        delta_buf[dst:],
+        src,
+        delta_buf[delta_bufs[curtable ^ 1]:], bw, bh,
+        pitch, offset_table
+    )
 
 
-def proc1(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
+def proc1(out, src, next_offs, bw, bh, pitch, offset_table):
 
     sidx = 0
     didx = 0
@@ -381,8 +414,6 @@ def proc1(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
     filling = False
     skip_code = False
     ln = -1
-
-    out = [0 for _ in range(decoded_size)]
 
     for i in range(bh):
         for j in range(bw):
@@ -421,15 +452,48 @@ def proc1(decoded_size, src, next_offs, bw, bh, pitch, offset_table):
             didx += 4
             ln -= 1
         didx += pitch * 3
-    assert len(out) == decoded_size
     return out
 
-def action1(decoded_size, src, ref, mask_flags, bw, bh, pitch, offset_table):
-    return proc1(decoded_size, src, ref, bw, bh, pitch, offset_table)
+def action1(delta_bufs, decoded_size, src, seq_nb, mask_flags, bw, bh, pitch, offset_table):
+    global delta_buf
+    global curtable
+
+    assert mask_flags == scene_config
+
+    if (seq_nb & 1) or not (mask_flags & 1):
+	    curtable ^= 1
+
+    dst = delta_bufs[curtable]
+
+    delta_buf[dst:] = proc1(
+        delta_buf[dst:],
+        src,
+        delta_buf[delta_bufs[curtable ^ 1]:], bw, bh,
+        pitch, offset_table
+    )
 
 
-def action0(decoded_size, src, ref, mask_flags, bw, bh, pitch, offset_table):
-    return src[:decoded_size]
+def action0(delta_bufs, decoded_size, src, seq_nb, mask_flags, bw, bh, pitch, offset_table):
+    global delta_buf
+    global scene_num
+    global scene_config
+
+    print(f'SCENE {scene_num}')
+    scene_config = mask_flags
+    scene_num += 1
+
+    # check if used only on first frame of sequence
+    assert seq_nb == 0
+
+    dst = delta_bufs[curtable]
+    delta_buf[dst:dst+decoded_size] = src[:decoded_size]
+
+    assert dst > 0
+    for i in delta_buf[:dst]:
+        assert i == 0
+
+    for i in delta_buf[dst+decoded_size:]:
+        assert i == 0
 
 
 action_switch = [
@@ -440,8 +504,6 @@ action_switch = [
     action4
 ]
 
-
-curtable = 0
 delta_buf = None
 delta_bufs = None
 frme_num = 0
@@ -449,12 +511,11 @@ scene_num = 0
 scene_config = None
 
 def decode37(width, height, f):
-    global curtable
+
     global delta_buf
     global delta_bufs
+    global last_frame
     global frme_num
-    global scene_num
-    global scene_config
 
     # with open('FIRST_FOBJ.DAT', 'wb') as aside:
     #     aside.write(f)
@@ -478,43 +539,16 @@ def decode37(width, height, f):
     mask_flags = f[12]
     offset_table = list(maketable(pitch, f[1]))
 
-    # print(f[1], f[12], f[8:10])
+    # print(offset_table)
 
-    size = 0
-
-    act = f[0]
-    if act & 5:
-        assert seq_nb != 0
-        assert mask_flags == scene_config
-        if (seq_nb & 1) or not (mask_flags & 1):
-            curtable ^= 1
-        size = frame_size
-    else:
-        scene_num += 1
-        scene_config = mask_flags
-        assert seq_nb == 0
-        # TODO: check if ok to assign frame_size instead
-        size = decoded_size
-        # assert decoded_size == frame_size, f'{decoded_size} != {frame_size}'
-
-    dst = delta_bufs[curtable]
-    ref = delta_bufs[1 - curtable]
-
-
-    mid = action_switch[act](size, f[16:], delta_buf[ref:ref+frame_size], mask_flags, bw, bh, pitch, offset_table)
-    # assert len(mid) == size, (len(mid), size, decoded_size, frame_size)
-    delta_buf[dst:dst+size] = mid # + [0] * (size - len(mid))
+    # changes globals :/
+    action_switch[f[0]](delta_bufs, decoded_size, f[16:], seq_nb, mask_flags, bw, bh, pitch, offset_table)
 
     print(f'DECODED FRAME {frme_num}: SEQUENCE: {seq_nb}: USING {f[0]}, with FDFE: {mask_flags & 4}')
 
+    dst = delta_bufs[curtable]
     out = delta_buf[dst:dst+frame_size]
     frme_num += 1
 
     # return to_matrix(width, len(delta_buf) // width, delta_buf)
-
     return to_matrix(width, height, out)
-
-
-
-def fake_encode37(width, height, out):
-    return b'\0' * 12 + struct.pack('<H', width * height) + b'\0\0' + out

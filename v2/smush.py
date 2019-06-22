@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import builtins
 import io
 import struct
 
@@ -35,7 +36,7 @@ def assert_tag(target, chunk):
 assert_frame = partial(assert_tag, 'FRME')
 
 def read_animations(filename):
-    with open(filename, 'rb') as smush_file:
+    with builtins.open(filename, 'rb') as smush_file:
         anim = assert_tag('ANIM', untag(smush_file))
         return io.BytesIO(anim)
 
@@ -66,6 +67,10 @@ class SmushFile:
 
     def __exit__(self, type, value, traceback):
         return self._stream.close()
+
+@contextmanager
+def open(*args, **kwargs):
+    yield SmushFile(*args, **kwargs)
 
 if __name__=="__main__":
     import argparse

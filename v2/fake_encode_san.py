@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import smush
-
 from fobj import unobj, mkobj
 from ahdr import parse_header
 from codex import get_decoder
@@ -86,36 +85,16 @@ if __name__ == '__main__':
 
         delta_pal = []
 
-
         for idx, frame in enumerate(frames):
             print(f'{idx} - {[tag for tag, _ in frame]}')
-
+            fdata = b''
             for tag, chunk in frame:
-                if tag == 'NPAL':
-                    palette = list(zip(*[iter(chunk)]*3))
-                    palette = [x for l in palette for x in l]
-                    continue
-                if tag == 'XPAL':
-
-                    sub_size = len(chunk)
-                    print(f'{idx} - XPAL {sub_size}')
-
-                    if sub_size == 0x300 * 3 + 4:
-                        delta_pal = struct.unpack(f'<{0x300}h', chunk[4:4 + 2 * 0x300])
-                        palette = list(zip(*[iter(chunk[4 + 2 * 0x300:])]*3))
-                        palette = [x for l in palette for x in l]
-
-                    if sub_size == 6:
-
-                        print(f'{idx} - XPAL 6 {chunk}')
-                        palette = [delta_color(palette[i], delta_pal[i]) for i in range(0x300)]
-                        # print(f'NEW PALETTE: {palette}')
-
-                elif tag == 'FOBJ':
-                    screen = convert_fobj(chunk)
+                if tag == 'FOBJ':
+                    image = get_frame_image()
+                    fdata += mktag('FOBJ', encode_fake(image))
                     continue
                 else:
-                    # print(f'TAG {tag} not implemented yet')
+                    fdata += mktag(tag, chunk)
                     continue
             im = save_single_frame_image(screen)
             # im = im.crop(box=(0,0,320,200))
