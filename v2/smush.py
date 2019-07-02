@@ -4,6 +4,8 @@ import builtins
 import io
 import struct
 
+import logging
+
 from contextlib import contextmanager
 from functools import partial
 
@@ -13,8 +15,10 @@ def untag(stream):
         return None
     size = struct.unpack('>I', stream.read(4))[0]
     data = stream.read(size)
-    if len(data) % 2 != 0 and stream.read(1) != b'\00':
-        raise ValueError('non-zero padding between chunks')
+    if len(data) % 2 != 0:
+        pad =  stream.read(1)
+        if pad and pad != b'\00':
+            raise ValueError(f'non-zero padding between chunks: {pad}')
     return tag.decode(), data
 
 def read_chunks(data):

@@ -493,7 +493,6 @@ def decode37(width, height, f):
         scene_num += 1
         scene_config = mask_flags
         assert seq_nb == 0
-        print('=====================', f[:16])
         # TODO: check if ok to assign frame_size instead
         size = decoded_size
         # assert decoded_size == frame_size, f'{decoded_size} != {frame_size}'

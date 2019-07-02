@@ -6,3 +6,4 @@ tr.txt
 *.xcf
 .vscode
 *.txt
+*.raw

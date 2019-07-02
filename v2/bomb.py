@@ -26,5 +26,5 @@ def decode_line(src, decoded_size):
             sidx += 1
             out[didx:didx+num] = [color] * num
         didx += num
-    
+
     return out
