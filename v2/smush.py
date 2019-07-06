@@ -16,7 +16,7 @@ def untag(stream):
     size = struct.unpack('>I', stream.read(4))[0]
     data = stream.read(size)
     if len(data) % 2 != 0:
-        pad =  stream.read(1)
+        pad = stream.read(1)
         if pad and pad != b'\00':
             raise ValueError(f'non-zero padding between chunks: {pad}')
     return tag.decode(), data

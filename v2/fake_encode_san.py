@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+import struct
+import zlib
+
+from functools import partial
+
 from PIL import Image
 import numpy as np
 
@@ -8,9 +13,6 @@ from ahdr import parse_header
 from codex import get_decoder, get_encoder
 from image import save_single_frame_image
 from smush_writer import mktag
-
-import struct
-from functools import partial
 
 def clip(lower, upper, value):
     return lower if value < lower else upper if value > upper else value
@@ -104,6 +106,12 @@ if __name__ == '__main__':
             print(f'{idx} - {[tag for tag, _ in frame]}')
             fdata = b''
             for tag, chunk in frame:
+                if tag == 'ZFOB':
+                    image = get_frame_image(idx)
+                    encoded = encode_fake(image)
+                    decompressed_size = struct.pack('>I', len(encoded))
+                    fdata += mktag('ZFOB', decompressed_size + zlib.compress(encoded, 9))
+                    continue
                 if tag == 'FOBJ':
                     image = get_frame_image(idx)
                     fdata += mktag('FOBJ', encode_fake(image))

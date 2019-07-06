@@ -456,6 +456,9 @@ def decode37(width, height, f):
     global scene_num
     global scene_config
 
+    # fix for odd length
+    f += b'\0'
+
     # with open('FIRST_FOBJ.DAT', 'wb') as aside:
     #     aside.write(f)
 

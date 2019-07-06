@@ -38,6 +38,40 @@ def unidecoder(width, height, f):
         src = srcPtrNext
     return to_matrix(width, height, out)
 
+
+def decode1(width, height, f):
+    BG = 39
+
+    out = [BG for _ in range(width * height)]
+
+    dst = 0
+    src = 0
+    for i in range(height):
+        size_line = read_le_uint16(f[src:])
+        src += 2
+        while size_line > 0:
+            code = f[src]
+            src += 1
+            size_line -= 1
+            length = (code >> 1) + 1
+            if code & 1:
+                val = f[src]
+                src += 1
+                size_line -= 1
+                if val != b'\x00':
+                    out[dst:dst+length] = [val] * length
+                dst += length
+            else:
+                size_line -= length
+                while length > 0:
+                    val = f[src]
+                    src += 1
+                    if val != b'\x00':
+                        out[dst] = val
+                    dst += 1
+                    length -= 1
+    return to_matrix(width, height, out)
+
 def decode47(width, height, f):
     BG = 39
 
@@ -55,6 +89,7 @@ def unidecoder_factory(width, height):
     return unidecoder
 
 decoders = {
+    1: decode1,
     21: unidecoder,
     44: unidecoder,
     47: decode47,

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+import zlib
+import struct
+
+from functools import partial
 
 import smush
 
@@ -7,9 +11,6 @@ from ahdr import parse_header
 from codex import get_decoder
 from image import save_single_frame_image
 
-import struct
-from functools import partial
-
 def clip(lower, upper, value):
     return lower if value < lower else upper if value > upper else value
 
@@ -17,8 +18,8 @@ clip_byte = partial(clip, 0, 255)
 
 def convert_fobj(datam):
     meta, data = unobj(datam)
-    width = meta['x2'] - meta['x1']
-    height = meta['y2'] - meta['y1']
+    width = meta['x2'] - meta['x1'] if meta['codec'] != 1 else meta['x2']
+    height = meta['y2'] - meta['y1'] if meta['codec'] != 1 else meta['y2']
     decode = get_decoder(meta['codec'])
     if decode == NotImplemented:
         print(f"Codec not implemented: {meta['codec']}")
@@ -67,36 +68,17 @@ if __name__ == '__main__':
         frames = verify_nframes(smush_file, header['nframes'])
         frames = (list(smush.read_chunks(frame)) for frame in frames)
 
-        # parsers = {
-        #     'FOBJ': convert_fobj
-        # }
-
-        # frames = (frame for idx, frame in enumerate(frames) if 1050 > idx)
-        # parsed_frames = list(parse_frame(frame, parsers) for frame in frames)
-
-        # for idx, frame in enumerate(parsed_frames):
-        #     print((idx, [tag for tag, chunk in frame]))
-
-        # image_frames = ((filter_chunk_once(parsed, 'FOBJ'), filter_chunk_once(parsed, 'NPAL')) for parsed in parsed_frames)
-        # image_frames, pal_frames = zip(*image_frames)
-        # frames_pil = save_frame_image(image_frames)
-
         palette = [x for l in palette for x in l]
         screen = []
-
         delta_pal = []
 
-
         for idx, frame in enumerate(frames):
-            print(f'{idx} - {[tag for tag, _ in frame]}')
-
-            for tag, chunk in frame:
+            for cidx, (tag, chunk) in enumerate(frame):
                 if tag == 'NPAL':
                     palette = list(zip(*[iter(chunk)]*3))
                     palette = [x for l in palette for x in l]
                     continue
                 if tag == 'XPAL':
-
                     sub_size = len(chunk)
                     print(f'{idx} - XPAL {sub_size}')
 
@@ -106,13 +88,21 @@ if __name__ == '__main__':
                         palette = [x for l in palette for x in l]
 
                     if sub_size == 6:
-
                         print(f'{idx} - XPAL 6 {chunk}')
                         palette = [delta_color(palette[i], delta_pal[i]) for i in range(0x300)]
                         # print(f'NEW PALETTE: {palette}')
-
-                elif tag == 'FOBJ':
+                    continue
+                if tag == 'ZFOB':
+                    decompressed_size = struct.unpack('>I', chunk[:4])[0]
+                    chunk = zlib.decompress(chunk[4:])
+                    assert len(chunk) == decompressed_size
                     screen = convert_fobj(chunk)
+                    continue
+                if tag == 'FOBJ':
+                    screen = convert_fobj(chunk)
+                    # im = save_single_frame_image(screen)
+                    # im.putpalette(palette)
+                    # im.save(f'out/FRME_{idx:05d}_{cidx:05d}.png')   
                     continue
                 else:
                     # print(f'TAG {tag} not implemented yet')
@@ -120,4 +110,4 @@ if __name__ == '__main__':
             im = save_single_frame_image(screen)
             # im = im.crop(box=(0,0,320,200))
             im.putpalette(palette)
-            im.save(f'out/FRME_{idx:05d}.png')           
+            im.save(f'out/FRME_{idx:05d}.png')        

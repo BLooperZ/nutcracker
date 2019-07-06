@@ -50,7 +50,8 @@ def handle_sound_buffer(track_id, index, max_frames, flags, vol, pan, chunk, siz
     else:
         print('other length', len(chunk))
         with open(fname, 'ab') as aud:
-            aud.write(chunk) 
+            aud.write(chunk)
+
 FLAG_UNSIGNED = 1 << 0
 FLAG_16BITS = 1 << 1
 FLAG_LITTLE_ENDIAN = 1 << 2
