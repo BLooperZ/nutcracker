@@ -2,7 +2,9 @@
 
 import struct
 
-def mktag(tag, data):
+from structures import write_uint32be
+
+def mktag(tag: str, data: bytes) -> bytes:
     new_data = data
     if len(data) % 2 != 0:
         new_data += b'\x00'
