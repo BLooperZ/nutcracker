@@ -17,7 +17,9 @@ def untag(stream: IO[bytes]) -> Optional[Tuple[str, bytes]]:
         return None
     size = struct.unpack('>I', stream.read(4))[0]
     data = stream.read(size)
-    if len(data) % 2 != 0:
+    if len(data) != size:
+        raise ValueError(f'got EOF while reading chunk: expected {size}, got {len(data)}')
+    if size % 2 != 0:
         pad = stream.read(1)
         if pad and pad != b'\00':
             raise ValueError(f'non-zero padding between chunks: {pad}')

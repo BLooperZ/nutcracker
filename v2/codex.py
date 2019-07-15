@@ -34,6 +34,7 @@ def unidecoder(width, height, f):
             out[dst:dst + w] = f[src:src + w]
             dst += w
             src += w
+        assert dst == dstPtrNext
         dst = dstPtrNext
         src = srcPtrNext
     return to_matrix(width, height, out)

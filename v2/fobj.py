@@ -14,5 +14,6 @@ def unobj(data):
 
 def mkobj(meta, data):
     metas = (v for k, v in meta.items())
+    if len(data) % 2 != 0:
+        data += b'\x00'
     return meta_struct.pack(*metas) + data
-

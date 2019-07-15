@@ -12,7 +12,7 @@ def write_nut_file(header, numChars, chars, filename):
     import struct
     chars = (mktag('FRME', char) for char in chars)
 
-    header = struct.pack('<H', 2) + struct.pack('<H', numChars) + header[4:]
+    header = header[:2] + struct.pack('<H', numChars) + header[4:]
     header = mktag('AHDR', header)
 
     nutFile = mktag('ANIM', header + b''.join(chars))
