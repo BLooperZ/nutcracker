@@ -49,6 +49,7 @@ assert_frame = partial(assert_tag, 'FRME')
 def read_animations(filename: AnyStr) -> IO[bytes]:
     with builtins.open(filename, 'rb') as smush_file:
         anim = assert_tag('ANIM', untag(smush_file))
+        assert smush_file.read() == b''
         return io.BytesIO(anim)
 
 class SmushFile:
