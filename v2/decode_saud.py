@@ -1,80 +1,63 @@
 #!/usr/bin/env python3
+import glob
 import io
+import os
 import struct
+import wave
 
 from functools import partial
 
 import smush
+import ahdr
 
-from ahdr import parse_header
+from typing import Iterable, Iterator, TypeVar
 
-frame_audio_size = {
-    12: 7352 // 2,
-	10: 8802 // 2
-}
+T = TypeVar('T')
 
 def read_le_uint16(f):
     return struct.unpack('<H', f[:2])[0]
 
-def read_le_uint32(f):
-    return struct.unpack('<I', f[:4])[0]
-
-def handle_sound_buffer(track_id, index, max_frames, flags, vol, pan, chunk, size, frame_no):
-    fname = f'sound/PSAD_{track_id:04d}.RAW'
-    mode = 'ab' if index != 0 else 'wb'
-    with open(fname, mode) as aud:
-        # aud.write(b'\x80' * frame_audio_size[12] * frame_no)
-        aud.write(chunk)
-    # if index == 0:
-    #     print('first length', len(chunk))
-    #     with open(fname, 'wb') as aud:
-    #         # aud.write(b'\x80' * frame_audio_size[12] * frame_no)
-    #         aud.write(chunk)
-        # c_stream = io.BytesIO(chunk)
-        # saud = smush.assert_tag('SAUD', smush.untag(c_stream))
-        # assert c_stream.read() == b''
-        # for tag, data in smush.read_chunks(saud):
-        #     if tag == 'SDAT':
-        #         print('first length', len(data))
-        #         with open(fname, 'wb') as aud:
-        #             # aud.write(b'\x80' * frame_audio_size[12] * frame_no)
-        #             aud.write(data)
-        #     elif tag == 'STRK':
-        #         print(data)
-        #     else:
-        #         raise ValueError(f'Unknown audio tag: {tag}')
-    # else:
-    #     print('other length', len(chunk))
-    #     with open(fname, 'ab') as aud:
-    #         aud.write(chunk)
-
-def old_untag(stream):
-    tag = stream.read(4)
-    if not tag:
-        return None
-    size = struct.unpack('>I', stream.read(4))[0]
-    data = stream.read(size)
-    if len(data) != size:
-        raise ValueError(f'got EOF while reading chunk: expected {size}, got {len(data)}')
-    return tag.decode(), data
-
-def old_read_chunks(data: bytes):
-    with io.BytesIO(data) as stream:
-        chunks = iter(partial(old_untag, stream), None)
-        for chunk in chunks:
-            assert chunk
-            yield chunk
+def flatten(ls: Iterable[Iterable[T]]) -> Iterator[T]: 
+    return (item for sublist in ls for item in sublist)
 
 if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('filename', help='filename to read from')
+    parser.add_argument('files', nargs='+', help='files to read from')
     args = parser.parse_args()
 
-    with open(args.filename, 'rb') as res:
-        saud = smush.assert_tag('SAUD', smush.untag(res))
-        assert res.read() == b''
-        # print([tag for tag, _ in old_read_chunks(saud)])
-        for tag, data in old_read_chunks(saud):
-            print(tag)
+    files = set(flatten(glob.iglob(r) for r in args.files))
+    print(files)
+    for filename in files:
+        with open(filename, 'rb') as res:
+            fname = os.path.basename(filename)
+            print(fname)
+            saud = smush.assert_tag('SAUD', smush.untag(res))
+            assert res.read() == b''
+
+            sound = b''
+            sample_rate = 22050
+
+            print([tag for tag, _ in smush.read_chunks(saud, align=1)])
+            for tag, data in smush.read_chunks(saud, align=1):
+                if tag == 'STRK':
+                    print([read_le_uint16(bytes(word)) for word in ahdr.grouper(data, 2)]) 
+                    continue
+                if tag == 'SDAT':
+                    sound = data
+                    continue
+                if tag == 'SMRK':
+                    if data:
+                        print('Mark reached')
+                        print(data)
+                    continue
+                if tag == 'SHDR':
+                    print([read_le_uint16(bytes(word)) for word in ahdr.grouper(data, 2)]) 
+                    continue
+            with wave.open(f'sound/SDAT_{fname}.WAV', 'w') as wav:
+                # aud.write(b'\x80' * frame_audio_size[12] * frame_no)
+                wav.setnchannels(1)
+                wav.setsampwidth(1) 
+                wav.setframerate(sample_rate)
+                wav.writeframesraw(sound)

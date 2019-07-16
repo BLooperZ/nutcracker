@@ -12,9 +12,12 @@ primary_struct = Struct('<{}H'.format(len(primary_fields)))
 palette_struct = Struct('<{}B'.format(3 * PALETTE_SIZE))
 secondary_struct = Struct('<{}I'.format(len(secondary_fields)))
 
+def grouper(it, chunk_size):
+    return zip(*([iter(it)] * chunk_size))
+
 def read_palette(strip):
     palette = palette_struct.unpack(strip)
-    palette = list(zip(*[iter(palette)]*3)) #[palette[3*i:3*i+3] for i in range(256)]
+    palette = list(grouper(palette, 3)) #[palette[3*i:3*i+3] for i in range(256)]
     return palette
 
 def parse_header(header):

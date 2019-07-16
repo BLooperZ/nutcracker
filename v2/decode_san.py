@@ -7,7 +7,7 @@ from functools import partial
 import smush
 
 from fobj import unobj, mkobj
-from ahdr import parse_header
+import ahdr
 from codex import get_decoder
 from image import save_single_frame_image
 
@@ -62,7 +62,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     with smush.open(args.filename) as smush_file:
-        header = parse_header(smush_file.header)
+        header = ahdr.parse_header(smush_file.header)
         print(header['palette'][39])
 
         palette = header['palette']
@@ -78,7 +78,7 @@ if __name__ == '__main__':
         for idx, frame in enumerate(frames):
             for cidx, (tag, chunk) in enumerate(frame):
                 if tag == 'NPAL':
-                    palette = list(zip(*[iter(chunk)]*3))
+                    palette = list(ahdr.grouper(chunk, 3))
                     palette = [x for l in palette for x in l]
                     continue
                 if tag == 'XPAL':
@@ -87,7 +87,7 @@ if __name__ == '__main__':
 
                     if sub_size == 0x300 * 3 + 4:
                         delta_pal = struct.unpack(f'<{0x300}h', chunk[4:4 + 2 * 0x300])
-                        palette = list(zip(*[iter(chunk[4 + 2 * 0x300:])]*3))
+                        palette = list(ahdr.grouper(chunk[4 + 2 * 0x300:], 3))
                         palette = [x for l in palette for x in l]
 
                     if sub_size == 6:
