@@ -18,18 +18,29 @@ def untag(stream: IO[bytes]) -> Optional[Tuple[str, bytes]]:
     size = struct.unpack('>I', stream.read(4))[0]
     data = stream.read(size)
     if len(data) != size:
-        raise ValueError(f'got EOF while reading chunk: expected {size}, got {len(data)}')
-    if size % 2 != 0:
-        pad = stream.read(1)
-        if pad and pad != b'\00':
-            raise ValueError(f'non-zero padding between chunks: {pad}')
+        raise ValueError(f'got EOF while reading chunk {tag}: expected {size}, got {len(data)}')
     return tag.decode(), data
 
-def read_chunks(data: bytes) -> Iterator[Tuple[str, bytes]]:
+def align_chunk(stream: IO[bytes], size, align: int = 2):
+    if size % align == 0:
+        # TODO: check if size is really needed, perhaps the foolowing assertion is suffice
+        assert stream.tell() % align == 0
+        return
+    assert stream.tell() % align != 0
+    pad = stream.read(align - size % align)
+    if pad and set(pad) != {0}:
+        raise ValueError(f'non-zero padding between chunks: {pad}')
+
+def read_chunks_stream(stream: IO[bytes], align: int = 2) -> Iterator[Tuple[str, bytes]]:
+    chunks = iter(partial(untag, stream), None)
+    for chunk in chunks:
+        assert chunk
+        align_chunk(stream, len(chunk[1]), align=align)
+        yield chunk
+
+def read_chunks(data: bytes, align: int = 2) -> Iterator[Tuple[str, bytes]]:
     with io.BytesIO(data) as stream:
-        chunks = iter(partial(untag, stream), None)
-        for chunk in chunks:
-            assert chunk
+        for chunk in read_chunks_stream(stream, align=align):
             yield chunk
 
 def get_chunk_offset(stream: IO[bytes], off: int) -> Optional[Tuple[str, bytes]]:
@@ -56,7 +67,8 @@ class SmushFile:
     def __init__(self, filename: str):
         self.filename = filename
         self._stream = read_animations(self.filename)
-        self.index = [self._stream.tell() for _ in iter(partial(untag, self._stream), None)][:-1]
+        self.index = [self._stream.tell() for _ in read_chunks_stream(self._stream)][:-1]
+        print(f'INDEX: {self.index}')
         self.header = assert_tag('AHDR', get_chunk_offset(self._stream, 0))
 
     def __enter__(self):

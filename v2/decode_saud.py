@@ -48,30 +48,22 @@ def handle_sound_buffer(track_id, index, max_frames, flags, vol, pan, chunk, siz
     #     with open(fname, 'ab') as aud:
     #         aud.write(chunk)
 
-FLAG_UNSIGNED = 1 << 0
-FLAG_16BITS = 1 << 1
-FLAG_LITTLE_ENDIAN = 1 << 2
+def old_untag(stream):
+    tag = stream.read(4)
+    if not tag:
+        return None
+    size = struct.unpack('>I', stream.read(4))[0]
+    data = stream.read(size)
+    if len(data) != size:
+        raise ValueError(f'got EOF while reading chunk: expected {size}, got {len(data)}')
+    return tag.decode(), data
 
-def handle_sound_frame(chunk, frame_no):
-    track_id = read_le_uint16(chunk)
-    index = read_le_uint16(chunk[2:])
-    max_frames = read_le_uint16(chunk[4:])
-    flags = read_le_uint16(chunk[6:])
-    vol = chunk[8]
-    pan = chunk[9]
-    print(chunk[-10:])
-    if index == 0:
-        print(f'track_id:{track_id}, max_frames:{max_frames}, flags:{flags}, vol:{vol}, pan:{pan}')     
-        print(f'unsigned: {flags & FLAG_UNSIGNED}')
-        print(f'16bit: {flags & FLAG_16BITS}')
-        print(f'le: {flags & FLAG_LITTLE_ENDIAN}')
-    handle_sound_buffer(track_id, index, max_frames, flags, vol, pan, chunk[10:], len(chunk) - 10, frame_no)
-
-def verify_nframes(frames, nframes):
-    for idx, frame in enumerate(frames):
-        if nframes and idx > nframes:
-            raise ValueError('too many frames')
-        yield frame
+def old_read_chunks(data: bytes):
+    with io.BytesIO(data) as stream:
+        chunks = iter(partial(old_untag, stream), None)
+        for chunk in chunks:
+            assert chunk
+            yield chunk
 
 if __name__ == '__main__':
     import argparse
@@ -80,16 +72,9 @@ if __name__ == '__main__':
     parser.add_argument('filename', help='filename to read from')
     args = parser.parse_args()
 
-    with smush.open(args.filename) as smush_file:
-        header = parse_header(smush_file.header)
-        frames = verify_nframes(smush_file, header['nframes'])
-        frames = (list(smush.read_chunks(frame)) for frame in frames)
-
-        for idx, frame in enumerate(frames):
-            print(f'{idx} - {[tag for tag, _ in frame]}')
-
-            for tag, chunk in frame:
-                if tag == 'PSAD':
-                    handle_sound_frame(chunk, idx)
-                else:
-                    continue         
+    with open(args.filename, 'rb') as res:
+        saud = smush.assert_tag('SAUD', smush.untag(res))
+        assert res.read() == b''
+        # print([tag for tag, _ in old_read_chunks(saud)])
+        for tag, data in old_read_chunks(saud):
+            print(tag)

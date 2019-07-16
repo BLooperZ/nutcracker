@@ -11,6 +11,8 @@ from ahdr import parse_header
 from codex import get_decoder
 from image import save_single_frame_image
 
+from typing import Sequence
+
 def clip(lower, upper, value):
     return lower if value < lower else upper if value > upper else value
 
@@ -69,8 +71,9 @@ if __name__ == '__main__':
         frames = (list(smush.read_chunks(frame)) for frame in frames)
 
         palette = [x for l in palette for x in l]
-        screen = []
-        delta_pal = []
+
+        screen: Sequence[int] = []
+        delta_pal: Sequence[int] = []
 
         for idx, frame in enumerate(frames):
             for cidx, (tag, chunk) in enumerate(frame):
@@ -88,6 +91,7 @@ if __name__ == '__main__':
                         palette = [x for l in palette for x in l]
 
                     if sub_size == 6:
+                        assert delta_pal
                         print(f'{idx} - XPAL 6 {chunk}')
                         palette = [delta_color(palette[i], delta_pal[i]) for i in range(0x300)]
                         # print(f'NEW PALETTE: {palette}')
@@ -107,6 +111,8 @@ if __name__ == '__main__':
                 else:
                     # print(f'TAG {tag} not implemented yet')
                     continue
+            assert palette
+            assert screen
             im = save_single_frame_image(screen)
             # im = im.crop(box=(0,0,320,200))
             im.putpalette(palette)
