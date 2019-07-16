@@ -6,7 +6,6 @@ import struct
 
 import logging
 
-from contextlib import contextmanager
 from functools import partial
 
 from typing import AnyStr, IO, Iterator, Optional, overload, Sequence, Tuple, Union
@@ -21,13 +20,14 @@ def untag(stream: IO[bytes]) -> Optional[Tuple[str, bytes]]:
         raise ValueError(f'got EOF while reading chunk {tag}: expected {size}, got {len(data)}')
     return tag.decode(), data
 
-def align_chunk(stream: IO[bytes], size, align: int = 2):
-    if size % align == 0:
-        # TODO: check if size is really needed, perhaps the foolowing assertion is suffice
-        assert stream.tell() % align == 0
+def calc_align(pos: int, align: int):
+    return (align - pos % align) % align
+
+def align_stream(stream: IO[bytes], align: int = 2):
+    pos = stream.tell()
+    if pos % align == 0:
         return
-    assert stream.tell() % align != 0
-    pad = stream.read(align - size % align)
+    pad = stream.read(calc_align(pos, align))
     if pad and set(pad) != {0}:
         raise ValueError(f'non-zero padding between chunks: {pad}')
 
@@ -35,7 +35,7 @@ def read_chunks_stream(stream: IO[bytes], align: int = 2) -> Iterator[Tuple[str,
     chunks = iter(partial(untag, stream), None)
     for chunk in chunks:
         assert chunk
-        align_chunk(stream, len(chunk[1]), align=align)
+        align_stream(stream, align=align)
         yield chunk
 
 def read_chunks(data: bytes, align: int = 2) -> Iterator[Tuple[str, bytes]]:
@@ -68,15 +68,15 @@ class SmushFile:
         self.filename = filename
         self._stream = read_animations(self.filename)
         self.index = [self._stream.tell() for _ in read_chunks_stream(self._stream)][:-1]
-        print(f'INDEX: {self.index}')
         self.header = assert_tag('AHDR', get_chunk_offset(self._stream, 0))
 
     def __enter__(self):
         return self
 
     # def __next__(self):
-    #     tag, frame = untag(self._stream)
-    #     assert_tag(tag, 'FRME')
+    #     chunk = untag(self._stream)
+    #     frame = assert_frame(chunk)
+    #     align_stream(self._stream)
     #     return frame
 
     @overload
@@ -97,9 +97,8 @@ class SmushFile:
     def __exit__(self, type, value, traceback):
         return self._stream.close()
 
-@contextmanager
-def open(*args, **kwargs) -> Iterator[SmushFile]:
-    yield SmushFile(*args, **kwargs)
+def open(*args, **kwargs) -> SmushFile:
+    return SmushFile(*args, **kwargs)
 
 if __name__=="__main__":
     import argparse
