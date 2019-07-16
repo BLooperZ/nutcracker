@@ -31,8 +31,8 @@ if __name__ == '__main__':
     print(files)
     for filename in files:
         with open(filename, 'rb') as res:
-            fname = os.path.basename(filename)
-            print(fname)
+            basename, _ = os.path.splitext(os.path.basename(filename))
+            print(basename)
             saud = smush.assert_tag('SAUD', smush.untag(res))
             assert res.read() == b''
 
@@ -55,7 +55,7 @@ if __name__ == '__main__':
                 if tag == 'SHDR':
                     print([read_le_uint16(bytes(word)) for word in ahdr.grouper(data, 2)]) 
                     continue
-            with wave.open(f'sound/SDAT_{fname}.WAV', 'w') as wav:
+            with wave.open(f'sound/SDAT_{basename}.WAV', 'w') as wav:
                 # aud.write(b'\x80' * frame_audio_size[12] * frame_no)
                 wav.setnchannels(1)
                 wav.setsampwidth(1) 
