@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
+import os
 
 from image_reader import read_image_grid, resize_frame
-from fobj import mkobj
-from codex import get_encoder
-from smush_writer import mktag
-from smush import SmushFile
-from ahdr import parse_header
+from smush.fobj import mkobj
+from codex.codex import get_encoder
+from smush.smush_writer import mktag
+from smush import anim, ahdr
 
 # LEGACY
 def write_nut_file(header, numChars, chars, filename):
     import struct
     chars = (mktag('FRME', char) for char in chars)
-
-    header = header[:2] + struct.pack('<H', numChars) + header[4:]
-    header = mktag('AHDR', header)
+    header = ahdr.create(header, nframes=numChars)
+    header = mktag('AHDR', ahdr.to_bytes(header))
 
     nutFile = mktag('ANIM', header + b''.join(chars))
 
@@ -28,6 +27,9 @@ if __name__=="__main__":
     parser.add_argument('filename', help='filename to read from')
     parser.add_argument('--codec', '-c', action='store', type=int, required=True, help='codec for encoding', choices=[21, 44])
     parser.add_argument('--fake', '-f', action='store', type=int, help='fake codec for FOBJ header', choices=[21, 44])
+    parser.add_argument('--ref', '-r', action='store', type=str, help='reference SMUSH file')
+    parser.add_argument('--target', '-t', help='target directory', default='out')
+
     args = parser.parse_args()
 
     if args.fake == None:
@@ -58,8 +60,8 @@ if __name__=="__main__":
 
         teste.append(mktag('FOBJ', fobj))
 
-    with SmushFile('../../../try-fonts/DIG/FONT0.NUT') as smush_file:
-        # header, *frames = read_smush_file(args.filename)
-        header = smush_file.header
+    with open(args.ref, 'rb') as res:
+        header, _ = anim.parse(res)
 
-    write_nut_file(header, len(teste), teste, 'FONT0-NEW.NUT')
+    os.makedirs('nuts/test', exist_ok=True)
+    write_nut_file(header, len(teste), teste, os.path.join('nuts/test', os.path.basename(args.ref)))

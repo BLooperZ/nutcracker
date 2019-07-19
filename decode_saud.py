@@ -10,15 +10,12 @@ from functools import partial
 import smush
 import ahdr
 
-from typing import Iterable, Iterator, TypeVar
+from funcutils import flatten
 
-T = TypeVar('T')
+from typing import Iterable, Iterator
 
 def read_le_uint16(f):
     return struct.unpack('<H', f[:2])[0]
-
-def flatten(ls: Iterable[Iterable[T]]) -> Iterator[T]: 
-    return (item for sublist in ls for item in sublist)
 
 if __name__ == '__main__':
     import argparse

@@ -50,7 +50,7 @@ def save_image_grid(filename, frames, palette, transparency=None):
     h = 48
     grid_size = 16
 
-    palette = [x for l in palette for x in l]
+    palette = list(palette)
 
     locs, frames = zip(*frames)
     im_frames = (convert_to_pil_image(frame) for frame in frames)
@@ -65,9 +65,7 @@ def save_image_grid(filename, frames, palette, transparency=None):
     for idx, frame in enumerate(stack):
         bim.paste(frame, box=((idx % grid_size) * w, int(idx / grid_size) * h))
 
-    palette[39*3] = 109
-    palette[39*3+1] = 109
-    palette[39*3+1] = 109
+    palette[3 * transparency: 3 * transparency + 3] = [109, 109, 109]
     bim.putpalette(palette)
     bim.save(filename) #, transparency=transparency)
 
@@ -94,13 +92,16 @@ def save_frame_image(frames):
     for frame in stack:
         yield frame
 
-def save_single_frame_image(frame):
+def save_single_frame_image(frame, resize=None):
 
     loc, frame = frame
-    return convert_to_pil_image(frame)
-    # idx = 0
+    if not resize:
+        return convert_to_pil_image(frame)
 
-    # get_bg = get_bg_color(1, lambda idx: idx + int(idx))
+    idx = 0
+    get_bg = get_bg_color(1, lambda idx: idx + int(idx))
+
+    w, h = resize
 
     # w = loc['x1'] + loc['x2']
     # h = loc['y1'] + loc['y2']
@@ -108,4 +109,4 @@ def save_single_frame_image(frame):
     # w = 320
     # h = 200
 
-    # return resize_pil_image(w, h, get_bg(idx), frame, loc)
+    return resize_pil_image(w, h, get_bg(idx), frame, loc)

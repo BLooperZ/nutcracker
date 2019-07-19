@@ -2,7 +2,7 @@
 
 import struct
 
-from codex37 import fake_encode37, decode37
+from .codex37 import fake_encode37, decode37
 # from codex37_old import decode37
 
 # DECODE
@@ -37,6 +37,8 @@ def unidecoder(width, height, f):
         assert dst == dstPtrNext
         dst = dstPtrNext
         src = srcPtrNext
+    if src != len(f):
+        print('DIFF', f[src:])
     return to_matrix(width, height, out)
 
 
@@ -133,10 +135,9 @@ def codec44(width, height, out):
             done += i
         f += struct.pack('<H', len(l) + 1) + l + struct.pack('<B', 0)
     f += struct.pack('<H', width + 5) + b'\x00\x00' + struct.pack('<H', width)
-    for i in range(width):
+    f += b'\x00' * (width + 1)
+    if len(f) % 2 != 0:
         f += b'\x00'
-    if len(f) % 2 == 0:
-        f += b'\x00\x00'
     return f
 
 def codec21(width, height, out):
@@ -165,6 +166,8 @@ def codec21(width, height, out):
                     l += struct.pack('<B', it)
             done += i
         f += struct.pack('<H', len(l)) + l
+    if len(f) % 2 != 0:
+        f += b'\x00'
     return f
 
 encoders = {

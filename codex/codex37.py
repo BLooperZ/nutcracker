@@ -2,7 +2,7 @@ import struct
 
 from math import ceil
 
-import bomb
+from . import bomb
 
 def to_matrix(w, h, data):
     return [data[i*w:(i+1)*w] for i in range(h)]
@@ -425,12 +425,10 @@ def proc1(decoded_size, src, next_offs, ref, bw, bh, pitch, offset_table):
     return out
 
 def action1(decoded_size, src, delta_buf, ref, mask_flags, bw, bh, pitch, offset_table):
-    return proc1(decoded_size, src, ref, bw, bh, pitch, offset_table)
-
+    return proc1(decoded_size, src, delta_buf, ref, bw, bh, pitch, offset_table)
 
 def action0(decoded_size, src, delta_buf, ref, mask_flags, bw, bh, pitch, offset_table):
     return src[:decoded_size]
-
 
 action_switch = [
     action0,
