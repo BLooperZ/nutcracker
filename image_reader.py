@@ -19,7 +19,7 @@ def read_image_grid(filename):
     # if mode != 'P':
     #      bim.convert('P')
 
-    print(list(np.asarray(bim))[0])
+    # print(list(np.asarray(bim))[0])
 
     color_mode, palette = bim.palette.getdata()
     palette = palette_struct.unpack(palette)

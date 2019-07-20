@@ -1,6 +1,6 @@
 from typing import NamedTuple, Optional, Tuple, Sequence
 
-# TaggedChunk = Tuple[str, bytes]
+# Chunk = Tuple[str, bytes]
 class Chunk(NamedTuple):
     tag: str
     data: bytes
