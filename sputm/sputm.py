@@ -9,10 +9,10 @@ import functools
 import res.base
 
 from typing import IO, Iterator, Optional  # ,Callable
-from .smush_types import Chunk
+from .sputm_types import Chunk
 
-ALIGN = 2
-SIZE_FIX = 0
+ALIGN = 1
+SIZE_FIX = 8
 
 # untag: Callable[[IO[bytes]], Optional[Chunk]] = partial(res.base.untag, size_fix=SIZE_FIX)
 @functools.wraps(res.base.untag)

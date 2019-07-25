@@ -7,12 +7,11 @@ from functools import partial
 from PIL import Image
 import numpy as np
 
-import smush
 from fobj import unobj, mkobj
 from ahdr import parse_header
-from codex import get_decoder, get_encoder
+from codex.codex import get_decoder, get_encoder
 from image import save_single_frame_image
-from smush_writer import mktag
+from smush import smush
 
 def clip(lower, upper, value):
     return lower if value < lower else upper if value > upper else value
@@ -110,21 +109,21 @@ if __name__ == '__main__':
                     image = get_frame_image(idx)
                     encoded = encode_fake(image)
                     decompressed_size = struct.pack('>I', len(encoded))
-                    fdata += mktag('ZFOB', decompressed_size + zlib.compress(encoded, 9))
+                    fdata += smush.mktag('ZFOB', decompressed_size + zlib.compress(encoded, 9))
                     continue
                 if tag == 'FOBJ':
                     image = get_frame_image(idx)
-                    fdata += mktag('FOBJ', encode_fake(image))
+                    fdata += smush.mktag('FOBJ', encode_fake(image))
                     continue
                 else:
-                    fdata += mktag(tag, chunk)
+                    fdata += smush.mktag(tag, chunk)
                     continue
 
-            chars.append(mktag('FRME', fdata))
+            chars.append(smush.mktag('FRME', fdata))
             # im = save_single_frame_image(screen)
             # # im = im.crop(box=(0,0,320,200))
             # im.putpalette(palette)
             # im.save(f'out/FRME_{idx:05d}.png')
         with open('NEW-VIDEO.SAN', 'wb') as output_file:
-            header = mktag('AHDR', smush_file.header)
-            output_file.write(mktag('ANIM', header + b''.join(chars)))
+            header = smush.mktag('AHDR', smush_file.header)
+            output_file.write(smush.mktag('ANIM', header + b''.join(chars)))

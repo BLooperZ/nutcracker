@@ -6,15 +6,14 @@ from itertools import chain
 from image_reader import read_image_grid, resize_frame
 from smush.fobj import mkobj
 from codex.codex import get_encoder
-from smush.smush_writer import mktag, write_chunks
-from smush import anim, ahdr
+from smush import smush, anim, ahdr
 
 # LEGACY
 def write_nut_file(header, numChars, chars, filename):
-    chars = (mktag('FRME', char) for char in chars)
+    chars = (smush.mktag('FRME', char) for char in chars)
     header = ahdr.create(header, nframes=numChars)
-    header = mktag('AHDR', ahdr.to_bytes(header))
-    nut_file = mktag('ANIM', write_chunks(chain([header], chars)))
+    header = smush.mktag('AHDR', ahdr.to_bytes(header))
+    nut_file = smush.mktag('ANIM', smush.write_chunks(chain([header], chars)))
     with open(filename, 'wb') as font_file:
         font_file.write(nut_file)
 
@@ -56,7 +55,7 @@ if __name__=="__main__":
         fobj = mkobj(meta, encoded_frame)
         # print(mktag('FOBJ', fobj))
 
-        teste.append(mktag('FOBJ', fobj))
+        teste.append(smush.mktag('FOBJ', fobj))
 
     with open(args.ref, 'rb') as res:
         header, _ = anim.parse(res)

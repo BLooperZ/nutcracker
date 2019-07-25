@@ -47,14 +47,4 @@ def to_bytes(header: AnimationHeader) -> bytes:
     return base
 
 def create(base: AnimationHeader, **kwargs):
-    return AnimationHeader(
-        version=kwargs.get('version', base.version),
-        nframes=kwargs.get('nframes', base.nframes),
-        unk1=kwargs.get('unk1', base.unk1),
-        palette=kwargs.get('palette', base.palette),
-        secondary_version=kwargs.get('secondary_version', base.secondary_version),
-        unk2=kwargs.get('unk2', base.unk2),
-        sound_freq=kwargs.get('sound_freq', base.sound_freq),
-        zero1=kwargs.get('zero1', base.zero1),
-        zero2=kwargs.get('zero2', base.zero2)
-    )
+    return base._replace(**kwargs)
