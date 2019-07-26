@@ -10,7 +10,7 @@ from smush import anim, ahdr
 from smush.fobj import unobj, mkobj
 from codex.codex import get_decoder
 from image import save_single_frame_image, save_image_grid
-from funcutils import flatten
+from utils.funcutils import flatten
 
 from typing import Sequence
 
