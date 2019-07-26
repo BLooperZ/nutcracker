@@ -7,10 +7,9 @@ import wave
 
 from functools import partial
 
-import smush
-import ahdr
+from . import smush
 
-from funcutils import flatten
+from funcutils import flatten, grouper
 
 from typing import Iterable, Iterator
 
