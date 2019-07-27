@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
+import os
 import struct
 import zlib
 
 from functools import partial
+from itertools import chain
 
 from PIL import Image
 import numpy as np
 
-from fobj import unobj, mkobj
-from ahdr import parse_header
 from codex.codex import get_decoder, get_encoder
 from image import save_single_frame_image
-from smush import smush
+from smush import smush, anim, ahdr, fobj
+
+from typing import List
 
 def clip(lower, upper, value):
     return lower if value < lower else upper if value > upper else value
@@ -19,7 +21,7 @@ def clip(lower, upper, value):
 clip_byte = partial(clip, 0, 255)
 
 def convert_fobj(datam):
-    meta, data = unobj(datam)
+    meta, data = fobj.unobj(datam)
     width = meta['x2'] - meta['x1']
     height = meta['y2'] - meta['y1']
     decode = get_decoder(meta['codec'])
@@ -61,14 +63,14 @@ if __name__ == '__main__':
     parser.add_argument('filename', help='filename to read from')
     args = parser.parse_args()
 
-    with smush.open(args.filename) as smush_file:
-        header = parse_header(smush_file.header)
+    with open(args.filename, 'rb') as res:
+        header, frames = anim.parse(res)
         # print(header['palette'][39])
 
-        # palette = header['palette']
+        basename = os.path.basename(args.filename)
 
-        frames = verify_nframes(smush_file, header['nframes'])
-        frames = (list(smush.read_chunks(frame)) for frame in frames)
+        # palette = header['palette']
+        mframes = (list(frame) for frame in frames)
 
         # parsers = {
         #     'FOBJ': convert_fobj
@@ -92,38 +94,38 @@ if __name__ == '__main__':
         chars = []
 
         def get_frame_image(idx):
-            im = Image.open(f'out/FRME_{idx:05d}.png')
+            im = Image.open(f'out/{basename}/FRME_{idx:05d}.png')
             return list(np.asarray(im))
 
         def encode_fake(image):
             encode = get_encoder(37)
             loc = {'x1': 0, 'y1': 0, 'x2': len(image[0]), 'y2': len(image)}
             meta = {'codec': 37, **loc, 'unk1': 0, 'unk2': 0}
-            return mkobj(meta, encode(image))
+            return fobj.mkobj(meta, encode(image))
 
-        for idx, frame in enumerate(frames):
+        for idx, frame in enumerate(mframes):
             print(f'{idx} - {[tag for tag, _ in frame]}')
-            fdata = b''
+            fdata: List[bytes] = []
             for tag, chunk in frame:
                 if tag == 'ZFOB':
                     image = get_frame_image(idx)
                     encoded = encode_fake(image)
                     decompressed_size = struct.pack('>I', len(encoded))
-                    fdata += smush.mktag('ZFOB', decompressed_size + zlib.compress(encoded, 9))
+                    fdata += [smush.mktag('ZFOB', decompressed_size + zlib.compress(encoded, 9))]
                     continue
                 if tag == 'FOBJ':
                     image = get_frame_image(idx)
-                    fdata += smush.mktag('FOBJ', encode_fake(image))
+                    fdata += [smush.mktag('FOBJ', encode_fake(image))]
                     continue
                 else:
-                    fdata += smush.mktag(tag, chunk)
+                    fdata += [smush.mktag(tag, chunk)]
                     continue
-
-            chars.append(smush.mktag('FRME', fdata))
+            chars.append(smush.mktag('FRME', smush.write_chunks(fdata)))
             # im = save_single_frame_image(screen)
             # # im = im.crop(box=(0,0,320,200))
             # im.putpalette(palette)
             # im.save(f'out/FRME_{idx:05d}.png')
+        bheader = smush.mktag('AHDR', ahdr.to_bytes(header))
+        nut_file = smush.mktag('ANIM', smush.write_chunks(chain([bheader], chars)))
         with open('NEW-VIDEO.SAN', 'wb') as output_file:
-            header = smush.mktag('AHDR', smush_file.header)
-            output_file.write(smush.mktag('ANIM', header + b''.join(chars)))
+            output_file.write(nut_file)

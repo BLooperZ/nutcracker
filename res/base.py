@@ -18,10 +18,13 @@ def untag(stream: IO[bytes], size_fix: int = 0) -> Optional[Chunk]:
 
     * size of chunk header = 4CC tag (4) + uint32_be size (4) = 8 bytes
     """
+    offset = stream.tell()
     tag = stream.read(4)
     if not tag:
         return None
     size = struct.unpack('>I', stream.read(4))[0] - size_fix
+    print(offset, tag.decode(), size)
+    # print(stream.tell(), tag, size)
     data = stream.read(size)
     if len(data) != size:
         raise ValueError(f'got EOF while reading chunk {tag}: expected {size}, got {len(data)}')
@@ -64,8 +67,9 @@ def write_chunks(stream: IO[bytes], chunks: Iterator[bytes], align: int = 2) -> 
     """
     for chunk in chunks:
         assert chunk
-        align_write_stream(stream, align=align)
         stream.write(chunk)
+        align_write_stream(stream, align=align)
+        # print(stream.tell(), chunk[:4])
 
 def write_chunks_bytes(chunks: Iterator[bytes], align: int = 2) -> bytes:
     """Write chunks sequence to bytes with given data alignment.

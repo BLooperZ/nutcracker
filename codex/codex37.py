@@ -384,6 +384,8 @@ def proc1(decoded_size, src, next_offs, ref, bw, bh, pitch, offset_table):
 
     out = [0 for _ in range(decoded_size)]
 
+    print(len(out))
+
     for i in range(bh):
         for j in range(bw):
             if ln < 0:
@@ -418,10 +420,11 @@ def proc1(decoded_size, src, next_offs, ref, bw, bh, pitch, offset_table):
                 dpp = didx + pitch * x
                 spp = dpp + ref + offset_table[code]
                 out[dpp:dpp + 4] = next_offs[spp:spp + 4]
+                # assert(len(out[dpp:dpp + 4])) == 4, (dpp, decoded_size, out[dpp:], next_offs[spp:spp + 4])
             didx += 4
             ln -= 1
         didx += pitch * 3
-    assert len(out) == decoded_size
+    # assert len(out) == decoded_size, (len(out), decoded_size)
     return out
 
 def action1(decoded_size, src, delta_buf, ref, mask_flags, bw, bh, pitch, offset_table):

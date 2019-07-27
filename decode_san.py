@@ -5,6 +5,7 @@ import struct
 import zlib
 
 from functools import partial
+from itertools import chain
 
 from smush import anim, ahdr
 from smush.fobj import unobj, mkobj
@@ -30,6 +31,8 @@ def convert_fobj(datam):
     if decode == NotImplemented:
         print(f"Codec not implemented: {meta['codec']}")
         return None
+
+    # assert len(datam) % 2 == 0, (basename, meta['codec'])
 
     if meta['x1'] != 0 or meta['y1'] != 0:
         print('TELL ME')
@@ -89,6 +92,7 @@ if __name__ == '__main__':
     parser.add_argument('files', nargs='+', help='files to read from')
     parser.add_argument('--target', '-t', help='target directory', default='out')
     parser.add_argument('--nut', action='store_true')
+    parser.add_argument('--map', action='store_true')
     args = parser.parse_args()
 
     files = set(flatten(glob.iglob(r) for r in args.files))
@@ -100,6 +104,9 @@ if __name__ == '__main__':
         print(f'Decoding file: {basename}')
         with open(filename, 'rb') as res:
             header, frames = anim.parse(res)
+            if args.map:
+                list(chain.from_iterable(frames))
+                exit(0)
             if not args.nut:
                 for idx, (palette, screen) in enumerate(generate_frames(header, frames)):
                     im = save_single_frame_image(screen)
