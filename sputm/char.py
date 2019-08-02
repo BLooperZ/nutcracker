@@ -8,6 +8,7 @@ import numpy as np
 from PIL import Image
 
 from utils.funcutils import grouper
+from .bpp_codec import decode_bpp_char
 
 from typing import Set
 
@@ -41,15 +42,6 @@ def decode_lined_rle(data, width, height):
             assert not currx > width
     return output
 
-def handle_bpp_char(data: bytes, width: int, height: int, bpp: int = 1):
-    assert width != 0 and height != 0
-    bits = ''.join(f'{x:08b}' for x in data)
-    gbits = grouper(bits, bpp)
-    bmap = [int(''.join(next(gbits)), 2) for _ in range(height * width)]
-    char = list(grouper(bmap, width))
-    # char = list(grouper(bmap, width, fillvalue=0))
-    return char
-
 def handle_char(data):
     with io.BytesIO(data) as stream:
         stream.seek(0, 2)
@@ -65,7 +57,7 @@ def handle_char(data):
 
         bpp = ord(stream.read(1))
         print(f'{bpp}bpp')
-        decoder = partial(handle_bpp_char, bpp=bpp) if bpp in (1, 2, 4) else decode_lined_rle
+        decoder = partial(decode_bpp_char, bpp=bpp) if bpp in (1, 2, 4) else decode_lined_rle
 
         height = ord(stream.read(1))
 
@@ -87,6 +79,8 @@ def handle_char(data):
             cheight = ord(stream.read(1))
             off1 = ord(stream.read(1))
             off2 = ord(stream.read(1))
+            if not (off1 == 0 and off2 == 0):
+                print('OFFSET', idx, off1, off2)
             char = decoder(stream.read(size), width, cheight)
             unique_vals |= set(chain.from_iterable(char))
             yield idx, convert_to_pil_image(char, width, cheight)
@@ -128,7 +122,7 @@ if __name__ == '__main__':
     with open(args.filename, 'rb') as res:
         data = sputm.assert_tag('CHAR', sputm.untag(res))
         assert res.read() == b''
-        chars = handle_char(data)
+        chars = list(handle_char(data))
         palette = [((59 + x) ** 2 * 83 // 67) % 256 for x in range(256 * 3)]
 
         w = 48
@@ -139,7 +133,12 @@ if __name__ == '__main__':
         bim = Image.fromarray(enpp, mode='P')
         get_bg = get_bg_color(grid_size, lambda idx: idx + int(idx / grid_size))
 
-        for idx, char in chars:
+        max_no = max(idx for idx, char in chars)
+        for i in range(max_no):
+            ph = convert_to_pil_image(bytes(get_bg(i)) * w * h, w, h)
+            bim.paste(ph, box=((i % grid_size) * w, int(i / grid_size) * h))
+
+        for idx, char in chars:        
             im = resize_pil_image(w, h, get_bg(idx), char)
             bim.paste(im, box=((idx % grid_size) * w, int(idx / grid_size) * h))
         bim.putpalette(palette)

@@ -1,4 +1,4 @@
-from itertools import chain
+from itertools import chain, zip_longest
 
 from typing import Iterable, Iterator, Sequence, TypeVar
 
