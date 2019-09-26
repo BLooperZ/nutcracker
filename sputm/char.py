@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import io
+import struct
 
 from itertools import chain
 from functools import partial
@@ -40,6 +41,7 @@ def decode_lined_rle(data, width, height):
                     pos += count
                 currx += count
             assert not currx > width
+    print(data[pos:])
     return output
 
 def handle_char(data):
@@ -69,7 +71,7 @@ def handle_char(data):
 
         index = list(zip(offs, [off[1] for off in offs[1:]] + [dataend]))
         print(len(index))
-        # print(version, color_map, bpp, height, nchars, offs, stream.read())
+        # print(version, color_map, bpp, height, nchars)
 
         unique_vals: Set[int] = set()
         for (idx, off), nextoff in index:
@@ -81,7 +83,8 @@ def handle_char(data):
             off2 = ord(stream.read(1))
             if not (off1 == 0 and off2 == 0):
                 print('OFFSET', idx, off1, off2)
-            char = decoder(stream.read(size), width, cheight)
+            bchar = stream.read(size)
+            char = decoder(bchar, width, cheight)
             unique_vals |= set(chain.from_iterable(char))
             yield idx, convert_to_pil_image(char, width, cheight)
             # print(len(dt), height, width, cheight, off1, off2, bpp)
