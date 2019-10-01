@@ -30,13 +30,13 @@ def untag(stream: IO[bytes], size_fix: int = 0) -> Optional[Chunk]:
         raise ValueError(f'got EOF while reading chunk {tag}: expected {size}, got {len(data)}')
     return Chunk(tag.decode(), data)
 
-def read_chunks(data: bytes, align: int = 2) -> Iterator[Chunk]:
+def read_chunks(data: bytes, align: int = 2, size_fix: int = 0) -> Iterator[Chunk]:
     """Read all chunks from given bytes.
 
     align: data alignment for chunk start offsets.
     """
     with io.BytesIO(data) as stream:
-        for chunk in iter(partial(untag, stream), None):
+        for chunk in iter(partial(untag, stream, size_fix=size_fix), None):
             assert chunk
             align_read_stream(stream, align=align)
             yield chunk

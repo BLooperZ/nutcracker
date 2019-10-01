@@ -21,8 +21,8 @@ def untag(stream: IO[bytes], size_fix: int = SIZE_FIX) -> Optional[Chunk]:
 
 # read_chunks: Callable[[bytes], Iterator[Chunk]] = partial(res.base.read_chunks, align=ALIGN)
 @functools.wraps(res.base.read_chunks)
-def read_chunks(data: bytes, align: int = ALIGN) -> Iterator[Chunk]:
-    return res.base.read_chunks(data, align=align)
+def read_chunks(data: bytes, align: int = ALIGN, size_fix: int = SIZE_FIX) -> Iterator[Chunk]:
+    return res.base.read_chunks(data, align=align, size_fix=SIZE_FIX)
 
 # untag: Callable[[str, bytes], bytes] = partial(res.base.mktag, size_fix=SIZE_FIX)
 @functools.wraps(res.base.mktag)

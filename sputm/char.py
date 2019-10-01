@@ -10,39 +10,9 @@ from PIL import Image
 
 from utils.funcutils import grouper
 from .bpp_codec import decode_bpp_char
+from codex.rle import decode_lined_rle
 
 from typing import Set
-
-def decode_lined_rle(data, width, height):
-    datlen = len(data)
-
-    output = [[0 for _ in range(width)] for _ in range(height)]
-
-    pos = 0
-    next_pos = pos
-    for curry in range(height):
-    # while pos < datlen and curry < height:
-        currx = 0
-        bytecount = int.from_bytes(data[next_pos:next_pos + 2], byteorder='little', signed=False)
-        pos = next_pos + 2
-        next_pos += bytecount + 2
-        while pos < datlen and pos < next_pos:
-            code = data[pos]
-            pos += 1
-            if code & 1:  # skip count
-                currx += (code >> 1)
-            else:
-                count = (code >> 2) + 1
-                if code & 2:  # encoded run
-                    output[curry][currx:currx+count] = [data[pos]] * count
-                    pos += 1
-                else:  # absolute run
-                    output[curry][currx:currx+count] = data[pos:pos+count]
-                    pos += count
-                currx += count
-            assert not currx > width
-    print(data[pos:])
-    return output
 
 def handle_char(data):
     with io.BytesIO(data) as stream:
@@ -65,7 +35,11 @@ def handle_char(data):
 
         nchars = int.from_bytes(stream.read(2), byteorder='little', signed=False)
 
+        yield nchars
+
         assert stream.tell() == datastart + 4
+
+
         offs = [int.from_bytes(stream.read(4), byteorder='little', signed=False) for i in range(nchars)]
         offs = [off for off in enumerate(offs) if off[1] != 0]
 
@@ -125,19 +99,22 @@ if __name__ == '__main__':
     with open(args.filename, 'rb') as res:
         data = sputm.assert_tag('CHAR', sputm.untag(res))
         assert res.read() == b''
-        chars = list(handle_char(data))
+        nchars, *chars = list(handle_char(data))
         palette = [((59 + x) ** 2 * 83 // 67) % 256 for x in range(256 * 3)]
 
         w = 48
         h = 48
         grid_size = 16
 
+        assert nchars <= grid_size ** 2, nchars
+
         enpp = np.array([[0] * w * grid_size] * h * grid_size, dtype=np.uint8)
         bim = Image.fromarray(enpp, mode='P')
         get_bg = get_bg_color(grid_size, lambda idx: idx + int(idx / grid_size))
 
-        max_no = max(idx for idx, char in chars)
-        for i in range(max_no):
+        # max_no = max(idx for idx, char in chars)
+        # for i in range(max_no):
+        for i in range(nchars):
             ph = convert_to_pil_image(bytes(get_bg(i)) * w * h, w, h)
             bim.paste(ph, box=((i % grid_size) * w, int(i / grid_size) * h))
 

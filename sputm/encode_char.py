@@ -11,84 +11,9 @@ from PIL import Image
 
 from utils.funcutils import grouper, flatten
 from .bpp_codec import decode_bpp_char, encode_bpp_char
+from codex.rle import encode_lined_rle
 
 from typing import Set
-
-def decode_lined_rle(data, width, height):
-    datlen = len(data)
-
-    output = [[0 for _ in range(width)] for _ in range(height)]
-
-    pos = 0
-    next_pos = pos
-    for curry in range(height):
-    # while pos < datlen and curry < height:
-        currx = 0
-        bytecount = int.from_bytes(data[next_pos:next_pos + 2], byteorder='little', signed=False)
-        pos = next_pos + 2
-        next_pos += bytecount + 2
-        while pos < datlen and pos < next_pos:
-            code = data[pos]
-            pos += 1
-            if code & 1:  # skip count
-                currx += (code >> 1)
-            else:
-                count = (code >> 2) + 1
-                if code & 2:  # encoded run
-                    output[curry][currx:currx+count] = [data[pos]] * count
-                    pos += 1
-                else:  # absolute run
-                    output[curry][currx:currx+count] = data[pos:pos+count]
-                    pos += count
-                currx += count
-            assert not currx > width
-    return output
-
-def handle_char(data):
-    with io.BytesIO(data) as stream:
-        stream.seek(0, 2)
-        dataend_real = stream.tell()
-        print(dataend_real - 21)
-        stream.seek(0, 0)
-        dataend = int.from_bytes(stream.read(4), byteorder='little', signed=False) - 6
-        print(dataend)
-        datastart = 21
-        version = ord(stream.read(1))
-        color_map = stream.read(16)
-        assert stream.tell() == datastart
-
-        bpp = ord(stream.read(1))
-        print(f'{bpp}bpp')
-        decoder = partial(decode_bpp_char, bpp=bpp) if bpp in (1, 2, 4) else decode_lined_rle
-
-        height = ord(stream.read(1))
-
-        nchars = int.from_bytes(stream.read(2), byteorder='little', signed=False)
-
-        assert stream.tell() == datastart + 4
-        offs = [int.from_bytes(stream.read(4), byteorder='little', signed=False) for i in range(nchars)]
-        print(offs)
-        offs = [off for off in enumerate(offs) if off[1] != 0]
-
-        index = list(zip(offs, [off[1] for off in offs[1:]] + [dataend]))
-        print(len(index), index)
-        # print(version, color_map, bpp, height, nchars, offs, stream.read())
-
-        unique_vals: Set[int] = set()
-        for (idx, off), nextoff in index:
-            size = nextoff - off - 4
-            assert stream.tell() == datastart + off
-            width = ord(stream.read(1))
-            cheight = ord(stream.read(1))
-            off1 = ord(stream.read(1))
-            off2 = ord(stream.read(1))
-            if not (off1 == 0 and off2 == 0):
-                print('OFFSET', idx, off1, off2)
-            char = decoder(stream.read(size), width, cheight)
-            unique_vals |= set(chain.from_iterable(char))
-            yield idx, convert_to_pil_image(char, width, cheight)
-            # print(len(dt), height, width, cheight, off1, off2, bpp)
-        print(unique_vals)
 
 def read_image_grid(filename):
     w = 48
@@ -113,6 +38,14 @@ def count_in_row(pred, row):
 
 def calc_bpp(x):
     return 1 << max((x - 1).bit_length() - 1, 0).bit_length()
+
+# TODO: replace with itertools.takewhile
+def filter_empty_frames(frames):
+    for im in frames:
+        frame = list(np.asarray(im))
+        if set(flatten(frame)) == {0}:
+            break
+        yield im
 
 def resize_frame(im):
     frame = list(np.asarray(im))
@@ -143,9 +76,6 @@ def bind(func, frames):
     for frame in frames:
         yield frame, func(frame) if frame else None
 
-def encode_lined_rle(char):
-    return b'\0'
-
 def get_frame_bpp(frame):
     return calc_bpp(len(set(flatten(frame[1]))))
 
@@ -174,6 +104,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
     parser.add_argument('--ref', '-r', action='store', type=str, help='reference CHAR file')
+    parser.add_argument('--target', '-t', help='target file', default='CHAR_OUT')
     args = parser.parse_args()
 
     with open(args.ref, 'rb') as ref:
@@ -183,23 +114,24 @@ if __name__ == '__main__':
             stream.seek(4, io.SEEK_SET)
             version = ord(stream.read(1))       
             color_map = stream.read(16)
-            ref_bpp = ord(stream.read(1))
+            bpp = ord(stream.read(1))
             height = ord(stream.read(1))
 
     frames = read_image_grid(args.filename)
-    frames = (resize_frame(frame) for frame in frames)
-    frames, bpps = zip(*bind(get_frame_bpp, frames))
-
-    bpp = max(val for val in bpps if val)
-    print(f'{bpp}bpp')
-    assert bpp == ref_bpp
-
-    encoder = partial(encode_bpp_char, bpp=bpp) if bpp in (1, 2, 4) else encode_lined_rle
-    frames = list(encode_frames(frames, encoder))
+    frames = list(filter_empty_frames(frames))
     while not frames[-1]:
         frames = frames[:-1]
     nchars = len(frames)
     print(nchars)
+    frames = (resize_frame(frame) for frame in frames)
+    frames, bpps = zip(*bind(get_frame_bpp, frames))
+
+    v_bpp = max(val for val in bpps if val)
+    print(f'{v_bpp}v_bpp, {bpp}bpp')
+    assert v_bpp <= bpp, (bpp, v_bpp)
+    encoder = partial(encode_bpp_char, bpp=bpp) if bpp in (1, 2, 4) else encode_lined_rle
+    frames = list(encode_frames(frames, encoder))
+    assert nchars == len(frames)
     with io.BytesIO() as data_stream, io.BytesIO() as idx_stream:
         idx_stream.write(version.to_bytes(1, byteorder='little', signed=False))
         idx_stream.write(color_map)
@@ -217,5 +149,5 @@ if __name__ == '__main__':
                 offset += len(frame)
         out_data = idx_stream.getvalue() + data_stream.getvalue()
         out = (len(out_data) - 11).to_bytes(4, byteorder='little', signed=False) + out_data
-    with open('OUTPUT.CHAR', 'wb') as outfile:
+    with open(args.target, 'wb') as outfile:
         outfile.write(sputm.mktag('CHAR', out))
