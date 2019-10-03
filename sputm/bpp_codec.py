@@ -14,6 +14,8 @@ def decode_bpp_char(data: bytes, width: int, height: int, bpp: int = 1) -> Seque
     print(list(gbits))  # why there is still data left?
     char = list(grouper(bmap, width))
     # char = list(grouper(bmap, width, fillvalue=0))
+    # encoded = encode_bpp_char(char, bpp=bpp)
+    # assert encoded == data, (encoded, data)
     return char
 
 def encode_bpp_char(bmap: Sequence[Sequence[int]], bpp = 1) -> bytes:

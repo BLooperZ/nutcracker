@@ -96,5 +96,6 @@ def decode_lined_rle(data, width, height):
                 currx += count
             assert not currx > width
     encoded = encode_lined_rle(output)
+    print((data, encoded))
     assert encoded == data, (encoded, data)
     return output
