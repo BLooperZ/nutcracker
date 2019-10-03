@@ -53,14 +53,14 @@ def handle_char(data):
             assert stream.tell() == datastart + off
             width = ord(stream.read(1))
             cheight = ord(stream.read(1))
-            off1 = ord(stream.read(1))
-            off2 = ord(stream.read(1))
-            if not (off1 == 0 and off2 == 0):
-                print('OFFSET', idx, off1, off2)
+            xoff = int.from_bytes(stream.read(1), byteorder='little', signed=True)
+            yoff = int.from_bytes(stream.read(1), byteorder='little', signed=True)
+            if not (xoff == 0 and yoff == 0):
+                print('OFFSET', idx, xoff, yoff)
             bchar = stream.read(size)
             char = decoder(bchar, width, cheight)
             unique_vals |= set(chain.from_iterable(char))
-            yield idx, convert_to_pil_image(char, width, cheight)
+            yield idx, (xoff, yoff, convert_to_pil_image(char, width, cheight))
             # print(len(dt), height, width, cheight, off1, off2, bpp)
         print(unique_vals)
 
@@ -102,8 +102,10 @@ if __name__ == '__main__':
         nchars, *chars = list(handle_char(data))
         palette = [((59 + x) ** 2 * 83 // 67) % 256 for x in range(256 * 3)]
 
-        w = 48
-        h = 48
+        base_xoff = 8
+        base_yoff = 8
+        w = 48 + base_xoff * 2
+        h = 48 + base_yoff * 2
         grid_size = 16
 
         assert nchars <= grid_size ** 2, nchars
@@ -118,8 +120,10 @@ if __name__ == '__main__':
             ph = convert_to_pil_image(bytes(get_bg(i)) * w * h, w, h)
             bim.paste(ph, box=((i % grid_size) * w, int(i / grid_size) * h))
 
-        for idx, char in chars:        
-            im = resize_pil_image(w, h, get_bg(idx), char)
-            bim.paste(im, box=((idx % grid_size) * w, int(idx / grid_size) * h))
+        for idx, (xoff, yoff, im) in chars:
+        # for idx, char in chars: 
+            # im = resize_pil_image(w, h, get_bg(idx), char)
+            # xoff, yoff, im = char
+            bim.paste(im, box=((idx % grid_size) * w + base_xoff + xoff, int(idx / grid_size) * h + base_yoff + yoff))
         bim.putpalette(palette)
         bim.save(f'{basename}.png')

@@ -16,8 +16,11 @@ from codex.rle import encode_lined_rle
 from typing import Set
 
 def read_image_grid(filename):
-    w = 48
-    h = 48
+    base_xoff = 8
+    base_yoff = 8
+    w = 48 + base_xoff * 2
+    h = 48 + base_yoff * 2
+    grid_size = 16
 
     bim = Image.open(filename)
 
@@ -91,9 +94,9 @@ def encode_frames(frames, encoder):
                 assert width == len(img[0])
                 cheight = loc['y2'] - loc['y1']
                 assert cheight == len(img)
-                off1 = loc['x1']
-                off2 = loc['y1']
-                yield struct.pack('<4B', width, cheight, off1, off2) + encoder(img)
+                xoff = loc['x1'] - 8
+                yoff = loc['y1'] - 8
+                yield struct.pack('<2B2b', width, cheight, xoff, yoff) + encoder(img)
 
 if __name__ == '__main__':
     import argparse
@@ -148,6 +151,7 @@ if __name__ == '__main__':
                 idx_stream.write(offset.to_bytes(4, byteorder='little', signed=False))
                 offset += len(frame)
         out_data = idx_stream.getvalue() + data_stream.getvalue()
-        out = (len(out_data) - 11).to_bytes(4, byteorder='little', signed=False) + out_data
+        rel = 11 if bpp < 8 else -4
+        out = (len(out_data) - rel).to_bytes(4, byteorder='little', signed=False) + out_data
     with open(args.target, 'wb') as outfile:
         outfile.write(sputm.mktag('CHAR', out))
