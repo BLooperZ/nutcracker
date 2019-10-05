@@ -46,8 +46,10 @@ def save_image(filename, frames, palette, h, w, transparency=None):
     bim.save(filename, transparency=transparency)
 
 def save_image_grid(filename, frames, palette, transparency=None):
-    w = 32
-    h = 48
+    base_xoff = 8
+    base_yoff = 8
+    w = 48 + base_xoff
+    h = 48 + base_yoff
     grid_size = 16
 
     palette = list(palette)
@@ -57,13 +59,20 @@ def save_image_grid(filename, frames, palette, transparency=None):
 
     get_bg = get_bg_color(grid_size, lambda idx: idx + int(idx / grid_size))
 
-    stack = (resize_pil_image(w, h, get_bg(idx), frame, loc) for idx, (frame, loc) in enumerate(zip(im_frames, locs)))
+    # stack = (resize_pil_image(w, h, get_bg(idx), frame, loc) for idx, (frame, loc) in enumerate(zip(im_frames, locs)))
 
     enpp = np.array([[transparency] * w * grid_size] * h * grid_size, dtype=np.uint8)
     bim = Image.fromarray(enpp, mode='P')
 
-    for idx, frame in enumerate(stack):
-        bim.paste(frame, box=((idx % grid_size) * w, int(idx / grid_size) * h))
+    stack = list(im_frames)
+    nchars = len(stack)
+
+    for i in range(nchars):
+        ph = convert_to_pil_image([[get_bg(i)] * w] * h)
+        bim.paste(ph, box=((i % grid_size) * w, int(i / grid_size) * h))
+
+    for idx, (frame, loc) in enumerate(zip(stack, locs)):
+        bim.paste(frame, box=((idx % grid_size) * w + base_xoff + loc['x1'], int(idx / grid_size) * h + base_yoff + loc['y1']))
 
     palette[3 * transparency: 3 * transparency + 3] = [109, 109, 109]
     bim.putpalette(palette)

@@ -18,8 +18,8 @@ from typing import Set
 def read_image_grid(filename):
     base_xoff = 8
     base_yoff = 8
-    w = 48 + base_xoff * 2
-    h = 48 + base_yoff * 2
+    w = 48 + base_xoff
+    h = 48 + base_yoff
     grid_size = 16
 
     bim = Image.open(filename)
@@ -114,11 +114,16 @@ if __name__ == '__main__':
         data = sputm.assert_tag('CHAR', sputm.untag(ref))
         assert ref.read() == b''
         with io.BytesIO(data) as stream:
-            stream.seek(4, io.SEEK_SET)
+            stream.seek(0, io.SEEK_END)
+            dataend_real = stream.tell() - 4
+            stream.seek(0, io.SEEK_SET)
+            dataend = int.from_bytes(stream.read(4), byteorder='little', signed=False)
+            dataend_diff = dataend_real - dataend
             version = ord(stream.read(1))       
             color_map = stream.read(16)
             bpp = ord(stream.read(1))
             height = ord(stream.read(1))
+            print(dataend_diff, version, color_map, bpp, height)
 
     frames = read_image_grid(args.filename)
     frames = list(filter_empty_frames(frames))
@@ -151,7 +156,6 @@ if __name__ == '__main__':
                 idx_stream.write(offset.to_bytes(4, byteorder='little', signed=False))
                 offset += len(frame)
         out_data = idx_stream.getvalue() + data_stream.getvalue()
-        rel = 11 if bpp < 8 else -4
-        out = (len(out_data) - rel).to_bytes(4, byteorder='little', signed=False) + out_data
+        out = (len(out_data) - dataend_diff).to_bytes(4, byteorder='little', signed=False) + out_data
     with open(args.target, 'wb') as outfile:
         outfile.write(sputm.mktag('CHAR', out))

@@ -9,8 +9,11 @@ PALETTE_SIZE = 256
 palette_struct = Struct('<{}B'.format(3 * PALETTE_SIZE))
 
 def read_image_grid(filename):
-    w = 32
-    h = 48
+    base_xoff = 8
+    base_yoff = 8
+    w = 48 + base_xoff
+    h = 48 + base_yoff
+    grid_size = 16
 
     bim = Image.open(filename)
 
@@ -26,8 +29,8 @@ def read_image_grid(filename):
     palette = list(zip(*[iter(palette)]*3)) #[palette[3*i:3*i+3] for i in range(256)]
     # print(palette)
 
-    for row in range(16):
-        for col in range(16):
+    for row in range(grid_size):
+        for col in range(grid_size):
             area = (col * w, row * h, (col + 1) * w, (row + 1) * h)
             yield bim.crop(area)
 
@@ -36,6 +39,7 @@ def count_in_row(pred, row):
 
 def resize_frame(im):
     BGS = [5, 4]
+    base_xyoff = 8
     char_is_bg = lambda c: c in BGS
     line_is_bg = lambda line: all(c in BGS for c in line)
 
@@ -52,11 +56,11 @@ def resize_frame(im):
         return None
 
     fields = ('x1', 'y1', 'x2', 'y2')
-    loc = dict(zip(fields, area))
+    loc = dict(zip(fields, ((x - base_xyoff) for x in area)))
 
     return loc, list(np.asarray(im.crop(area)))
 
-if __name__=="__main__":
+if __name__== '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(description='read smush file')
