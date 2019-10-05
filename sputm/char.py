@@ -87,13 +87,6 @@ def get_bg_color(row_size, f):
         return BGS[f(idx) % len(BGS)]
     return get_bg
 
-def resize_pil_image(w, h, bg, im):
-    # print(bg)
-    nbase = convert_to_pil_image(bytes(bg) * w * h, w, h)
-    # nbase.paste(im, box=itemgetter('x1', 'y1', 'x2', 'y2')(loc))
-    nbase.paste(im, box=(0, 0))
-    return nbase
-
 if __name__ == '__main__':
     import argparse
     import os
@@ -108,6 +101,7 @@ if __name__ == '__main__':
     with open(args.filename, 'rb') as res:
         data = sputm.assert_tag('CHAR', sputm.untag(res))
         assert res.read() == b''
+
         nchars, *chars = list(handle_char(data))
         palette = [((59 + x) ** 2 * 83 // 67) % 256 for x in range(256 * 3)]
 
@@ -123,16 +117,16 @@ if __name__ == '__main__':
         bim = Image.fromarray(enpp, mode='P')
         get_bg = get_bg_color(grid_size, lambda idx: idx + int(idx / grid_size))
 
-        # max_no = max(idx for idx, char in chars)
-        # for i in range(max_no):
+        # nchars does not match real number of characters nor max. index
         for i in range(nchars):
             ph = convert_to_pil_image(bytes(get_bg(i)) * w * h, w, h)
             bim.paste(ph, box=((i % grid_size) * w, int(i / grid_size) * h))
 
+        # idx is character index in ascii table
         for idx, (xoff, yoff, im) in chars:
-        # for idx, char in chars: 
-            # im = resize_pil_image(w, h, get_bg(idx), char)
-            # xoff, yoff, im = char
-            bim.paste(im, box=((idx % grid_size) * w + base_xoff + xoff, int(idx / grid_size) * h + base_yoff + yoff))
+            assert idx < nchars
+            xbase = (idx % grid_size) * w + base_xoff
+            ybase = (idx // grid_size) * h + base_yoff
+            bim.paste(im, box=(xbase + xoff, ybase + yoff))
         bim.putpalette(palette)
         bim.save(f'{basename}.png')
