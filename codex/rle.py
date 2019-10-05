@@ -4,38 +4,26 @@ from typing import Sequence, Mapping
 
 from utils import funcutils
 
-def count_ignore_zeroes(group):
-    if set(group) == {0}:
-        return -1
-    return len(group)
-
 def encode_groups(groups):
     old_abs = b''
     for group in groups:
         assert len(group) > 0
-        inner = list(funcutils.flatten(group))
-        print(inner)
-        print([g for g in group])
-        if set(inner) == {0}:
-            if old_abs:
-                yield old_abs
-                old_abs = b''
-            yield (2 * len(inner) + 1).to_bytes(1, byteorder='little', signed=False)
+        print(group)
+        if set(group) == {0}:
+            yield old_abs + (2 * len(group) + 1).to_bytes(1, byteorder='little', signed=False)
+            old_abs = b''
         else:
-            absolute = (4 * (len(inner) - 1)).to_bytes(1, byteorder='little', signed=False) + bytes(inner)
-            encoded = b''.join((4 * (len(g) - 1) + 2).to_bytes(1, byteorder='little', signed=False) + bytes(g)[:1] for g in group)
+            absolute = (4 * (len(group) - 1)).to_bytes(1, byteorder='little', signed=False) + bytes(group)
+            encoded = (4 * (len(group) - 1) + 2).to_bytes(1, byteorder='little', signed=False) + bytes(group[:1])
             print(absolute, encoded)
             if len(encoded) + len(old_abs) < 1 + len(old_abs[1:] + absolute[1:]):
-                if old_abs:
-                    yield old_abs
-                    old_abs = b''
-                yield encoded
-            else:
-                if old_abs:
+                yield old_abs + encoded
+                old_abs = b''
+            elif old_abs:
                     new_abs = old_abs[1:] + absolute[1:]
                     old_abs = (4 * (len(new_abs) - 1)).to_bytes(1, byteorder='little', signed=False) + new_abs
-                else:
-                    old_abs = absolute
+            else:
+                old_abs = absolute
     if old_abs:
         yield old_abs
 
@@ -49,11 +37,9 @@ def encode_lined_rle(bmap: Sequence[Sequence[int]]) -> bytes:
                 continue
 
             grouped = [list(group) for c, group in itertools.groupby(line)]
-            len_grouped = [list(group) for c, group in itertools.groupby(grouped, key=count_ignore_zeroes)]
+            print(grouped)
 
-            print(len_grouped)
-
-            linedata = b''.join(encode_groups(len_grouped))
+            linedata = b''.join(encode_groups(grouped))
             sized = len(linedata).to_bytes(2, byteorder='little', signed=False) + linedata
             stream.write(sized)
             print('encode', sized)
