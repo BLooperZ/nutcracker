@@ -11,6 +11,7 @@ from PIL import Image
 from utils.funcutils import grouper
 from .bpp_codec import decode_bpp_char
 from codex.rle import decode_lined_rle
+from image.base import convert_to_pil_image
 
 from typing import Set
 
@@ -64,7 +65,7 @@ def handle_char(data):
             bchar = stream.read(size)
             char = decoder(bchar, width, cheight)
             unique_vals |= set(chain.from_iterable(char))
-            yield idx, (xoff, yoff, convert_to_pil_image(char, width, cheight))
+            yield idx, (xoff, yoff, convert_to_pil_image(char, size=(width, cheight)))
             print(cheight, yoff, height)
             # print(len(dt), height, width, cheight, off1, off2, bpp)
         assert stream.read() == b''
@@ -73,24 +74,11 @@ def handle_char(data):
         # # print(stream.read())
         # # exit(1)
 
-def convert_to_pil_image(char, width, height):
-    # print('CHAR:', char)
-    npp = np.array(list(char), dtype=np.uint8)
-    npp.resize(height, width)
-    im = Image.fromarray(npp, mode='P')
-    return im
-
-def get_bg_color(row_size, f):
-    BGS = [b'0', b'n']
-
-    def get_bg(idx):
-        return BGS[f(idx) % len(BGS)]
-    return get_bg
-
 if __name__ == '__main__':
     import argparse
     import os
 
+    from image import grid
     from . import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
@@ -105,28 +93,6 @@ if __name__ == '__main__':
         nchars, *chars = list(handle_char(data))
         palette = [((59 + x) ** 2 * 83 // 67) % 256 for x in range(256 * 3)]
 
-        base_xoff = 8
-        base_yoff = 8
-        w = 48 + base_xoff
-        h = 48 + base_yoff
-        grid_size = 16
-
-        assert nchars <= grid_size ** 2, nchars
-
-        enpp = np.array([[0] * w * grid_size] * h * grid_size, dtype=np.uint8)
-        bim = Image.fromarray(enpp, mode='P')
-        get_bg = get_bg_color(grid_size, lambda idx: idx + int(idx / grid_size))
-
-        # nchars does not match real number of characters nor max. index
-        for i in range(nchars):
-            ph = convert_to_pil_image(bytes(get_bg(i)) * w * h, w, h)
-            bim.paste(ph, box=((i % grid_size) * w, int(i / grid_size) * h))
-
-        # idx is character index in ascii table
-        for idx, (xoff, yoff, im) in chars:
-            assert idx < nchars
-            xbase = (idx % grid_size) * w + base_xoff
-            ybase = (idx // grid_size) * h + base_yoff
-            bim.paste(im, box=(xbase + xoff, ybase + yoff))
+        bim = grid.create_char_grid(nchars, chars)
         bim.putpalette(palette)
         bim.save(f'{basename}.png')

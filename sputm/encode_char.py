@@ -13,31 +13,9 @@ from utils.funcutils import grouper, flatten
 from .bpp_codec import decode_bpp_char, encode_bpp_char
 from codex.rle import encode_lined_rle
 
+from image import grid
+
 from typing import Set
-
-def read_image_grid(filename):
-    base_xoff = 8
-    base_yoff = 8
-    w = 48 + base_xoff
-    h = 48 + base_yoff
-    grid_size = 16
-
-    bim = Image.open(filename)
-
-    for row in range(16):
-        for col in range(16):
-            area = (col * w, row * h, (col + 1) * w, (row + 1) * h)
-            yield bim.crop(area)
-
-def resize_pil_image(w, h, bg, im):
-    # print(bg)
-    nbase = convert_to_pil_image(bytes(bg) * w * h, w, h)
-    # nbase.paste(im, box=itemgetter('x1', 'y1', 'x2', 'y2')(loc))
-    nbase.paste(im, box=(0, 0))
-    return nbase
-
-def count_in_row(pred, row):
-    return sum(1 for _ in takewhile(pred, row))
 
 def calc_bpp(x):
     return 1 << max((x - 1).bit_length() - 1, 0).bit_length()
@@ -49,31 +27,6 @@ def filter_empty_frames(frames):
         if set(flatten(frame)) == {0}:
             break
         yield im
-
-def resize_frame(im):
-    frame = list(np.asarray(im))
-    BG = frame[-1][-1]
-
-    char_is_bg = lambda c: c == BG
-    line_is_bg = lambda line: all(c == BG for c in line)
-
-    if set(flatten(frame)) == {BG}:
-        return None
-
-    x1 = min(count_in_row(char_is_bg, line) for line in frame)
-    x2 = len(frame[0]) - min(count_in_row(char_is_bg, reversed(line)) for line in frame)
-    y1 = count_in_row(line_is_bg, frame)
-    y2 = len(frame) - count_in_row(line_is_bg, reversed(frame))
-
-    area = (x1, y1, x2, y2)
-
-    if area == (0, 0, len(frame[0]), len(frame)):
-        return None
-
-    fields = ('x1', 'y1', 'x2', 'y2')
-    loc = dict(zip(fields, area))
-
-    return loc, np.asarray(im.crop(area))
 
 def bind(func, frames):
     for frame in frames:
@@ -94,14 +47,15 @@ def encode_frames(frames, encoder):
                 assert width == len(img[0])
                 cheight = loc['y2'] - loc['y1']
                 assert cheight == len(img)
-                xoff = loc['x1'] - 8
-                yoff = loc['y1'] - 8
+                xoff = loc['x1']
+                yoff = loc['y1']
                 yield struct.pack('<2B2b', width, cheight, xoff, yoff) + encoder(img)
 
 if __name__ == '__main__':
     import argparse
     import os
 
+    from image import grid
     from . import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
@@ -125,13 +79,13 @@ if __name__ == '__main__':
             height = ord(stream.read(1))
             print(dataend_diff, version, color_map, bpp, height)
 
-    frames = read_image_grid(args.filename)
+    frames = grid.read_image_grid(args.filename)
     frames = list(filter_empty_frames(frames))
     while not frames[-1]:
         frames = frames[:-1]
     nchars = len(frames)
     print(nchars)
-    frames = (resize_frame(frame) for frame in frames)
+    frames = (grid.resize_frame(frame) for frame in frames)
     frames, bpps = zip(*bind(get_frame_bpp, frames))
 
     v_bpp = max(val for val in bpps if val)
