@@ -11,7 +11,7 @@ from PIL import Image
 from utils.funcutils import grouper
 from .bpp_codec import decode_bpp_char
 from codex.rle import decode_lined_rle
-from image.base import convert_to_pil_image
+from graphics import image
 
 from typing import Set
 
@@ -65,7 +65,7 @@ def handle_char(data):
             bchar = stream.read(size)
             char = decoder(bchar, width, cheight)
             unique_vals |= set(chain.from_iterable(char))
-            yield idx, (xoff, yoff, convert_to_pil_image(char, size=(width, cheight)))
+            yield idx, (xoff, yoff, image.convert_to_pil_image(char, size=(width, cheight)))
             print(cheight, yoff, height)
             # print(len(dt), height, width, cheight, off1, off2, bpp)
         assert stream.read() == b''
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     import argparse
     import os
 
-    from image import grid
+    from graphics import grid
     from . import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')

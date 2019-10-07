@@ -88,6 +88,9 @@ def generate_frames(header, frames):
 if __name__ == '__main__':
     import argparse
 
+    from graphics import grid
+    from graphics.image import convert_to_pil_image
+
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('files', nargs='+', help='files to read from')
     parser.add_argument('--target', '-t', help='target directory', default='out')
@@ -114,10 +117,19 @@ if __name__ == '__main__':
                     im.putpalette(palette)
                     im.save(os.path.join(output_dir, f'FRME_{idx:05d}.png'))
             else:
-                chars = (frame for _, frame in generate_frames(header, frames))
-                save_image_grid(
-                    os.path.join(output_dir, 'chars.png'),
-                    chars,
-                    header.palette,
-                    transparency=39
-                )
+                chars = list(frame for _, frame in generate_frames(header, frames))
+                lchars = [(loc['x1'], loc['x2'], convert_to_pil_image(im)) for loc, im in chars]
+                nchars = len(lchars)
+                transparency=39
+                # bim = grid.create_char_grid(nchars, enumerate(lchars), transparency=transparency)
+                bim = save_image_grid(chars, transparency=transparency)
+                palette = list(header.palette)
+                palette[3 * transparency: 3 * transparency + 3] = [109, 109, 109]
+                bim.putpalette(palette)
+                bim.save(os.path.join(output_dir, 'chars.png')) #, transparency=transparency)
+                # save_image_grid(
+                #     os.path.join(output_dir, 'chars.png'),
+                #     chars,
+                #     header.palette,
+                #     transparency=39
+                # )

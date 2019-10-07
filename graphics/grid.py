@@ -4,9 +4,10 @@ import numpy as np
 from PIL import Image
 
 from utils import funcutils
-from .base import convert_to_pil_image
+from .image import convert_to_pil_image
 
 BGS = [b'0', b'n']
+BGS = [b'\05', b'\04']
 BASE_XOFF = 8
 BASE_YOFF = 8
 TILE_W = 48 + BASE_XOFF
@@ -26,10 +27,10 @@ def read_image_grid(filename, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE):
             area = (col * w, row * h, (col + 1) * w, (row + 1) * h)
             yield bim.crop(area)
 
-def checkered_grid(nchars, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE):
+def checkered_grid(nchars, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE, transparency=0):
     assert nchars <= grid_size ** 2, nchars
 
-    bim = convert_to_pil_image([[0] * w * grid_size] * h * grid_size)
+    bim = convert_to_pil_image([[transparency] * w * grid_size] * h * grid_size)
     get_bg = get_bg_color(grid_size, lambda idx: idx + int(idx / grid_size))
 
     # nchars does not have to match real number of characters nor max. index
@@ -39,8 +40,8 @@ def checkered_grid(nchars, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE):
 
     return bim
 
-def create_char_grid(nchars, chars, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE, base_xoff=BASE_XOFF, base_yoff=BASE_YOFF):
-    bim = checkered_grid(nchars, w=w, h=h, grid_size=grid_size)
+def create_char_grid(nchars, chars, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE, base_xoff=BASE_XOFF, base_yoff=BASE_YOFF, transparency=0):
+    bim = checkered_grid(nchars, w=w, h=h, grid_size=grid_size, transparency=transparency)
 
     # idx is character index in ascii table
     for idx, (xoff, yoff, im) in chars:
