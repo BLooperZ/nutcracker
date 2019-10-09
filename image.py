@@ -4,20 +4,14 @@ from PIL import Image
 import numpy as np
 from operator import itemgetter
 
+from graphics.grid import convert_to_pil_image
+
 def get_bg_color(row_size, f):
     BGS = [5, 4]
 
     def get_bg(idx):
         return BGS[f(idx) % len(BGS)]
     return get_bg
-
-def convert_to_pil_image(frame):
-    try:
-        npp = np.array(frame, dtype=np.uint8)
-        im = Image.fromarray(npp, mode='P')
-        return im
-    except Exception as e:
-        print(frame)
 
 def resize_pil_image(w, h, bg, im, loc):
     nbase = convert_to_pil_image([[bg] * w] * h)
@@ -44,32 +38,6 @@ def save_image(filename, frames, palette, h, w, transparency=None):
 
     bim.putpalette(palette)
     bim.save(filename, transparency=transparency)
-
-def save_image_grid(frames, transparency=None):
-    base_xoff = 8
-    base_yoff = 8
-    w = 48 + base_xoff
-    h = 48 + base_yoff
-    grid_size = 16
-
-    locs, frames = zip(*frames)
-    im_frames = (convert_to_pil_image(frame) for frame in frames)
-
-    get_bg = get_bg_color(grid_size, lambda idx: idx + int(idx / grid_size))
-
-    bim = convert_to_pil_image([[transparency] * w * grid_size] * h * grid_size)
-
-    stack = list(im_frames)
-    nchars = len(stack)
-
-    for i in range(nchars):
-        ph = convert_to_pil_image([[get_bg(i)] * w] * h)
-        bim.paste(ph, box=((i % grid_size) * w, int(i / grid_size) * h))
-
-    for idx, (frame, loc) in enumerate(zip(stack, locs)):
-        bim.paste(frame, box=((idx % grid_size) * w + base_xoff + loc['x1'], int(idx / grid_size) * h + base_yoff + loc['y1']))
-
-    return bim
 
 def save_frame_image(frames):
 

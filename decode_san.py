@@ -10,7 +10,7 @@ from itertools import chain
 from smush import anim, ahdr
 from smush.fobj import unobj, mkobj
 from codex.codex import get_decoder
-from image import save_single_frame_image, save_image_grid
+from image import save_single_frame_image
 from utils.funcutils import flatten
 
 from typing import Sequence
@@ -117,12 +117,12 @@ if __name__ == '__main__':
                     im.putpalette(palette)
                     im.save(os.path.join(output_dir, f'FRME_{idx:05d}.png'))
             else:
-                chars = list(frame for _, frame in generate_frames(header, frames))
-                lchars = [(loc['x1'], loc['x2'], convert_to_pil_image(im)) for loc, im in chars]
+                _, chars = zip(*generate_frames(header, frames))
+                lchars = [(loc['x1'], loc['y1'], convert_to_pil_image(im)) for loc, im in chars]
                 nchars = len(lchars)
                 transparency=39
-                # bim = grid.create_char_grid(nchars, enumerate(lchars), transparency=transparency)
-                bim = save_image_grid(chars, transparency=transparency)
+                BGS = [b'\05', b'\04']
+                bim = grid.create_char_grid(nchars, enumerate(lchars), transparency=transparency, bgs=BGS)
                 palette = list(header.palette)
                 palette[3 * transparency: 3 * transparency + 3] = [109, 109, 109]
                 bim.putpalette(palette)

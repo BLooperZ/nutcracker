@@ -7,16 +7,15 @@ from utils import funcutils
 from .image import convert_to_pil_image
 
 BGS = [b'0', b'n']
-BGS = [b'\05', b'\04']
 BASE_XOFF = 8
 BASE_YOFF = 8
 TILE_W = 48 + BASE_XOFF
 TILE_H = 48 + BASE_YOFF
 GRID_SIZE = 16
 
-def get_bg_color(row_size, f):
+def get_bg_color(row_size, f, bgs=BGS):
     def get_bg(idx):
-        return ord(BGS[f(idx) % len(BGS)])
+        return ord(bgs[f(idx) % len(bgs)])
     return get_bg
 
 def read_image_grid(filename, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE):
@@ -27,11 +26,11 @@ def read_image_grid(filename, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE):
             area = (col * w, row * h, (col + 1) * w, (row + 1) * h)
             yield bim.crop(area)
 
-def checkered_grid(nchars, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE, transparency=0):
+def checkered_grid(nchars, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE, transparency=0, bgs=BGS):
     assert nchars <= grid_size ** 2, nchars
 
     bim = convert_to_pil_image([[transparency] * w * grid_size] * h * grid_size)
-    get_bg = get_bg_color(grid_size, lambda idx: idx + int(idx / grid_size))
+    get_bg = get_bg_color(grid_size, lambda idx: idx + int(idx / grid_size), bgs=bgs)
 
     # nchars does not have to match real number of characters nor max. index
     for i in range(nchars):
@@ -40,8 +39,8 @@ def checkered_grid(nchars, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE, transparency
 
     return bim
 
-def create_char_grid(nchars, chars, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE, base_xoff=BASE_XOFF, base_yoff=BASE_YOFF, transparency=0):
-    bim = checkered_grid(nchars, w=w, h=h, grid_size=grid_size, transparency=transparency)
+def create_char_grid(nchars, chars, w=TILE_W, h=TILE_H, grid_size=GRID_SIZE, base_xoff=BASE_XOFF, base_yoff=BASE_YOFF, transparency=0, bgs=BGS):
+    bim = checkered_grid(nchars, w=w, h=h, grid_size=grid_size, transparency=transparency, bgs=bgs)
 
     # idx is character index in ascii table
     for idx, (xoff, yoff, im) in chars:
