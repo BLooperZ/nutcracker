@@ -13,25 +13,46 @@ from .bpp_codec import decode_bpp_char
 from codex.rle import decode_lined_rle
 from graphics import image
 
-from typing import Set
+from typing import Set, NamedTuple, List
 
-def read_chars(stream, index, decoder):
+class DataFrame(NamedTuple):
+    width: int
+    height: int
+    xoff: int
+    yoff: int
+    data: Image.Image
+
+    def tolist(self):
+        return np.asarray(self.data).tolist()
+
+char_header = struct.Struct('<4b')
+def char_from_bytes(data, decoder):
+    width, cheight, xoff, yoff = char_header.unpack(data[:char_header.size])
+    data = decoder(data[char_header.size:], width, cheight)
+    return DataFrame(
+        width=width,
+        height=cheight,
+        xoff=xoff,
+        yoff=yoff,
+        data=image.convert_to_pil_image(data, size=(width, cheight))
+    )
+
+def read_chars(stream, index, bpp):
+    decoder = partial(decode_bpp_char, bpp=bpp) if bpp in (1, 2, 4) else decode_lined_rle
     unique_vals: Set[int] = set()
     for (idx, off), nextoff in index:
-        size = nextoff - off - 4
         assert stream.tell() == off
-        width = ord(stream.read(1))
-        cheight = ord(stream.read(1))
-        xoff = int.from_bytes(stream.read(1), byteorder='little', signed=True)
-        yoff = int.from_bytes(stream.read(1), byteorder='little', signed=True)
-        if not (xoff == 0 and yoff == 0):
-            print('OFFSET', idx, xoff, yoff)
+        data = stream.read(nextoff - off)
+        char = char_from_bytes(data, decoder)
+
+        if not (char.xoff == 0 and char.yoff == 0):
+            print('OFFSET', idx, char.xoff, char.yoff, char.width, char.height)
+
         # assert cheight + yoff <= height, (cheight, yoff, height)
-        bchar = stream.read(size)
-        char = decoder(bchar, width, cheight)
-        unique_vals |= set(chain.from_iterable(char))
-        yield idx, (xoff, yoff, image.convert_to_pil_image(char, size=(width, cheight)))
-        # print(len(dt), height, width, cheight, off1, off2, bpp)
+
+        unique_vals |= set(chain.from_iterable(char.tolist()))
+        yield idx, char
+
     assert stream.read() == b''
     print(unique_vals)
 
@@ -58,7 +79,6 @@ def handle_char(data):
         bpp = ord(stream.read(1))
         assert bpp in (1, 2, 4, 8)
         print(f'{bpp}bpp')
-        decoder = partial(decode_bpp_char, bpp=bpp) if bpp in (1, 2, 4) else decode_lined_rle
 
         height = ord(stream.read(1))
 
@@ -73,7 +93,7 @@ def handle_char(data):
         print(len(index))
         # print(version, color_map, bpp, height, nchars)
 
-        frames = list(read_chars(stream, index, decoder))
+        frames = list(read_chars(stream, index, bpp))
         assert stream.read() == b''
         return nchars, frames
 
@@ -95,6 +115,8 @@ if __name__ == '__main__':
 
         nchars, chars = handle_char(data)
         palette = [((59 + x) ** 2 * 83 // 67) % 256 for x in range(256 * 3)]
+
+        chars = [(idx, (char.xoff, char.yoff, char.data)) for idx, char in chars]
 
         bim = grid.create_char_grid(nchars, chars)
         bim.putpalette(palette)
