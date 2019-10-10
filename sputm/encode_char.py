@@ -7,13 +7,12 @@ from functools import partial
 from operator import itemgetter
 
 import numpy as np
-from PIL import Image
 
 from utils.funcutils import grouper, flatten
 from .bpp_codec import decode_bpp_char, encode_bpp_char
 from codex.rle import encode_lined_rle
 
-from image import grid
+from graphics import grid
 
 from typing import Set
 
@@ -55,7 +54,6 @@ if __name__ == '__main__':
     import argparse
     import os
 
-    from image import grid
     from . import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')

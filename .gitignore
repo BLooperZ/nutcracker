@@ -117,4 +117,5 @@ tr.txt
 *.raw
 *.wav
 hebtest.bat
+test_he.bat
 samples/
