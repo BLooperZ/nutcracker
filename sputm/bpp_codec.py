@@ -11,8 +11,13 @@ def decode_bpp_char(data: bytes, width: int, height: int, bpp: int = 1) -> Seque
     bits = ''.join(f'{x:08b}' for x in data)
     gbits = grouper(bits, bpp)
     bmap = [int(''.join(next(gbits)), 2) for _ in range(height * width)]
-    print(list(gbits))  # why there is still data left?
+
     char = list(grouper(bmap, width))
+    
+    left = [int(''.join(gb), 2) for gb in gbits]  # why there is still data left?
+    print(left)
+    # char += list(grouper(left, width, fillvalue=0))
+
     # char = list(grouper(bmap, width, fillvalue=0))
     # encoded = encode_bpp_char(char, bpp=bpp)
     # assert encoded == data, (encoded, data)
