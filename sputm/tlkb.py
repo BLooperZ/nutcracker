@@ -42,9 +42,9 @@ if __name__ == '__main__':
                     sound = data
                     continue
             # save raw
-            with open(f'OUT/TALK_SDAT_{idx:04d}.RAW', 'wb') as aud:
-                # aud.write(b'\x80' * frame_audio_size[12] * frame_no)
-                aud.write(sound)
+            # with open(f'OUT/TALK_SDAT_{idx:04d}.RAW', 'wb') as aud:
+            #     # aud.write(b'\x80' * frame_audio_size[12] * frame_no)
+            #     aud.write(sound)
             with wave.open(f'OUT/TALK_SDAT_{idx:04d}.WAV', 'w') as wav:
                 # aud.write(b'\x80' * frame_audio_size[12] * frame_no)
                 wav.setnchannels(1)
