@@ -7,9 +7,9 @@ def read(stream: IO[bytes], size: Optional[int] = None, key = CHIPER_KEY):
 
 if __name__ == '__main__':
     import argparse
-    import io
-
     from functools import partial
+
+    from utils import copyio
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
@@ -17,5 +17,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     with open(args.filename,'rb') as infile, open(args.output,'wb') as outfile:
-        for buffer in iter(partial(read, infile, io.DEFAULT_BUFFER_SIZE), b''):
+        for buffer in copyio.buffered(partial(read, infile, key=CHIPER_KEY)):
             outfile.write(buffer)
