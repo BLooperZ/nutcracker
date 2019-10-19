@@ -18,12 +18,12 @@ if __name__ == '__main__':
         lecf = sputm.assert_tag('LECF', sputm.untag(res))
         assert res.read() == b''
         # chunks = (assert_tag('LFLF', chunk) for chunk in read_chunks(tlkb))
-        chunks = sputm.read_chunks(lecf)
+        chunks = sputm.drop_offsets(sputm.read_chunks(lecf))
         for idx, (tag, chunk) in enumerate(chunks):
             if not tag == 'LFLF':
                 continue
-            print([tag for tag, _ in sputm.read_chunks(chunk)])
-            for cidx, (tag, data) in enumerate(sputm.read_chunks(chunk)):
+            print([tag for _, (tag, _) in sputm.read_chunks(chunk)])
+            for cidx, (tag, data) in enumerate(sputm.drop_offsets(sputm.read_chunks(chunk))):
                 if tag == 'SCRP':
                     os.makedirs('SCRIPTS', exist_ok=True)
                     with open(os.path.join('SCRIPTS', f'SCRP_{cidx:04d}_{idx:04d}'), 'wb') as out:

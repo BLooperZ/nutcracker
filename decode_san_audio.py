@@ -7,8 +7,6 @@ from functools import partial
 
 import smush
 
-from ahdr import parse_header
-
 FLAG_UNSIGNED = 1 << 0
 FLAG_16BITS = 1 << 1
 FLAG_LITTLE_ENDIAN = 1 << 2
@@ -45,19 +43,19 @@ def verify_nframes(frames, nframes):
 if __name__ == '__main__':
     import argparse
 
+    from smush import anim
+    from smush.smush import drop_offsets, print_chunks
+
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
     args = parser.parse_args()
 
-    with smush.open(args.filename) as smush_file:
-        header = parse_header(smush_file.header)
-        frames = verify_nframes(smush_file, header['nframes'])
-        frames = (list(smush.read_chunks(frame)) for frame in frames)
+    with open(args.filename, 'rb') as res:
+
+        header, frames = anim.parse(res)
 
         for idx, frame in enumerate(frames):
-            print(f'{idx} - {[tag for tag, _ in frame]}')
-
-            for tag, chunk in frame:
+            for tag, chunk in drop_offsets(print_chunks(frame, level=1)):
                 if tag == 'PSAD':
                     handle_sound_frame(chunk, idx)
                 else:

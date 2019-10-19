@@ -9,6 +9,7 @@ from itertools import chain
 
 from smush import anim, ahdr
 from smush.fobj import unobj, mkobj
+from smush.smush import drop_offsets, print_chunks
 from codex.codex import get_decoder
 from image import save_single_frame_image
 from utils.funcutils import flatten
@@ -48,7 +49,7 @@ def generate_frames(header, frames):
     delta_pal: Sequence[int] = []
 
     for idx, frame in enumerate(frames):
-        for cidx, (tag, chunk) in enumerate(frame):
+        for cidx, (tag, chunk) in enumerate(drop_offsets(frame)):
             if tag == 'NPAL':
                 palette = tuple(chunk)
                 continue
@@ -108,7 +109,7 @@ if __name__ == '__main__':
         with open(filename, 'rb') as res:
             header, frames = anim.parse(res)
             if args.map:
-                list(chain.from_iterable(frames))
+                list(print_chunks(chain.from_iterable(frames)))
                 exit(0)
             if not args.nut:
                 for idx, (palette, screen) in enumerate(generate_frames(header, frames)):

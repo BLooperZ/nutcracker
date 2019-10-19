@@ -17,10 +17,10 @@ if __name__ == '__main__':
     with open(args.filename, 'rb') as res:
         tlkb = sputm.assert_tag('TLKB', sputm.untag(res))
         assert res.read() == b''
-        chunks = (sputm.assert_tag('TALK', chunk) for chunk in sputm.read_chunks(tlkb))
+        chunks = (sputm.assert_tag('TALK', chunk) for chunk in sputm.drop_offsets(sputm.read_chunks(tlkb)))
         for idx, chunk in enumerate(chunks):
             sound = b''
-            for tag, data in sputm.read_chunks(chunk):
+            for _, (tag, data) in sputm.read_chunks(chunk):
                 if tag == 'HSHD':
                     print(len(data))
                     print(tag, data)

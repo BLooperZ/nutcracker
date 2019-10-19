@@ -13,8 +13,8 @@ from .smush_types import AnimationHeader
 
 PALETTE_SIZE = 3 * 256
 
-primary_fields = ('version', 'nframes', 'unk1')
-secondary_fields = ('secondary_version', 'unk2', 'sound_freq', 'zero1', 'zero2')
+primary_fields = ('version', 'nframes', 'dummy')
+secondary_fields = ('framerate', 'maxframe', 'samplerate', 'dummy2', 'dummy3')
 primary_struct = Struct('<{}H'.format(len(primary_fields)))
 secondary_struct = Struct('<{}I'.format(len(secondary_fields)))
 
@@ -31,13 +31,13 @@ def from_bytes(header: bytes) -> AnimationHeader:
     return AnimationHeader(
         version=primary['version'],
         nframes=primary['nframes'],
-        unk1=primary['unk1'],
+        dummy=primary['dummy'],
         palette=palette,
-        secondary_version=secondary.get('secondary_version', None),
-        unk2=secondary.get('unk2', None),
-        sound_freq=secondary.get('sound_freq', None),
-        zero1=secondary.get('zero1', None),
-        zero2=secondary.get('zero2', None)
+        framerate=secondary.get('framerate', None),
+        maxframe=secondary.get('maxframe', None),
+        samplerate=secondary.get('samplerate', None),
+        dummy2=secondary.get('dummy2', None),
+        dummy3=secondary.get('dummy3', None)
     )
 
 def to_bytes(header: AnimationHeader) -> bytes:
