@@ -110,8 +110,7 @@ if __name__ == '__main__':
             header, frames = anim.parse(res)
             if args.map:
                 list(print_chunks(chain.from_iterable(frames)))
-                exit(0)
-            if not args.nut:
+            elif not args.nut:
                 for idx, (palette, screen) in enumerate(generate_frames(header, frames)):
                     im = save_single_frame_image(screen)
                     # im = im.crop(box=(0,0,320,200))

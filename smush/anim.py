@@ -1,3 +1,5 @@
+import itertools
+
 from . import smush, ahdr
 
 from typing import cast, IO, Iterable, Iterator, Mapping, Tuple, TypeVar
@@ -44,3 +46,13 @@ def parse(stream: IO[bytes]) -> Tuple[AnimationHeader, Iterator[Iterator[Tuple[i
     chunked_frames = (smush.read_chunks(frame, align=2) for frame in frames)
 
     return header, chunked_frames
+
+def compose(header: AnimationHeader, frames: Iterator[bytes]):
+    bheader = smush.mktag('AHDR', ahdr.to_bytes(header))
+    return smush.mktag(
+        'ANIM',
+        smush.write_chunks(
+            itertools.chain([bheader], frames),
+            align=2
+        )
+    )

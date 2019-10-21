@@ -11,8 +11,7 @@ from smush import smush, anim, ahdr
 def write_nut_file(header, numChars, chars, filename):
     chars = (smush.mktag('FRME', char) for char in chars)
     header = ahdr.create(header, nframes=numChars)
-    header = smush.mktag('AHDR', ahdr.to_bytes(header))
-    nut_file = smush.mktag('ANIM', smush.write_chunks(chain([header], chars)))
+    nut_file = anim.compose(header, chars)
     with open(filename, 'wb') as font_file:
         font_file.write(nut_file)
 
