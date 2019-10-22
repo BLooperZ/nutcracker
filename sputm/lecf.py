@@ -18,12 +18,16 @@ if __name__ == '__main__':
         lecf = sputm.assert_tag('LECF', sputm.untag(res))
         assert res.read() == b''
         # chunks = (assert_tag('LFLF', chunk) for chunk in read_chunks(tlkb))
-        chunks = sputm.drop_offsets(sputm.read_chunks(lecf))
-        for idx, (tag, chunk) in enumerate(chunks):
+        chunks = sputm.print_chunks(sputm.read_chunks(lecf))
+        for idx, (hoff, (tag, chunk)) in enumerate(chunks):
             if not tag == 'LFLF':
                 continue
+            if idx == 87:  # uncomment to skip failing tag after AKOS in FT.LA1
+                with open('CHUNK_0087.DAT', 'wb') as f:
+                    f.write(chunk)
+                continue
             print([tag for _, (tag, _) in sputm.read_chunks(chunk)])
-            for cidx, (tag, data) in enumerate(sputm.drop_offsets(sputm.read_chunks(chunk))):
+            for cidx, (off, (tag, data)) in enumerate(sputm.read_chunks(chunk)):
                 if tag == 'SCRP':
                     os.makedirs('SCRIPTS', exist_ok=True)
                     with open(os.path.join('SCRIPTS', f'SCRP_{cidx:04d}_{idx:04d}'), 'wb') as out:
@@ -44,5 +48,10 @@ if __name__ == '__main__':
                     os.makedirs('ROOMS', exist_ok=True)
                     with open(os.path.join('ROOMS', f'ROOM_{cidx:04d}_{idx:04d}'), 'wb') as out:
                         out.write(sputm.mktag('ROOM', data))
+
+                if tag == 'SOUN':
+                    os.makedirs('SOUNDS', exist_ok=True)
+                    with open(os.path.join('SOUNDS', f'{hoff + off + 16:08x}.voc'), 'wb') as out:
+                        out.write(data)
             # save raw
             print('==========')
