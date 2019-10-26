@@ -1,28 +1,25 @@
 # NUTCracker
 Tools for editing resources in SCUMM games.
 
-## Usage
+## NUT File Usage
 ### Decoding
-Decode given font file (NUT_FILE)
+Decode all NUT files in given directory DATADIR
 ```
-nutcracker.py -d NUT_FILE
+python -m nutcracker.decode_san DATADIR/*.NUT --nut --target OUTDIR
 ```
-This will result in NUT_FILE.PNG font image which can be edited using regular image editing software (e.g. GIMP)
+Creates a font image file named chars.png in OUTDIR which can be edited using regular image editing software (e.g. GIMP)
 
 ### Encoding
-Encode given font image (PNG_FILE) with given codec number (CODEC)
+Encode given font image (PNG_FILE) with given codec number (CODEC) using REF_NUT_FILE as reference
 ```
-nutcracker.py -e PNG_FILE CODEC
+python -m nutcracker.encode_nut PNG_FILE --target NEW_NUT_FILE --ref REF_NUT_FILE --codec CODEC [--fake CODEC]
 ```
-This will convert font image file back to font file which can be used in game
+This will convert font image file back to font file (NEW_NUT_FILE) which can be used in game.
 
 Available codecs: 
-* 21 (FT)
+* 21 (FT + The Dig*)
 * 44 (COMI*)
 
-*FONT3.NUT was actually encoded using codec 21 method. it can be forced using `-f CODEC`:
-```
-nutcracker.py -e FONT3.NUT.PNG 44 -f 21
-```
-
-see more examples in [cmds.txt](cmds.txt)
+*FONT3.NUT and the fonts in The Dig was actually encoded using codec 21 method but marked as 44.
+It can be achieved using `--codec 21 --fake 44`.
+see examples in [test.bat](test.bat)
