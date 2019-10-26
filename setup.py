@@ -20,7 +20,7 @@ setuptools.setup(
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Intended Audience :: Developers',
         'Operating System :: OS Independent',
-        'Topic :: Software Development :: Build Tools'
+        'Topic :: Software Development :: Build Tools',
         'Topic :: Games/Entertainment',
         'Topic :: Utilities'
     ],
