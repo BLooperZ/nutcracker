@@ -26,7 +26,8 @@ def compress_frame_data(frame):
 
 def compress_frames(frames):
     for frame in frames:
-        yield smush.mktag('FRME', smush.write_chunks(compress_frame_data(frame)))
+        compressed = smush.write_chunks(compress_frame_data(frame))
+        yield smush.mktag('FRME', compressed)
 
 def strip_compress_san(res: IO[bytes]) -> bytes:
     header, frames = anim.parse(res)
