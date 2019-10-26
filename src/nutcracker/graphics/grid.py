@@ -3,8 +3,8 @@ import itertools
 import numpy as np
 from PIL import Image
 
-from utils import funcutils
-from .image import convert_to_pil_image
+from nutcracker.utils import funcutils
+from nutcracker.image import convert_to_pil_image
 
 BGS = [b'0', b'n']
 BASE_XOFF = 8

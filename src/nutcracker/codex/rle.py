@@ -2,7 +2,7 @@ import io
 import itertools
 from typing import Sequence, Mapping
 
-from utils import funcutils
+from nutcracker.utils import funcutils
 
 def encode_groups(groups):
     old_abs = b''

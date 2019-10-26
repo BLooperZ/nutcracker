@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 import io
 import struct
-
 from itertools import chain
 from functools import partial
+from typing import Set, NamedTuple, List
 
 import numpy as np
 from PIL import Image
 
-from utils.funcutils import grouper
+from nutcracker.utils.funcutils import grouper
+from nutcracker.codex.rle import decode_lined_rle
+from nutcracker.graphics import image
 from .bpp_codec import decode_bpp_char
-from codex.rle import decode_lined_rle
-from graphics import image
 
-from typing import Set, NamedTuple, List
 
 class DataFrame(NamedTuple):
     width: int

@@ -1,5 +1,5 @@
 # NUTCracker
-Tools to decode and re-encode fonts (.NUT) for Full Throttle and Curse of Monkey Island
+Tools for editing resources in SCUMM games.
 
 ## Usage
 ### Decoding

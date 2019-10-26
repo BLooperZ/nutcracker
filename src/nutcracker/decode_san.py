@@ -3,16 +3,15 @@ import glob
 import os
 import struct
 import zlib
-
 from functools import partial
 from itertools import chain
 
-from smush import anim, ahdr
-from smush.fobj import unobj, mkobj
-from smush.smush import drop_offsets, print_chunks
-from codex.codex import get_decoder
-from image import save_single_frame_image
-from utils.funcutils import flatten
+from nutcracker.smush import anim, ahdr
+from nutcracker.smush.fobj import unobj, mkobj
+from nutcracker.smush.smush import drop_offsets, print_chunks
+from nutcracker.codex.codex import get_decoder
+from nutcracker.image import save_single_frame_image
+from nutcracker.utils.funcutils import flatten
 
 from typing import Sequence
 
@@ -89,8 +88,7 @@ def generate_frames(header, frames):
 if __name__ == '__main__':
     import argparse
 
-    from graphics import grid
-    from graphics.image import convert_to_pil_image
+    from nutcracker.graphics import image, grid
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('files', nargs='+', help='files to read from')
@@ -118,7 +116,7 @@ if __name__ == '__main__':
                     im.save(os.path.join(output_dir, f'FRME_{idx:05d}.png'))
             else:
                 _, chars = zip(*generate_frames(header, frames))
-                lchars = [(loc['x1'], loc['y1'], convert_to_pil_image(im)) for loc, im in chars]
+                lchars = [(loc['x1'], loc['y1'], image.convert_to_pil_image(im)) for loc, im in chars]
                 nchars = len(lchars)
                 transparency=39
                 BGS = [b'\05', b'\04']

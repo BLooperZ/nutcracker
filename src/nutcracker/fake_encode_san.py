@@ -9,9 +9,9 @@ from itertools import chain
 from PIL import Image
 import numpy as np
 
-from codex.codex import get_decoder, get_encoder
-from image import save_single_frame_image
-from smush import smush, anim, ahdr, fobj
+from nutcracker.codex.codex import get_decoder, get_encoder
+from nutcracker.image import save_single_frame_image
+from nutcracker.smush import smush, anim, ahdr, fobj
 
 from typing import List
 

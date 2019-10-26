@@ -5,8 +5,6 @@ import struct
 
 from functools import partial
 
-import smush
-
 FLAG_UNSIGNED = 1 << 0
 FLAG_16BITS = 1 << 1
 FLAG_LITTLE_ENDIAN = 1 << 2
@@ -15,7 +13,7 @@ def read_le_uint16(f):
     return struct.unpack('<H', f[:2])[0]
 
 def handle_sound_buffer(track_id, index, max_frames, flags, vol, pan, chunk, frame_no):
-    fname = f'sound/PSAD_{track_id:04d}.RAW'
+    fname = f'sound/PSAD_{track_id:04d}.SAD'
     mode = 'ab' if index != 0 else 'wb'
     with open(fname, mode) as aud:
         aud.write(chunk)
@@ -43,8 +41,8 @@ def verify_nframes(frames, nframes):
 if __name__ == '__main__':
     import argparse
 
-    from smush import anim
-    from smush.smush import drop_offsets, print_chunks
+    from nutcracker.smush import anim
+    from nutcracker.smush import smush
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
@@ -55,7 +53,7 @@ if __name__ == '__main__':
         header, frames = anim.parse(res)
 
         for idx, frame in enumerate(frames):
-            for tag, chunk in drop_offsets(print_chunks(frame, level=1)):
+            for _, (tag, chunk) in smush.print_chunks(frame, level=1):
                 if tag == 'PSAD':
                     handle_sound_frame(chunk, idx)
                 else:

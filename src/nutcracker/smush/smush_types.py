@@ -1,6 +1,6 @@
 from typing import NamedTuple, Optional, Tuple, Sequence
 
-from res.res_types import Chunk
+from nutcracker.res.res_types import Chunk
 
 class AnimationHeader(NamedTuple):
     version: int

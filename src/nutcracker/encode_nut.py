@@ -3,9 +3,9 @@ import os
 
 from itertools import chain
 
-from smush.fobj import mkobj
-from codex.codex import get_encoder
-from smush import smush, anim, ahdr
+from nutcracker.smush.fobj import mkobj
+from nutcracker.codex.codex import get_encoder
+from nutcracker.smush import smush, anim, ahdr
 
 # LEGACY
 def write_nut_file(header, numChars, chars, filename):
@@ -18,7 +18,7 @@ def write_nut_file(header, numChars, chars, filename):
 if __name__=="__main__":
     import argparse
 
-    from graphics import grid
+    from nutcracker.graphics import grid
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')

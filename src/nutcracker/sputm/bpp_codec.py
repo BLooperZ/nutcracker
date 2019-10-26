@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import io
 
-from utils.funcutils import grouper, flatten
+from nutcracker.utils.funcutils import grouper, flatten
 
 from typing import Sequence
 

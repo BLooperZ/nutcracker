@@ -5,16 +5,15 @@ import struct
 from itertools import chain, takewhile
 from functools import partial
 from operator import itemgetter
+from typing import Set
 
 import numpy as np
 
-from utils.funcutils import grouper, flatten
+from nutcracker.utils.funcutils import grouper, flatten
+from nutcracker.codex.rle import encode_lined_rle
+from nutcracker.graphics import grid
 from .bpp_codec import decode_bpp_char, encode_bpp_char
-from codex.rle import encode_lined_rle
 
-from graphics import grid
-
-from typing import Set
 
 def calc_bpp(x):
     return 1 << max((x - 1).bit_length() - 1, 0).bit_length()

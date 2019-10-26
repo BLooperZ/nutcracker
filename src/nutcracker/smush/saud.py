@@ -4,14 +4,12 @@ import io
 import os
 import struct
 import wave
-
 from functools import partial
+from typing import Iterable, Iterator
 
 from . import smush
 
-from utils.funcutils import flatten, grouper
-
-from typing import Iterable, Iterator
+from nutcracker.utils import funcutils
 
 def read_le_uint16(f):
     return struct.unpack('<H', f[:2])[0]
@@ -23,7 +21,7 @@ if __name__ == '__main__':
     parser.add_argument('files', nargs='+', help='files to read from')
     args = parser.parse_args()
 
-    files = set(flatten(glob.iglob(r) for r in args.files))
+    files = set(funcutils.flatten(glob.iglob(r) for r in args.files))
     print(files)
     for filename in files:
         with open(filename, 'rb') as res:
@@ -35,10 +33,10 @@ if __name__ == '__main__':
             sound = b''
             sample_rate = 22050
 
-            print([tag for tag, _ in smush.read_chunks(saud, align=1)])
-            for tag, data in smush.read_chunks(saud, align=1):
+            print([tag for _, (tag, _) in smush.read_chunks(saud, align=1)])
+            for _, (tag, data) in smush.read_chunks(saud, align=1):
                 if tag == 'STRK':
-                    print([read_le_uint16(bytes(word)) for word in grouper(data, 2)]) 
+                    print([read_le_uint16(bytes(word)) for word in funcutils.grouper(data, 2)]) 
                     continue
                 if tag == 'SDAT':
                     sound = data
@@ -49,7 +47,7 @@ if __name__ == '__main__':
                         print(data)
                     continue
                 if tag == 'SHDR':
-                    print([read_le_uint16(bytes(word)) for word in grouper(data, 2)]) 
+                    print([read_le_uint16(bytes(word)) for word in funcutils.grouper(data, 2)]) 
                     continue
             with wave.open(f'sound/SDAT_{basename}.WAV', 'w') as wav:
                 # aud.write(b'\x80' * frame_audio_size[12] * frame_no)

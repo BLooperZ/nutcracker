@@ -4,7 +4,7 @@ from PIL import Image
 import numpy as np
 from operator import itemgetter
 
-from graphics.grid import convert_to_pil_image
+from nutcracker.graphics.image import convert_to_pil_image
 
 def get_bg_color(row_size, f):
     BGS = [5, 4]

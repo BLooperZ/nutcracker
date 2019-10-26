@@ -9,7 +9,7 @@ if __name__ == '__main__':
     import argparse
     from functools import partial
 
-    from utils import copyio
+    from nutcracker.utils import copyio
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
