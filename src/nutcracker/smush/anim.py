@@ -1,9 +1,8 @@
 import itertools
+from typing import cast, IO, Iterable, Iterator, Mapping, Tuple, TypeVar
 
 from . import smush, ahdr
-
-from typing import cast, IO, Iterable, Iterator, Mapping, Tuple, TypeVar
-from .smush_types import Chunk, AnimationHeader
+from .types import Chunk, AnimationHeader
 
 T = TypeVar('T')
 

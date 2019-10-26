@@ -7,7 +7,7 @@ from functools import partial
 from typing import IO, Iterator, Optional, Tuple
 
 from .align import align_read_stream, align_write_stream
-from .res_types import Chunk
+from .types import Chunk
 
 INCLUSIVE = 8
 EXCLUSIVE = 0

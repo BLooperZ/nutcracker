@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 import io
+from typing import Sequence
 
 from nutcracker.utils.funcutils import grouper, flatten
-
-from typing import Sequence
 
 def decode_bpp_char(data: bytes, width: int, height: int, bpp: int = 1) -> Sequence[Sequence[int]]:
     assert width != 0 and height != 0

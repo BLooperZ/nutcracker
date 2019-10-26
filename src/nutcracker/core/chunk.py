@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 from typing import Iterator, Optional, Tuple
-from .res_types import Chunk
+
+from .types import Chunk
 
 def assert_tag(target: str, chunk: Optional[Chunk]) -> bytes:
     """Return chunk data if chunk has target 4CC tag."""

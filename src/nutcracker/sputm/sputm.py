@@ -6,32 +6,31 @@
 import functools
 from typing import IO, Iterator, Optional, Tuple  # ,Callable
 
-from nutcracker.res import base, chunk
-
-from .sputm_types import Chunk
+from nutcracker.core import resource, chunk
+from .types import Chunk
 
 ALIGN = 1
-SIZE_FIX = base.INCLUSIVE
+SIZE_FIX = resource.INCLUSIVE
 
-# untag: Callable[[IO[bytes]], Optional[Chunk]] = functools.partial(base.untag, size_fix=SIZE_FIX)
-@functools.wraps(base.untag)
+# untag: Callable[[IO[bytes]], Optional[Chunk]] = functools.partial(resource.untag, size_fix=SIZE_FIX)
+@functools.wraps(resource.untag)
 def untag(stream: IO[bytes], size_fix: int = SIZE_FIX) -> Optional[Chunk]:
-    return base.untag(stream, size_fix=size_fix)
+    return resource.untag(stream, size_fix=size_fix)
 
-# read_chunks: Callable[[bytes], Iterator[Chunk]] = functools.partial(base.read_chunks, align=ALIGN)
-@functools.wraps(base.read_chunks)
+# read_chunks: Callable[[bytes], Iterator[Chunk]] = functools.partial(resource.read_chunks, align=ALIGN)
+@functools.wraps(resource.read_chunks)
 def read_chunks(data: bytes, align: int = ALIGN, size_fix: int = SIZE_FIX) -> Iterator[Tuple[int, Chunk]]:
-    return base.read_chunks(data, align=align, size_fix=SIZE_FIX)
+    return resource.read_chunks(data, align=align, size_fix=SIZE_FIX)
 
-# untag: Callable[[str, bytes], bytes] = functools.partial(base.mktag, size_fix=SIZE_FIX)
-@functools.wraps(base.mktag)
+# untag: Callable[[str, bytes], bytes] = functools.partial(resource.mktag, size_fix=SIZE_FIX)
+@functools.wraps(resource.mktag)
 def mktag(tag: str, data: bytes, size_fix: int = SIZE_FIX) -> bytes:
-    return base.mktag(tag, data, size_fix=size_fix)
+    return resource.mktag(tag, data, size_fix=size_fix)
 
-# untag: Callable[[Iterator[bytes]], bytes] = functools.partial(base.write_chunks, align=ALIGN)
-@functools.wraps(base.write_chunks_bytes)
+# untag: Callable[[Iterator[bytes]], bytes] = functools.partial(resource.write_chunks, align=ALIGN)
+@functools.wraps(resource.write_chunks_bytes)
 def write_chunks(chunks: Iterator[bytes], align: int = ALIGN) -> bytes:
-    return base.write_chunks_bytes(chunks, align=align)
+    return resource.write_chunks_bytes(chunks, align=align)
 
 assert_tag = chunk.assert_tag
 drop_offsets = chunk.drop_offsets

@@ -1,5 +1,4 @@
 import io
-
 from typing import IO
 
 def calc_align(offset: int, align: int) -> int:

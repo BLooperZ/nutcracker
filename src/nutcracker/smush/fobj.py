@@ -4,10 +4,9 @@ import io
 
 from functools import partial
 from struct import Struct
+from typing import Mapping, Tuple
 
 from . import structure
-
-from typing import Mapping, Tuple
 
 meta_fields = ('codec', 'x1', 'y1', 'x2', 'y2', 'unk1', 'unk2')
 meta_struct = Struct('<{}H'.format(len(meta_fields)))

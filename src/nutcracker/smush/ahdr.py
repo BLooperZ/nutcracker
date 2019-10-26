@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 
 import io
-
 from functools import partial
 from struct import Struct
-
-from . import structure
-
 from typing import Mapping, Sequence, Union
 
-from .smush_types import AnimationHeader
+from . import structure
+from .types import AnimationHeader
 
 PALETTE_SIZE = 3 * 256
 
