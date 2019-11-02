@@ -3,6 +3,7 @@
 import struct
 
 from .codex37 import fake_encode37, decode37
+from .codex47 import decode47 as e_decode47
 # from codex37_old import decode37
 
 # DECODE
@@ -76,16 +77,7 @@ def decode1(width, height, f):
     return to_matrix(width, height, out)
 
 def decode47(width, height, f):
-    BG = 39
-
-    a = [b for b in f]
-    out = [BG for _ in range(width * height)]
-    if len(a) == len(out):
-        out = a
-        print('Yay')
-        if None in a:
-            print('Ooof')
-            return None
+    out = e_decode47(f, width, height)
     return to_matrix(width, height, out)
 
 def unidecoder_factory(width, height):
