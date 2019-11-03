@@ -3,7 +3,7 @@ import struct
 
 from enum import Enum
 
-from nutcracker.utils.funcutils import grouper
+from nutcracker.utils import funcutils
 from . import bomb
 
 glyph4_x = [
@@ -90,10 +90,11 @@ _height = None
 _frameSize = None
 _deltaSize = None
 _deltaBuf = None
-_deltaBufsPos = [0, 0]
+_prev1 = None
+_prev2 = None
 _curBuf = None
 
-_prevSeqNb = None
+_prev_seq = None
 
 def cast_int16(x):
     x = x % (2 ** 16)
@@ -205,7 +206,8 @@ def init_codec47(width, height):
     global _frameSize
     global _deltaSize
     global _deltaBuf
-    global _deltaBufsPos
+    global _prev1
+    global _prev2
     global _curBuf
 
     global _p4x4glyphs
@@ -222,14 +224,15 @@ def init_codec47(width, height):
     _frameSize = _width * _height
     _deltaSize = _frameSize * 3
     _deltaBuf = [0] * _deltaSize
-    _deltaBufsPos = [0, _frameSize]
+    _prev1, _prev2 = 0, _frameSize
     _curBuf = _frameSize * 2
 
 def decode47(src, width, height):
     global _table
-    global _prevSeqNb
+    global _prev_seq
     global _curBuf
-    global _deltaBufsPos
+    global _prev1
+    global _prev2
 
     if not (_width, _height) == (width, height):
         print(f'init {width, height}')
@@ -243,9 +246,9 @@ def decode47(src, width, height):
     gfx_data = 26
 
     if seq_nb == 0:
-        _deltaBuf[_deltaBufsPos[0]:_deltaBufsPos[0] + _frameSize] = [src[12]] * _frameSize
-        _deltaBuf[_deltaBufsPos[1]:_deltaBufsPos[1] + _frameSize] = [src[13]] * _frameSize
-        _prevSeqNb = -1
+        _deltaBuf[_prev1:_prev1 + _frameSize] = [src[12]] * _frameSize
+        _deltaBuf[_prev2:_prev2 + _frameSize] = [src[13]] * _frameSize
+        _prev_seq = -1
 
     if skip & 1:
         gfx_data += 0x8080
@@ -266,15 +269,15 @@ def decode47(src, width, height):
             dst += width * 2
         _deltaBuf[_curBuf:_curBuf + _frameSize] = out
     elif compression == 2:
-        if seq_nb == _prevSeqNb + 1:
+        if seq_nb == _prev_seq + 1:
             # out = decode2(_deltaBuf[_curBuf:], src[gfx_data:], width, height, src[8:])
             out = decode2(out, src[gfx_data:], width, height, src[8:])
         _deltaBuf[_curBuf:_curBuf + _frameSize] = out
     elif compression == 3:
-        out = _deltaBuf[_deltaBufsPos[1]:_deltaBufsPos[1] + _frameSize]
+        out = _deltaBuf[_prev2:_prev2 + _frameSize]
         _deltaBuf[_curBuf:_curBuf + _frameSize] = out
     elif compression == 4:
-        out = _deltaBuf[_deltaBufsPos[0]:_deltaBufsPos[0] + _frameSize]
+        out = _deltaBuf[_prev1:_prev1 + _frameSize]
         _deltaBuf[_curBuf:_curBuf + _frameSize] = out
     elif compression == 5:
         out = bomb.decode_line(src[gfx_data:], read_le_uint32(src[14:]))
@@ -283,19 +286,18 @@ def decode47(src, width, height):
     else:
         raise ValueError(f'Unknow compression: {compression}')
 
-    if seq_nb == _prevSeqNb + 1:
-        if rotation == 1:
-            _curBuf, _deltaBufsPos[1] = _deltaBufsPos[1], _curBuf
-        elif rotation == 2:
-            _deltaBufsPos[0], _deltaBufsPos[1] = _deltaBufsPos[1], _deltaBufsPos[0]
-            _curBuf, _deltaBufsPos[1] = _deltaBufsPos[1], _curBuf
-    _prevSeqNb = seq_nb
+    if seq_nb == _prev_seq + 1 and rotation != 0:
+        if rotation == 2:
+            _prev1, _prev2 = _prev2, _prev1
+        _curBuf, _prev2 = _prev2, _curBuf
+
+    _prev_seq = seq_nb
 
     return [x for x in out]
 
 def decode2(out, src, width, height, params):
-    prev1 = _deltaBufsPos[0]
-    prev2 = _deltaBufsPos[1]
+    prev1 = _prev1
+    prev2 = _prev2
 
     dst = 0
 
@@ -341,7 +343,7 @@ def process_block(out, stream, dst, prev1, prev2, stride, params, size):
         code = ord(stream.read(1))
         pglyph = _p8x8glyphs[code] if size == 8 else _p4x4glyphs[code]
         colors = [x for x in stream.read(2)]
-        glines = grouper(pglyph, size)
+        glines = funcutils.grouper(pglyph, size)
         for k, gline in zip(range(size), glines):
             assert not (set(gline) - {0, 1})
             out[dst:dst + size] = [colors[1 - x] for x in gline]
