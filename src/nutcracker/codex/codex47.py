@@ -291,7 +291,7 @@ def decode47(src, width, height):
             _curBuf, _deltaBufsPos[1] = _deltaBufsPos[1], _curBuf
     _prevSeqNb = seq_nb
 
-    return out
+    return [x for x in out]
 
 def decode2(out, src, width, height, params):
     prev1 = _deltaBufsPos[0]
@@ -357,5 +357,3 @@ def process_block(out, stream, dst, prev1, prev2, stride, params, size):
         for _ in range(size):
             out[dst:dst + size] = [t] * size
             dst += stride
-
-    return out[:_frameSize]

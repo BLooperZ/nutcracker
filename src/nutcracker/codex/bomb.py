@@ -1,30 +1,17 @@
+import io
 
 def decode_line(src, decoded_size):
+    with io.BytesIO(src) as stream:
+        return decode_line_stream(stream, decoded_size)
+
+def decode_line_stream(stream, decoded_size):
     assert decoded_size > 0
-
-    ln = decoded_size
-
-    # int num
-    # byte code, color
-    sidx = 0
-    didx = 0
-
-    out = [0 for _ in range(decoded_size)]
-
-    while ln > 0:
-        code = src[sidx]
-        sidx += 1
-        num = (code // 2) + 1
-        if num > ln:
-            num = ln
-        ln -= num
-        if code % 2 == 0:
-            out[didx:didx+num] = src[sidx:sidx+num]
-            sidx += num
-        else:
-            color = src[sidx]
-            sidx += 1
-            out[didx:didx+num] = [color] * num
-        didx += num
-
-    return out
+    with io.BytesIO() as out:
+        while out.tell() < decoded_size:
+            code = ord(stream.read(1))
+            run_len = (code // 2) + 1
+            line = stream.read(1) * run_len if code & 1 else stream.read(run_len)
+            out.write(line)
+        if out.tell() > decoded_size:
+            raise ValueError('out of bounds')
+        return [x for x in out.getvalue()]
