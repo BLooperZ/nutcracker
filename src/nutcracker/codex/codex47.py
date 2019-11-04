@@ -223,7 +223,7 @@ def init_codec47(width, height):
 
     _frameSize = _width * _height
     _deltaSize = _frameSize * 3
-    _deltaBuf = [0] * _deltaSize
+    _deltaBuf = [0 for _ in range(_deltaSize)]
     _prev1, _prev2 = 0, _frameSize
     _curBuf = _frameSize * 2
 
@@ -243,35 +243,45 @@ def decode47(src, width, height):
     rotation = src[3]
     skip = src[4]
 
-    gfx_data = 26
+    assert set(src[5:8]) == {0}, src[5:8]
+
+    params = src[8:]
+    bg1, bg2 = src[12:14]
+
+    decoded_size = read_le_uint32(src[14:])
+    assert decoded_size == _frameSize
+
+    assert set(src[18:26]) == {0}, src[18:26]
+
+    gfx_data = src[26:]
+    if skip & 1:
+        gfx_data = gfx_data[0x8080:]
 
     if seq_nb == 0:
-        _deltaBuf[_prev1:_prev1 + _frameSize] = [src[12]] * _frameSize
-        _deltaBuf[_prev2:_prev2 + _frameSize] = [src[13]] * _frameSize
+        bg1, bg2 = 0, 0
+        _deltaBuf[_prev1:_prev1 + _frameSize] = [bg1 for i in range(_frameSize)]
+        _deltaBuf[_prev2:_prev2 + _frameSize] = [bg2 for i in range(_frameSize)]
         _prev_seq = -1
-
-    if skip & 1:
-        gfx_data += 0x8080
 
     out = _deltaBuf[_curBuf:_curBuf + _frameSize]
 
     print(f'COMPRESSION: {compression}')
     if compression == 0:
-        out = src[gfx_data:gfx_data + _frameSize]
+        out = gfx_data[:_frameSize]
         _deltaBuf[_curBuf:_curBuf + _frameSize] = out
     elif compression == 1:
         dst = 0
         d_src = 0
         for _ in range(0, height, 2):
             for i in range(0, width, 2):
-                out[dst + i:dst + i + 2] = src[d_src + gfx_data:d_src + gfx_data + 2]
-                out[dst + i + width:dst + i + width + 2] = src[d_src + gfx_data + 2:d_src + gfx_data + 4]
+                out[dst + i:dst + i + 2] = gfx_data[d_src:d_src + 2]
+                out[dst + i + width:dst + i + width + 2] = gfx_data[d_src + 2:d_src + 4]
             dst += width * 2
         _deltaBuf[_curBuf:_curBuf + _frameSize] = out
     elif compression == 2:
         if seq_nb == _prev_seq + 1:
             # out = decode2(_deltaBuf[_curBuf:], src[gfx_data:], width, height, src[8:])
-            out = decode2(out, src[gfx_data:], width, height, src[8:])
+            out = decode2(out, gfx_data, width, height, params)
         _deltaBuf[_curBuf:_curBuf + _frameSize] = out
     elif compression == 3:
         out = _deltaBuf[_prev2:_prev2 + _frameSize]
@@ -280,7 +290,7 @@ def decode47(src, width, height):
         out = _deltaBuf[_prev1:_prev1 + _frameSize]
         _deltaBuf[_curBuf:_curBuf + _frameSize] = out
     elif compression == 5:
-        out = bomb.decode_line(src[gfx_data:], read_le_uint32(src[14:]))
+        out = bomb.decode_line(gfx_data, decoded_size)
         assert len(out) == _frameSize
         _deltaBuf[_curBuf:_curBuf + _frameSize] = out
     else:
