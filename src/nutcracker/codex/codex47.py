@@ -182,7 +182,7 @@ def make_glyphs(xvec, yvec, side_length):
             dirr = which_direction(edge0, edge1)
             npoints = max(abs(x1 - x0), abs(y1 - y0))
 
-            for ipoint in range(npoints):
+            for ipoint in range(npoints + 1):
                 point = interp_point(x0, y0, x1, y1, ipoint, npoints)
                 if dirr == GlyphDir.DIR_UP:
                     for irow in range(point[1]):
@@ -258,7 +258,6 @@ def decode47(src, width, height):
         gfx_data = gfx_data[0x8080:]
 
     if seq_nb == 0:
-        bg1, bg2 = 0, 0
         _deltaBuf[_prev1:_prev1 + _frameSize] = [bg1 for i in range(_frameSize)]
         _deltaBuf[_prev2:_prev2 + _frameSize] = [bg2 for i in range(_frameSize)]
         _prev_seq = -1
@@ -280,7 +279,6 @@ def decode47(src, width, height):
         _deltaBuf[_curBuf:_curBuf + _frameSize] = out
     elif compression == 2:
         if seq_nb == _prev_seq + 1:
-            # out = decode2(_deltaBuf[_curBuf:], src[gfx_data:], width, height, src[8:])
             out = decode2(out, gfx_data, width, height, params)
         _deltaBuf[_curBuf:_curBuf + _frameSize] = out
     elif compression == 3:

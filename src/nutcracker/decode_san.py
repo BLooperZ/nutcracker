@@ -107,7 +107,7 @@ if __name__ == '__main__':
         with open(filename, 'rb') as res:
             header, frames = anim.parse(res)
             if args.map:
-                list(print_chunks(chain.from_iterable(frames)))
+                list(print_chunks(chain.from_iterable(frames), level=1))
             elif not args.nut:
                 for idx, (palette, screen) in enumerate(generate_frames(header, frames)):
                     im = save_single_frame_image(screen)
