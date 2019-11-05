@@ -3,7 +3,7 @@ import io
 import struct
 
 from .codex37 import fake_encode37, decode37
-from .codex47 import decode47 as e_decode47
+from .codex47_np import decode47 as e_decode47
 # from codex37_old import decode37
 
 # DECODE

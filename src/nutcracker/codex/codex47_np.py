@@ -1,7 +1,11 @@
 import io
 import struct
-
 from enum import Enum
+from datetime import datetime
+
+
+import numpy as np
+
 
 from nutcracker.utils import funcutils
 from . import bomb
@@ -197,7 +201,8 @@ def make_glyphs(xvec, yvec, side_length):
                     for icol in range(point[0], side_length):
                         pglyph[icol + point[1] * side_length] = 1
             
-            yield pglyph
+            pglyph2d = np.asarray(pglyph, dtype=np.uint8).reshape(side_length, side_length)
+            yield 1 * np.logical_not(pglyph2d)
 
 def init_codec47(width, height):
     global _width
@@ -303,69 +308,55 @@ def decode47(src, width, height):
 
     return [x for x in out]
 
-def decode2(out, src, width, height, params):
-    prev1 = _prev1
-    prev2 = _prev2
+_bprev1 = None
+_bprev2 = None
 
-    dst = 0
+def decode2(out, src, width, height, params):
+    global _bprev1
+    global _bprev2
+
+    _bprev1 = np.asarray(_deltaBuf[_prev1:_prev1 + _frameSize], dtype=np.uint8).reshape(height, width)
+    _bprev2 = np.asarray(_deltaBuf[_prev2:_prev2 + _frameSize], dtype=np.uint8).flatten()
 
     with io.BytesIO(src) as stream:
-        for _ in range(0, height, 8):
-            for i in range(0, width, 8):
-                process_block(out, stream, dst + i, prev1 + i, prev2 + i, width, params, 8)
-            dst += width * 8
-            prev1 += width * 8
-            prev2 += width * 8
+        return np.block([
+            [process_block_mat(stream, yloc, xloc, params, 8) for xloc in range(0, width, 8)]
+            for yloc in range(0, height, 8)
+        ]).flatten()
 
-    return out[:_frameSize]
-
-def process_block(out, stream, dst, prev1, prev2, stride, params, size):
+def process_block_mat(stream, yloc, xloc, params, size):
     code = ord(stream.read(1))
-
-    assert prev1 - _prev1 == prev2 - _prev2
 
     if code < 0xf8:
         mx, my = motion_vectors[code]
-        for k in range(size):
-            tmp = prev2 + mx + (my + k) * stride
-            out[dst:dst + size] = _deltaBuf[tmp:tmp + size]
-            dst += stride
+        off = xloc + mx + (yloc + my) * _width
+        cuts = [slice(off + k * _width, off + k * _width + size) for k in range(size)]
+        return np.asarray([_bprev2[cut] for cut in cuts], dtype=np.uint8).reshape(size, size)
     elif code == 0xff:
         if size == 2:
-            out[dst:dst + 2] = [x for x in stream.read(2)]
-            out[dst + stride:dst + stride + 2] = [x for x in stream.read(2)]
+            return np.frombuffer(stream.read(4), dtype=np.uint8).reshape(size, size)
         else:
             size >>= 1
-            process_block(out, stream, dst, prev1, prev2, stride, params, size)
-            process_block(out, stream, dst + size, prev1 + size, prev2 + size, stride, params, size)
-            dst += size * stride
-            prev1 += size * stride
-            prev2 += size * stride
-            process_block(out, stream, dst, prev1, prev2, stride, params, size)
-            process_block(out, stream, dst + size, prev1 + size, prev2 + size, stride, params, size)
+            qrt1 = process_block_mat(stream, yloc, xloc, params, size)
+            qrt2 = process_block_mat(stream, yloc, xloc + size, params, size)
+            qrt3 = process_block_mat(stream, yloc + size, xloc, params, size)
+            qrt4 = process_block_mat(stream, yloc + size, xloc + size, params, size)
+            return np.block([
+                [qrt1, qrt2],
+                [qrt3, qrt4]
+            ])
     elif code == 0xfe:
-        t = ord(stream.read(1))
-        for _ in range(size):
-            out[dst:dst + size] = [t] * size
-            dst += stride
+        val = ord(stream.read(1))
+        return np.full((size, size), val, dtype=np.uint8)
     elif code == 0xfd:
         assert size > 2
+        glyphs = _p8x8glyphs if size == 8 else _p4x4glyphs
         code = ord(stream.read(1))
-        pglyph = _p8x8glyphs[code] if size == 8 else _p4x4glyphs[code]
-        colors = [x for x in stream.read(2)]
-        glines = funcutils.grouper(pglyph, size)
-        for k, gline in zip(range(size), glines):
-            assert not (set(gline) - {0, 1})
-            out[dst:dst + size] = [colors[1 - x] for x in gline]
-            dst += stride
+        pglyph = glyphs[code]
+        colors = np.frombuffer(stream.read(2), dtype=np.uint8)
+        return colors[pglyph]
     elif code == 0xfc:
-        off = prev1
-        for _ in range(size):
-            out[dst:dst + size] = _deltaBuf[off:off + size]
-            dst += stride
-            off += stride
+        return _bprev1[yloc:yloc + size, xloc:xloc + size]
     else:
-        t = params[code & 7]
-        for _ in range(size):
-            out[dst:dst + size] = [t] * size
-            dst += stride
+        val = params[code & 7]
+        return np.full((size, size), val, dtype=np.uint8)
