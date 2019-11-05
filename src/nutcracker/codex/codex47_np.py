@@ -307,58 +307,58 @@ def decode47(src, width, height):
 
     return [x for x in out]
 
-_bprev1 = None
-_bprev2 = None
-
 def decode2(out, src, width, height, params):
-    global _bprev1
-    global _bprev2
-
-    _bprev1 = np.asarray(_deltaBuf[_prev1:_prev1 + _frameSize], dtype=np.uint8).reshape(height, width)
-    _bprev2 = np.asarray(_deltaBuf[_prev2:_prev2 + _frameSize], dtype=np.uint8).flatten()
+    process_block = create_processor(
+        np.asarray(_deltaBuf[_prev1:_prev1 + _frameSize], dtype=np.uint8).reshape(height, width),
+        np.asarray(_deltaBuf[_prev2:_prev2 + _frameSize], dtype=np.uint8).flatten(),
+        params
+    )
 
     with io.BytesIO(src) as stream:
         return np.block([
-            [process_block_mat(stream, yloc, xloc, params, 8) for xloc in range(0, width, 8)]
+            [process_block(stream, yloc, xloc, 8) for xloc in range(0, width, 8)]
             for yloc in range(0, height, 8)
         ]).flatten()
 
-def process_block_mat(stream, yloc, xloc, params, size):
-    code = ord(stream.read(1))
-
-    if size == 1:
-        return np.asarray([[code]], dtype=np.uint8)
-
-    if code < 0xf8:
-        mx, my = motion_vectors[code]
-        off = xloc + mx + (yloc + my) * _width
-        cuts = [slice(off + k * _width, off + k * _width + size) for k in range(size)]
-        return np.asarray([_bprev2[cut] for cut in cuts], dtype=np.uint8).reshape(size, size)
-    elif code == 0xff:
-        if size == 2:
-            buf = stream.read(4)
-            return np.frombuffer(buf, dtype=np.uint8).reshape(size, size)
-        size >>= 1
-        qrt1 = process_block_mat(stream, yloc, xloc, params, size)
-        qrt2 = process_block_mat(stream, yloc, xloc + size, params, size)
-        qrt3 = process_block_mat(stream, yloc + size, xloc, params, size)
-        qrt4 = process_block_mat(stream, yloc + size, xloc + size, params, size)
-        return np.block([
-            [qrt1, qrt2],
-            [qrt3, qrt4]
-        ])
-    elif code == 0xfe:
-        val = ord(stream.read(1))
-        return np.full((size, size), val, dtype=np.uint8)
-    elif code == 0xfd:
-        assert size > 2
-        glyphs = _p8x8glyphs if size == 8 else _p4x4glyphs
+def create_processor(bprev1, bprev2, params):
+    def process_block(stream, yloc, xloc, size):
         code = ord(stream.read(1))
-        pglyph = glyphs[code]
-        colors = np.frombuffer(stream.read(2), dtype=np.uint8)
-        return colors[1 - pglyph]
-    elif code == 0xfc:
-        return _bprev1[yloc:yloc + size, xloc:xloc + size]
-    else:
-        val = params[code & 7]
-        return np.full((size, size), val, dtype=np.uint8)
+
+        if size == 1:
+            return np.asarray([[code]], dtype=np.uint8)
+
+        if code < 0xf8:
+            mx, my = motion_vectors[code]
+            off = xloc + mx + (yloc + my) * _width
+            cuts = [slice(off + k * _width, off + k * _width + size) for k in range(size)]
+            return np.asarray([bprev2[cut] for cut in cuts], dtype=np.uint8).reshape(size, size)
+        elif code == 0xff:
+            if size == 2:
+                buf = stream.read(4)
+                return np.frombuffer(buf, dtype=np.uint8).reshape(size, size)
+            size >>= 1
+            qrt1 = process_block(stream, yloc, xloc, size)
+            qrt2 = process_block(stream, yloc, xloc + size, size)
+            qrt3 = process_block(stream, yloc + size, xloc, size)
+            qrt4 = process_block(stream, yloc + size, xloc + size, size)
+            return np.block([
+                [qrt1, qrt2],
+                [qrt3, qrt4]
+            ])
+        elif code == 0xfe:
+            val = ord(stream.read(1))
+            return np.full((size, size), val, dtype=np.uint8)
+        elif code == 0xfd:
+            assert size > 2
+            glyphs = _p8x8glyphs if size == 8 else _p4x4glyphs
+            code = ord(stream.read(1))
+            pglyph = glyphs[code]
+            colors = np.frombuffer(stream.read(2), dtype=np.uint8)
+            return colors[1 - pglyph]
+        elif code == 0xfc:
+            return bprev1[yloc:yloc + size, xloc:xloc + size]
+        else:
+            val = params[code & 7]
+            return np.full((size, size), val, dtype=np.uint8)
+    
+    return process_block
