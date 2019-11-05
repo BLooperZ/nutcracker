@@ -122,7 +122,7 @@ class GlyphDir(Enum):
     NO_DIR = 4
 
 def which_edge(x, y, edge_size):
-    edge_max = edge_size - 1;
+    edge_max = edge_size - 1
     if not y:
         return GlyphEdge.BOTTOM_EDGE
     elif y == edge_max:
@@ -185,13 +185,13 @@ def make_glyphs(xvec, yvec, side_length):
             for ipoint in range(npoints + 1):
                 point = interp_point(x0, y0, x1, y1, ipoint, npoints)
                 if dirr == GlyphDir.DIR_UP:
-                    for irow in range(point[1]):
+                    for irow in range(point[1] + 1):
                         pglyph[point[0] + irow * side_length] = 1
                 elif dirr == GlyphDir.DIR_DOWN:
                     for irow in range(point[1], side_length):
                         pglyph[point[0] + irow * side_length] = 1
                 elif dirr == GlyphDir.DIR_LEFT:
-                    for icol in range(point[0]):
+                    for icol in range(point[0] + 1):
                         pglyph[icol + point[1] * side_length] = 1
                 elif dirr == GlyphDir.DIR_RIGHT:
                     for icol in range(point[0], side_length):

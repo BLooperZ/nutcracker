@@ -126,7 +126,7 @@ class GlyphDir(Enum):
     NO_DIR = 4
 
 def which_edge(x, y, edge_size):
-    edge_max = edge_size - 1;
+    edge_max = edge_size - 1
     if not y:
         return GlyphEdge.BOTTOM_EDGE
     elif y == edge_max:
@@ -189,20 +189,19 @@ def make_glyphs(xvec, yvec, side_length):
             for ipoint in range(npoints + 1):
                 point = interp_point(x0, y0, x1, y1, ipoint, npoints)
                 if dirr == GlyphDir.DIR_UP:
-                    for irow in range(point[1]):
+                    for irow in range(point[1] + 1):
                         pglyph[point[0] + irow * side_length] = 1
                 elif dirr == GlyphDir.DIR_DOWN:
                     for irow in range(point[1], side_length):
                         pglyph[point[0] + irow * side_length] = 1
                 elif dirr == GlyphDir.DIR_LEFT:
-                    for icol in range(point[0]):
+                    for icol in range(point[0] + 1):
                         pglyph[icol + point[1] * side_length] = 1
                 elif dirr == GlyphDir.DIR_RIGHT:
                     for icol in range(point[0], side_length):
                         pglyph[icol + point[1] * side_length] = 1
             
-            pglyph2d = np.asarray(pglyph, dtype=np.uint8).reshape(side_length, side_length)
-            yield 1 * np.logical_not(pglyph2d)
+            yield np.asarray(pglyph, dtype=np.uint8).reshape(side_length, side_length)
 
 def init_codec47(width, height):
     global _width
@@ -327,6 +326,9 @@ def decode2(out, src, width, height, params):
 def process_block_mat(stream, yloc, xloc, params, size):
     code = ord(stream.read(1))
 
+    if size == 1:
+        return np.asarray([[code]], dtype=np.uint8)
+
     if code < 0xf8:
         mx, my = motion_vectors[code]
         off = xloc + mx + (yloc + my) * _width
@@ -334,17 +336,17 @@ def process_block_mat(stream, yloc, xloc, params, size):
         return np.asarray([_bprev2[cut] for cut in cuts], dtype=np.uint8).reshape(size, size)
     elif code == 0xff:
         if size == 2:
-            return np.frombuffer(stream.read(4), dtype=np.uint8).reshape(size, size)
-        else:
-            size >>= 1
-            qrt1 = process_block_mat(stream, yloc, xloc, params, size)
-            qrt2 = process_block_mat(stream, yloc, xloc + size, params, size)
-            qrt3 = process_block_mat(stream, yloc + size, xloc, params, size)
-            qrt4 = process_block_mat(stream, yloc + size, xloc + size, params, size)
-            return np.block([
-                [qrt1, qrt2],
-                [qrt3, qrt4]
-            ])
+            buf = stream.read(4)
+            return np.frombuffer(buf, dtype=np.uint8).reshape(size, size)
+        size >>= 1
+        qrt1 = process_block_mat(stream, yloc, xloc, params, size)
+        qrt2 = process_block_mat(stream, yloc, xloc + size, params, size)
+        qrt3 = process_block_mat(stream, yloc + size, xloc, params, size)
+        qrt4 = process_block_mat(stream, yloc + size, xloc + size, params, size)
+        return np.block([
+            [qrt1, qrt2],
+            [qrt3, qrt4]
+        ])
     elif code == 0xfe:
         val = ord(stream.read(1))
         return np.full((size, size), val, dtype=np.uint8)
@@ -354,7 +356,7 @@ def process_block_mat(stream, yloc, xloc, params, size):
         code = ord(stream.read(1))
         pglyph = glyphs[code]
         colors = np.frombuffer(stream.read(2), dtype=np.uint8)
-        return colors[pglyph]
+        return colors[1 - pglyph]
     elif code == 0xfc:
         return _bprev1[yloc:yloc + size, xloc:xloc + size]
     else:
