@@ -200,7 +200,7 @@ def make_glyphs(xvec, yvec, side_length):
                 elif dirr == GlyphDir.DIR_RIGHT:
                     for icol in range(point[0], side_length):
                         pglyph[icol + point[1] * side_length] = 1
-            
+
             yield np.asarray(pglyph, dtype=np.uint8).reshape(side_length, side_length)
 
 def init_codec47(width, height):
