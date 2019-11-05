@@ -196,7 +196,7 @@ def make_glyphs(xvec, yvec, side_length):
                 elif dirr == GlyphDir.DIR_RIGHT:
                     for icol in range(point[0], side_length):
                         pglyph[icol + point[1] * side_length] = 1
-            
+
             yield pglyph
 
 def init_codec47(width, height):
