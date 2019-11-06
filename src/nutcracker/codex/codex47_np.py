@@ -310,7 +310,7 @@ def decode47(src, width, height):
 def decode2(out, src, width, height, params):
     process_block = create_processor(
         np.asarray(_deltaBuf[_prev1:_prev1 + _frameSize], dtype=np.uint8).reshape(height, width),
-        np.asarray(_deltaBuf[_prev2:_prev2 + _frameSize], dtype=np.uint8).flatten(),
+        np.asarray(_deltaBuf[_prev2:_prev2 + _frameSize], dtype=np.uint8).ravel(),
         params
     )
 
