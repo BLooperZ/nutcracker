@@ -222,6 +222,11 @@ def init_codec47(width, height):
     _buffer = np.zeros((3 * _height, _width), dtype=np.uint8)
     _bprev1, _bprev2, _bcurr = _buffer[:_height, :], _buffer[_height:2 * _height, :], _buffer[2 * _height:, :]
 
+def get_locs(width, height, step):
+    for yloc in range(0, height, step):
+        for xloc in range(0, width, step):
+            yield yloc, xloc
+
 def decode47(src, width, height):
     global _prev_seq
     global _bcurr
@@ -264,11 +269,8 @@ def decode47(src, width, height):
     if compression == 0:
         out[:, :] = np.frombuffer(gfx_data[:_frame_size], dtype=np.uint8).reshape((_height, _width))
     elif compression == 1:
-        gfx = np.frombuffer(gfx_data, dtype=np.uint8)
-        for yloc in range(0, height, 2):
-            for xloc in range(0, width, 2):
-                out[yloc:yloc + 2, xloc:xloc + 2] = gfx[:4].reshape(2, 2)
-                gfx = gfx[4:]
+        gfx = np.frombuffer(gfx_data, dtype=np.uint8).reshape(_height // 2, _width // 2)
+        out[:, :] = gfx.repeat(2, axis=0).repeat(2, axis=1)
     elif compression == 2:
         if seq_nb == _prev_seq + 1:
             decode2(out, gfx_data, width, height, params)
@@ -306,9 +308,8 @@ def decode2(out, src, width, height, params):
     start = datetime.now()
 
     with io.BytesIO(src) as stream:
-        for yloc in range(0, height, 8):
-            for xloc in range(0, width, 8):
-                out[yloc:yloc + 8, xloc:xloc + 8] = process_block(stream, yloc, xloc, 8)
+        for (yloc, xloc) in get_locs(width, height, 8):
+            out[yloc:yloc + 8, xloc:xloc + 8] = process_block(stream, yloc, xloc, 8)
 
     print('processing time', str(datetime.now() - start))
 
