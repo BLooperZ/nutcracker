@@ -264,24 +264,30 @@ def decode47(src, width, height):
         _bprev2[:, :] = bg2
         _prev_seq = -1
 
+    out = _bcurr
+
+    assert(npoff(out) == npoff(_bcurr))
+
     print(f'COMPRESSION: {compression}')
     if compression == 0:
-        _bcurr[:, :] = np.frombuffer(gfx_data, dtype=np.uint8).reshape((_height, _width))
+        out[:, :] = np.frombuffer(gfx_data, dtype=np.uint8).reshape((_height, _width))
     elif compression == 1:
         gfx = np.frombuffer(gfx_data, dtype=np.uint8).reshape(_height // 2, _width // 2)
-        _bcurr[:, :] = gfx.repeat(2, axis=0).repeat(2, axis=1)
+        out[:, :] = gfx.repeat(2, axis=0).repeat(2, axis=1)
     elif compression == 2:
         if seq_nb == _prev_seq + 1:
-            decode2(_bcurr, gfx_data, width, height, params)
+            decode2(out, gfx_data, width, height, params)
             # out[:, :] = decode2(out, gfx_data, width, height, params)
     elif compression == 3:
-        _bcurr[:, :] = _bprev2
+        out[:, :] = _bprev2
     elif compression == 4:
-        _bcurr[:, :] = _bprev1
+        out[:, :] = _bprev1
     elif compression == 5:
-        _bcurr[:, :] = np.asarray(bomb.decode_line(gfx_data, decoded_size), dtype=np.uint8).reshape(_height, _width)
+        out[:, :] = np.asarray(bomb.decode_line(gfx_data, decoded_size), dtype=np.uint8).reshape(_height, _width)
     else:
         raise ValueError(f'Unknow compression: {compression}')
+
+    assert(npoff(out) == npoff(_bcurr))
 
     if seq_nb == _prev_seq + 1 and rotation != 0:
         if rotation == 2:
@@ -293,12 +299,15 @@ def decode47(src, width, height):
 
     print('OFFSETS', npoff(_bcurr), npoff(_bprev1), npoff(_bprev2))
 
-    return _bcurr.ravel().tolist()
+    return out.ravel().tolist()
+
+def strided_app(a, L, S ):
+    nrows = ((a.size-L)//S)+1
+    n = a.strides[0]
+    return np.lib.stride_tricks.as_strided(a, shape=(nrows,L), strides=(S*n,n))
 
 def decode2(out, src, width, height, params):
     process_block = create_processor(
-        _bprev1,
-        _bprev2.ravel(),
         params
     )
 
@@ -306,51 +315,55 @@ def decode2(out, src, width, height, params):
 
     with io.BytesIO(src) as stream:
         for (yloc, xloc) in get_locs(width, height, 8):
-            out[yloc:yloc + 8, xloc:xloc + 8] = process_block(stream, yloc, xloc, 8)
+            process_block(
+                out[yloc:yloc + 8, xloc:xloc + 8],
+                stream,
+                yloc, xloc, 8
+            )
 
     print('processing time', str(datetime.now() - start))
 
-    return out
-
-def create_processor(bprev1, bprev2, params):
-    def process_block(stream, yloc, xloc, size):
+def create_processor(params):
+    def process_block(out, stream, yloc, xloc, size):
         code = ord(stream.read(1))
 
         if size == 1:
-            return np.asarray([[code]], dtype=np.uint8)
+            out[:, :] = np.asarray([[code]], dtype=np.uint8)
 
         if code < 0xf8:
             mx, my = motion_vectors[code]
-            off = xloc + mx + (yloc + my) * _width
-            cuts = [slice(off + k * _width, off + k * _width + size) for k in range(size)]
-            return np.asarray([bprev2[cut] for cut in cuts], dtype=np.uint8).reshape(size, size)
+            by, bx = my + yloc, mx + xloc
+            if 0 <= by <= _height - size and 0 <= bx <= _width - size:
+                out[:, :] = _bprev2[by:by + size, bx:bx + size]
+            else:
+                raveled = _bprev2.ravel()
+                off = bx + by * _width
+                cuts = [slice(off + k * _width, off + k * _width + size) for k in range(size)]
+                out[:, :] = np.asarray([raveled[cut] for cut in cuts], dtype=np.uint8).reshape(size, size)
         elif code == 0xff:
             if size == 2:
                 buf = stream.read(4)
-                return np.frombuffer(buf, dtype=np.uint8).reshape(size, size)
-            size >>= 1
-            qrt1 = process_block(stream, yloc, xloc, size)
-            qrt2 = process_block(stream, yloc, xloc + size, size)
-            qrt3 = process_block(stream, yloc + size, xloc, size)
-            qrt4 = process_block(stream, yloc + size, xloc + size, size)
-            return np.block([
-                [qrt1, qrt2],
-                [qrt3, qrt4]
-            ])
+                out[:, :] = np.frombuffer(buf, dtype=np.uint8).reshape(size, size)
+            else:
+                size >>= 1
+                process_block(out[:size, :size], stream, yloc, xloc, size)
+                process_block(out[:size, size:], stream, yloc, xloc + size, size)
+                process_block(out[size:, :size], stream, yloc + size, xloc, size)
+                process_block(out[size:, size:], stream, yloc + size, xloc + size, size)
         elif code == 0xfe:
             val = ord(stream.read(1))
-            return np.full((size, size), val, dtype=np.uint8)
+            out[:, :] = val
         elif code == 0xfd:
             assert size > 2
             glyphs = _p8x8glyphs if size == 8 else _p4x4glyphs
             code = ord(stream.read(1))
             pglyph = glyphs[code]
             colors = np.frombuffer(stream.read(2), dtype=np.uint8)
-            return colors[1 - pglyph]
+            out[:, :] = colors[1 - pglyph]
         elif code == 0xfc:
-            return bprev1[yloc:yloc + size, xloc:xloc + size]
+            out[:, :] = _bprev1[yloc:yloc + size, xloc:xloc + size]
         else:
             val = params[code & 7]
-            return np.full((size, size), val, dtype=np.uint8)
+            out[:, :] = val
     
     return process_block
