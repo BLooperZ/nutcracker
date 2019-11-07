@@ -306,13 +306,14 @@ def strided_app(a, L, S ):
     n = a.strides[0]
     return np.lib.stride_tricks.as_strided(a, shape=(nrows,L), strides=(S*n,n))
 
+_params = None
+
 def decode2(out, src, width, height, params):
-    process_block = create_processor(
-        params
-    )
+    global _params
+
+    _params = params
 
     start = datetime.now()
-
     with io.BytesIO(src) as stream:
         for (yloc, xloc) in get_locs(width, height, 8):
             process_block(
@@ -320,50 +321,46 @@ def decode2(out, src, width, height, params):
                 stream,
                 yloc, xloc, 8
             )
-
     print('processing time', str(datetime.now() - start))
 
-def create_processor(params):
-    def process_block(out, stream, yloc, xloc, size):
-        code = ord(stream.read(1))
+def process_block(out, stream, yloc, xloc, size):
+    code = ord(stream.read(1))
 
-        if size == 1:
-            out[:, :] = np.asarray([[code]], dtype=np.uint8)
+    if size == 1:
+        out[:, :] = np.asarray([[code]], dtype=np.uint8)
 
-        if code < 0xf8:
-            mx, my = motion_vectors[code]
-            by, bx = my + yloc, mx + xloc
-            if 0 <= by <= _height - size and 0 <= bx <= _width - size:
-                out[:, :] = _bprev2[by:by + size, bx:bx + size]
-            else:
-                raveled = _bprev2.ravel()
-                off = bx + by * _width
-                cuts = [slice(off + k * _width, off + k * _width + size) for k in range(size)]
-                out[:, :] = np.asarray([raveled[cut] for cut in cuts], dtype=np.uint8).reshape(size, size)
-        elif code == 0xff:
-            if size == 2:
-                buf = stream.read(4)
-                out[:, :] = np.frombuffer(buf, dtype=np.uint8).reshape(size, size)
-            else:
-                size >>= 1
-                process_block(out[:size, :size], stream, yloc, xloc, size)
-                process_block(out[:size, size:], stream, yloc, xloc + size, size)
-                process_block(out[size:, :size], stream, yloc + size, xloc, size)
-                process_block(out[size:, size:], stream, yloc + size, xloc + size, size)
-        elif code == 0xfe:
-            val = ord(stream.read(1))
-            out[:, :] = val
-        elif code == 0xfd:
-            assert size > 2
-            glyphs = _p8x8glyphs if size == 8 else _p4x4glyphs
-            code = ord(stream.read(1))
-            pglyph = glyphs[code]
-            colors = np.frombuffer(stream.read(2), dtype=np.uint8)
-            out[:, :] = colors[1 - pglyph]
-        elif code == 0xfc:
-            out[:, :] = _bprev1[yloc:yloc + size, xloc:xloc + size]
+    if code < 0xf8:
+        mx, my = motion_vectors[code]
+        by, bx = my + yloc, mx + xloc
+        if 0 <= by <= _height - size and 0 <= bx <= _width - size:
+            out[:, :] = _bprev2[by:by + size, bx:bx + size]
         else:
-            val = params[code & 7]
-            out[:, :] = val
-    
-    return process_block
+            raveled = _bprev2.ravel()
+            off = bx + by * _width
+            cuts = [slice(off + k * _width, off + k * _width + size) for k in range(size)]
+            out[:, :] = np.asarray([raveled[cut] for cut in cuts], dtype=np.uint8).reshape(size, size)
+    elif code == 0xff:
+        if size == 2:
+            buf = stream.read(4)
+            out[:, :] = np.frombuffer(buf, dtype=np.uint8).reshape(size, size)
+        else:
+            size >>= 1
+            process_block(out[:size, :size], stream, yloc, xloc, size)
+            process_block(out[:size, size:], stream, yloc, xloc + size, size)
+            process_block(out[size:, :size], stream, yloc + size, xloc, size)
+            process_block(out[size:, size:], stream, yloc + size, xloc + size, size)
+    elif code == 0xfe:
+        val = ord(stream.read(1))
+        out[:, :] = val
+    elif code == 0xfd:
+        assert size > 2
+        glyphs = _p8x8glyphs if size == 8 else _p4x4glyphs
+        code = ord(stream.read(1))
+        pglyph = glyphs[code]
+        colors = np.frombuffer(stream.read(2), dtype=np.uint8)
+        out[:, :] = colors[1 - pglyph]
+    elif code == 0xfc:
+        out[:, :] = _bprev1[yloc:yloc + size, xloc:xloc + size]
+    else:
+        val = _params[code & 7]
+        out[:, :] = val
