@@ -93,7 +93,6 @@ def npoff(x):
 
 _width = None
 _height = None
-_frame_size = None
 
 _buffer = None
 _bprev1 = None
@@ -200,7 +199,6 @@ def make_glyphs(xvec, yvec, side_length):
 def init_codec47(width, height):
     global _width
     global _height
-    global _frame_size
 
     global _buffer
     global _bprev1
@@ -212,7 +210,6 @@ def init_codec47(width, height):
 
     _width = width
     _height = height
-    _frame_size = _height * _width
 
     _p4x4glyphs = list(make_glyphs(glyph4_x, glyph4_y, 4))
     _p8x8glyphs = list(make_glyphs(glyph8_x, glyph8_y, 8))
@@ -220,7 +217,13 @@ def init_codec47(width, height):
     assert len(_p4x4glyphs) == len(_p8x8glyphs) == 256
 
     _buffer = np.zeros((3 * _height, _width), dtype=np.uint8)
-    _bprev1, _bprev2, _bcurr = _buffer[:_height, :], _buffer[_height:2 * _height, :], _buffer[2 * _height:, :]
+
+    # initialize views of buffer
+    _bprev1, _bprev2, _bcurr = (
+        _buffer[:_height, :],
+        _buffer[_height:2 * _height, :],
+        _buffer[2 * _height:, :]
+    )
 
 def get_locs(width, height, step):
     for yloc in range(0, height, step):
@@ -248,7 +251,7 @@ def decode47(src, width, height):
     bg1, bg2 = src[12:14]
 
     decoded_size = read_le_uint32(src[14:])
-    assert decoded_size == _frame_size
+    assert decoded_size == _width * _height
 
     assert set(src[18:26]) == {0}, src[18:26]
 
@@ -267,7 +270,7 @@ def decode47(src, width, height):
 
     print(f'COMPRESSION: {compression}')
     if compression == 0:
-        out[:, :] = np.frombuffer(gfx_data[:_frame_size], dtype=np.uint8).reshape((_height, _width))
+        out[:, :] = np.frombuffer(gfx_data, dtype=np.uint8).reshape((_height, _width))
     elif compression == 1:
         gfx = np.frombuffer(gfx_data, dtype=np.uint8).reshape(_height // 2, _width // 2)
         out[:, :] = gfx.repeat(2, axis=0).repeat(2, axis=1)
