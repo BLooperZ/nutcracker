@@ -3,9 +3,7 @@ import struct
 from enum import Enum
 from datetime import datetime
 
-
 import numpy as np
-
 
 from nutcracker.utils import funcutils
 from . import bomb
@@ -88,25 +86,21 @@ def read_le_uint32(f):
     bts = bytes(x % 256 for x in f[:4])
     return struct.unpack('<I', bts)[0]
 
+def npoff(x):
+    # This function returns the memory
+    # block address of an array.
+    return x.__array_interface__['data'][0]
+
 _width = None
 _height = None
+_frame_size = None
 
-_frameSize = None
-_deltaSize = None
-_deltaBuf = None
-_prev1 = None
-_prev2 = None
-_curBuf = None
+_buffer = None
+_bprev1 = None
+_bprev2 = None
+_bcurr = None
 
 _prev_seq = None
-
-def cast_int16(x):
-    x = x % (2 ** 16)
-    return x - (x >> 15) * (2 ** 16)
-
-def cast_int8(x):
-    x = x % (2 ** 8)
-    return x - (x >> 7) * (2 ** 8)
 
 _p4x4glyphs = None
 _p8x8glyphs = None
@@ -206,39 +200,35 @@ def make_glyphs(xvec, yvec, side_length):
 def init_codec47(width, height):
     global _width
     global _height
+    global _frame_size
 
-    global _frameSize
-    global _deltaSize
-    global _deltaBuf
-    global _prev1
-    global _prev2
-    global _curBuf
+    global _buffer
+    global _bprev1
+    global _bprev2
+    global _bcurr
 
     global _p4x4glyphs
     global _p8x8glyphs
 
     _width = width
     _height = height
+    _frame_size = _height * _width
 
     _p4x4glyphs = list(make_glyphs(glyph4_x, glyph4_y, 4))
     _p8x8glyphs = list(make_glyphs(glyph8_x, glyph8_y, 8))
 
     assert len(_p4x4glyphs) == len(_p8x8glyphs) == 256
 
-    _frameSize = _width * _height
-    _deltaSize = _frameSize * 3
-    _deltaBuf = [0 for _ in range(_deltaSize)]
-    _prev1, _prev2 = 0, _frameSize
-    _curBuf = _frameSize * 2
+    _buffer = np.zeros((3 * _height, _width), dtype=np.uint8)
+    _bprev1, _bprev2, _bcurr = _buffer[:_height, :], _buffer[_height:2 * _height, :], _buffer[2 * _height:, :]
 
 def decode47(src, width, height):
-    global _table
     global _prev_seq
-    global _curBuf
-    global _prev1
-    global _prev2
+    global _bcurr
+    global _bprev1
+    global _bprev2
 
-    if not (_width, _height) == (width, height):
+    if (_width, _height) != (width, height):
         print(f'init {width, height}')
         init_codec47(width, height)
 
@@ -253,7 +243,7 @@ def decode47(src, width, height):
     bg1, bg2 = src[12:14]
 
     decoded_size = read_le_uint32(src[14:])
-    assert decoded_size == _frameSize
+    assert decoded_size == _frame_size
 
     assert set(src[18:26]) == {0}, src[18:26]
 
@@ -262,63 +252,67 @@ def decode47(src, width, height):
         gfx_data = gfx_data[0x8080:]
 
     if seq_nb == 0:
-        _deltaBuf[_prev1:_prev1 + _frameSize] = [bg1 for i in range(_frameSize)]
-        _deltaBuf[_prev2:_prev2 + _frameSize] = [bg2 for i in range(_frameSize)]
+        _bprev1[:, :] = bg1
+        _bprev2[:, :] = bg2
         _prev_seq = -1
 
-    out = _deltaBuf[_curBuf:_curBuf + _frameSize]
+    out = _bcurr
+
+    assert(npoff(out) == npoff(_bcurr))
 
     print(f'COMPRESSION: {compression}')
     if compression == 0:
-        out = gfx_data[:_frameSize]
-        _deltaBuf[_curBuf:_curBuf + _frameSize] = out
+        out[:, :] = np.frombuffer(gfx_data[:_frame_size], dtype=np.uint8).reshape((_height, _width))
     elif compression == 1:
-        dst = 0
-        d_src = 0
-        for _ in range(0, height, 2):
-            for i in range(0, width, 2):
-                out[dst + i:dst + i + 2] = gfx_data[d_src:d_src + 2]
-                out[dst + i + width:dst + i + width + 2] = gfx_data[d_src + 2:d_src + 4]
-            dst += width * 2
-        _deltaBuf[_curBuf:_curBuf + _frameSize] = out
+        gfx = np.frombuffer(gfx_data, dtype=np.uint8)
+        for yloc in range(0, height, 2):
+            for xloc in range(0, width, 2):
+                out[yloc:yloc + 2, xloc:xloc + 2] = gfx[:4].reshape(2, 2)
+                gfx = gfx[4:]
     elif compression == 2:
         if seq_nb == _prev_seq + 1:
-            out = decode2(out, gfx_data, width, height, params)
-        _deltaBuf[_curBuf:_curBuf + _frameSize] = out
+            decode2(out, gfx_data, width, height, params)
+            # out[:, :] = decode2(out, gfx_data, width, height, params)
     elif compression == 3:
-        out = _deltaBuf[_prev2:_prev2 + _frameSize]
-        _deltaBuf[_curBuf:_curBuf + _frameSize] = out
+        out[:, :] = _bprev2
     elif compression == 4:
-        out = _deltaBuf[_prev1:_prev1 + _frameSize]
-        _deltaBuf[_curBuf:_curBuf + _frameSize] = out
+        out[:, :] = _bprev1
     elif compression == 5:
-        out = bomb.decode_line(gfx_data, decoded_size)
-        assert len(out) == _frameSize
-        _deltaBuf[_curBuf:_curBuf + _frameSize] = out
+        out[:, :] = np.asarray(bomb.decode_line(gfx_data, decoded_size), dtype=np.uint8).reshape(_height, _width)
     else:
         raise ValueError(f'Unknow compression: {compression}')
 
+    assert(npoff(out) == npoff(_bcurr))
+
     if seq_nb == _prev_seq + 1 and rotation != 0:
         if rotation == 2:
-            _prev1, _prev2 = _prev2, _prev1
-        _curBuf, _prev2 = _prev2, _curBuf
+            print('ROTATION 2')
+            _bprev1, _bprev2 = _bprev2, _bprev1
+        _bcurr, _bprev2 = _bprev2, _bcurr
 
     _prev_seq = seq_nb
 
-    return [x for x in out]
+    print('OFFSETS', npoff(_bcurr), npoff(_bprev1), npoff(_bprev2))
+
+    return out.ravel().tolist()
 
 def decode2(out, src, width, height, params):
     process_block = create_processor(
-        np.asarray(_deltaBuf[_prev1:_prev1 + _frameSize], dtype=np.uint8).reshape(height, width),
-        np.asarray(_deltaBuf[_prev2:_prev2 + _frameSize], dtype=np.uint8).ravel(),
+        _bprev1,
+        _bprev2.ravel(),
         params
     )
 
+    start = datetime.now()
+
     with io.BytesIO(src) as stream:
-        return np.block([
-            [process_block(stream, yloc, xloc, 8) for xloc in range(0, width, 8)]
-            for yloc in range(0, height, 8)
-        ]).flatten()
+        for yloc in range(0, height, 8):
+            for xloc in range(0, width, 8):
+                out[yloc:yloc + 8, xloc:xloc + 8] = process_block(stream, yloc, xloc, 8)
+
+    print('processing time', str(datetime.now() - start))
+
+    return out
 
 def create_processor(bprev1, bprev2, params):
     def process_block(stream, yloc, xloc, size):
