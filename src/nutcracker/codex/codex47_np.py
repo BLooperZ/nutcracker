@@ -264,30 +264,24 @@ def decode47(src, width, height):
         _bprev2[:, :] = bg2
         _prev_seq = -1
 
-    out = _bcurr
-
-    assert(npoff(out) == npoff(_bcurr))
-
     print(f'COMPRESSION: {compression}')
     if compression == 0:
-        out[:, :] = np.frombuffer(gfx_data, dtype=np.uint8).reshape((_height, _width))
+        _bcurr[:, :] = np.frombuffer(gfx_data, dtype=np.uint8).reshape((_height, _width))
     elif compression == 1:
         gfx = np.frombuffer(gfx_data, dtype=np.uint8).reshape(_height // 2, _width // 2)
-        out[:, :] = gfx.repeat(2, axis=0).repeat(2, axis=1)
+        _bcurr[:, :] = gfx.repeat(2, axis=0).repeat(2, axis=1)
     elif compression == 2:
         if seq_nb == _prev_seq + 1:
-            decode2(out, gfx_data, width, height, params)
+            decode2(_bcurr, gfx_data, width, height, params)
             # out[:, :] = decode2(out, gfx_data, width, height, params)
     elif compression == 3:
-        out[:, :] = _bprev2
+        _bcurr[:, :] = _bprev2
     elif compression == 4:
-        out[:, :] = _bprev1
+        _bcurr[:, :] = _bprev1
     elif compression == 5:
-        out[:, :] = np.asarray(bomb.decode_line(gfx_data, decoded_size), dtype=np.uint8).reshape(_height, _width)
+        _bcurr[:, :] = np.asarray(bomb.decode_line(gfx_data, decoded_size), dtype=np.uint8).reshape(_height, _width)
     else:
         raise ValueError(f'Unknow compression: {compression}')
-
-    assert(npoff(out) == npoff(_bcurr))
 
     if seq_nb == _prev_seq + 1 and rotation != 0:
         if rotation == 2:
@@ -299,7 +293,7 @@ def decode47(src, width, height):
 
     print('OFFSETS', npoff(_bcurr), npoff(_bprev1), npoff(_bprev2))
 
-    return out.ravel().tolist()
+    return _bcurr.ravel().tolist()
 
 def decode2(out, src, width, height, params):
     process_block = create_processor(
