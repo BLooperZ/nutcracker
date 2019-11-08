@@ -300,10 +300,12 @@ def decode47(src, width, height):
 _params = None
 _strided = None
 
-def rollable_view(ndarr):
+def rollable_view(ndarr, max_overflow=None):
+    rows, cols = ndarr.shape
+    ncols = cols + max_overflow if max_overflow else rows * cols
     return np.lib.stride_tricks.as_strided(
         ndarr,
-        (ndarr.shape[0], ndarr.ravel().shape[0]),
+        (rows, ncols),
         ndarr.strides
     )
 
@@ -312,7 +314,8 @@ def decode2(out, src, width, height, params):
     global _strided
 
     _params = params
-    _strided = rollable_view(_bprev2)
+    _strided = rollable_view(_bprev2, max_overflow=8)
+
     assert npoff(_strided) == npoff(_bprev2)
 
     start = datetime.now()
