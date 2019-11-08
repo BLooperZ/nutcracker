@@ -301,17 +301,23 @@ def decode47(src, width, height):
 
     return out.ravel().tolist()
 
-def strided_app(a, L, S ):
-    nrows = ((a.size-L)//S)+1
-    n = a.strides[0]
-    return np.lib.stride_tricks.as_strided(a, shape=(nrows,L), strides=(S*n,n))
-
 _params = None
+_strided = None
+
+def rollable_view(ndarr):
+    return np.lib.stride_tricks.as_strided(
+        ndarr,
+        (ndarr.shape[0], ndarr.ravel().shape[0]),
+        ndarr.strides
+    )
 
 def decode2(out, src, width, height, params):
     global _params
+    global _strided
 
     _params = params
+    _strided = rollable_view(_bprev2)
+    assert npoff(_strided) == npoff(_bprev2)
 
     start = datetime.now()
     with io.BytesIO(src) as stream:
@@ -332,13 +338,12 @@ def process_block(out, stream, yloc, xloc, size):
     if code < 0xf8:
         mx, my = motion_vectors[code]
         by, bx = my + yloc, mx + xloc
-        if 0 <= by <= _height - size and 0 <= bx <= _width - size:
-            out[:, :] = _bprev2[by:by + size, bx:bx + size]
-        else:
-            raveled = _bprev2.ravel()
-            off = bx + by * _width
-            cuts = [slice(off + k * _width, off + k * _width + size) for k in range(size)]
-            out[:, :] = np.asarray([raveled[cut] for cut in cuts], dtype=np.uint8).reshape(size, size)
+        by, bx = by + bx // _width, bx % _width
+
+        assert 0 <= by <= _height, (by, _height)
+        assert 0 <= bx <= _width, (bx, _width)
+        out[:, :] = _strided[by:by + size, bx:bx + size]
+
     elif code == 0xff:
         if size == 2:
             buf = stream.read(4)
