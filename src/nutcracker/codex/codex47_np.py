@@ -174,27 +174,23 @@ def make_glyphs(xvec, yvec, side_length):
         edge0 = which_edge(x0, y0, side_length)
 
         for x1, y1 in zip(xvec, yvec):
-            pglyph = [0 for _ in range(glyph_size)]
             edge1 = which_edge(x1, y1, side_length)
             dirr = which_direction(edge0, edge1)
             npoints = max(abs(x1 - x0), abs(y1 - y0))
 
-            for ipoint in range(npoints + 1):
-                point = interp_point(x0, y0, x1, y1, ipoint, npoints)
-                if dirr == GlyphDir.DIR_UP:
-                    for irow in range(point[1] + 1):
-                        pglyph[point[0] + irow * side_length] = 1
-                elif dirr == GlyphDir.DIR_DOWN:
-                    for irow in range(point[1], side_length):
-                        pglyph[point[0] + irow * side_length] = 1
-                elif dirr == GlyphDir.DIR_LEFT:
-                    for icol in range(point[0] + 1):
-                        pglyph[icol + point[1] * side_length] = 1
-                elif dirr == GlyphDir.DIR_RIGHT:
-                    for icol in range(point[0], side_length):
-                        pglyph[icol + point[1] * side_length] = 1
+            npglyph = np.zeros((side_length, side_length), dtype=np.uint8)
 
-            yield np.asarray(pglyph, dtype=np.uint8).reshape(side_length, side_length)
+            for ipoint in range(npoints + 1):
+                p0, p1 = interp_point(x0, y0, x1, y1, ipoint, npoints)
+                if dirr == GlyphDir.DIR_UP:
+                    npglyph[:p1 + 1, p0] = 1
+                elif dirr == GlyphDir.DIR_DOWN:
+                    npglyph[p1:, p0] = 1
+                elif dirr == GlyphDir.DIR_LEFT:
+                    npglyph[p1, :p0 + 1] = 1
+                elif dirr == GlyphDir.DIR_RIGHT:
+                    npglyph[p1, p0:] = 1
+            yield npglyph
 
 def init_codec47(width, height):
     global _width
