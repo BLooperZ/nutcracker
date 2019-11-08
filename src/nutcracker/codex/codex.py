@@ -64,8 +64,7 @@ def decode1(width, height, f):
     return to_matrix(width, height, out)
 
 def decode47(width, height, f):
-    out = e_decode47(f, width, height)
-    return to_matrix(width, height, out)
+    return e_decode47(f, width, height)
 
 def unidecoder_factory(width, height):
     return unidecoder

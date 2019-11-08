@@ -8,23 +8,17 @@ import numpy as np
 from nutcracker.utils import funcutils
 from . import bomb
 
-glyph4_x = [
-  0, 1, 2, 3, 3, 3, 3, 2, 1, 0, 0, 0, 1, 2, 2, 1,
-]
+glyph4_xy = tuple(zip(
+    (0, 1, 2, 3, 3, 3, 3, 2, 1, 0, 0, 0, 1, 2, 2, 1),
+    (0, 0, 0, 0, 1, 2, 3, 3, 3, 3, 2, 1, 1, 1, 2, 2),
+))
 
-glyph4_y = [
-  0, 0, 0, 0, 1, 2, 3, 3, 3, 3, 2, 1, 1, 1, 2, 2,
-]
+glyph8_xy = tuple(zip(
+    (0, 2, 5, 7, 7, 7, 7, 7, 7, 5, 2, 0, 0, 0, 0, 0),
+    (0, 0, 0, 0, 1, 3, 4, 6, 7, 7, 7, 7, 6, 4, 3, 1),
+))
 
-glyph8_x = [
-  0, 2, 5, 7, 7, 7, 7, 7, 7, 5, 2, 0, 0, 0, 0, 0,
-]
-
-glyph8_y = [
-  0, 0, 0, 0, 1, 3, 4, 6, 7, 7, 7, 7, 6, 4, 3, 1,
-]
-
-motion_vectors = [
+motion_vectors = (
     (   0,   0 ), (  -1, -43 ), (   6, -43 ), (  -9, -42 ), (  13, -41 ),
     ( -16, -40 ), (  19, -39 ), ( -23, -36 ), (  26, -34 ), (  -2, -33 ),
     (   4, -33 ), ( -29, -32 ), (  -9, -32 ), (  11, -31 ), ( -16, -29 ),
@@ -76,7 +70,7 @@ motion_vectors = [
     (   9,  32 ), (  29,  32 ), (  -4,  33 ), (   2,  33 ), ( -26,  34 ),
     (  23,  36 ), ( -19,  39 ), (  16,  40 ), ( -13,  41 ), (   9,  42 ),
     (  -6,  43 ), (   1,  43 ), (   0,   0 ), (   0,   0 ), (   0,   0 ),
-]
+)
 
 def read_le_uint16(f):
     bts = bytes(x % 256 for x in f[:2])
@@ -167,13 +161,13 @@ def interp_point(x0, y0, x1, y1, pos, npoints):
         (y0 * pos + y1 * (npoints - pos) + (npoints >> 1)) // npoints
     )
 
-def make_glyphs(xvec, yvec, side_length):
+def make_glyphs(vecs, side_length):
     glyph_size = side_length * side_length
 
-    for x0, y0 in zip(xvec, yvec):
+    for x0, y0 in vecs:
         edge0 = which_edge(x0, y0, side_length)
 
-        for x1, y1 in zip(xvec, yvec):
+        for x1, y1 in vecs:
             edge1 = which_edge(x1, y1, side_length)
             dirr = which_direction(edge0, edge1)
             npoints = max(abs(x1 - x0), abs(y1 - y0))
@@ -207,8 +201,8 @@ def init_codec47(width, height):
     _width = width
     _height = height
 
-    _p4x4glyphs = list(make_glyphs(glyph4_x, glyph4_y, 4))
-    _p8x8glyphs = list(make_glyphs(glyph8_x, glyph8_y, 8))
+    _p4x4glyphs = tuple(make_glyphs(glyph4_xy, 4))
+    _p8x8glyphs = tuple(make_glyphs(glyph8_xy, 8))
 
     assert len(_p4x4glyphs) == len(_p8x8glyphs) == 256
 
@@ -295,7 +289,7 @@ def decode47(src, width, height):
 
     print('OFFSETS', npoff(_bcurr), npoff(_bprev1), npoff(_bprev2))
 
-    return out.ravel().tolist()
+    return out.tolist()
 
 _params = None
 _strided = None
