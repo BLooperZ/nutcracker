@@ -73,6 +73,7 @@ def generate_frames(header, frames):
                 screen = convert_fobj(chunk)
                 continue
             if tag == 'FOBJ':
+                # TODO: paste multiple fobjs on same screen
                 screen = convert_fobj(chunk)
                 # im = save_single_frame_image(screen)
                 # im.putpalette(palette)
@@ -81,8 +82,6 @@ def generate_frames(header, frames):
             else:
                 # print(f'support for tag {tag} not implemented yet')
                 continue
-        assert palette
-        assert screen
         yield palette, screen
 
 if __name__ == '__main__':
@@ -110,10 +109,12 @@ if __name__ == '__main__':
                 list(print_chunks(chain.from_iterable(frames), level=1))
             elif not args.nut:
                 for idx, (palette, screen) in enumerate(generate_frames(header, frames)):
-                    im = save_single_frame_image(screen)
-                    # im = im.crop(box=(0,0,320,200))
-                    im.putpalette(palette)
-                    im.save(os.path.join(output_dir, f'FRME_{idx:05d}.png'))
+                    if screen:
+                        assert palette
+                        im = save_single_frame_image(screen)
+                        # im = im.crop(box=(0,0,320,200))
+                        im.putpalette(palette)
+                        im.save(os.path.join(output_dir, f'FRME_{idx:05d}.png'))
             else:
                 _, chars = zip(*generate_frames(header, frames))
                 lchars = [(loc['x1'], loc['y1'], image.convert_to_pil_image(im)) for loc, im in chars]

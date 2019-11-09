@@ -300,7 +300,8 @@ def rollable_view(ndarr, max_overflow=None):
     return np.lib.stride_tricks.as_strided(
         ndarr,
         (rows, ncols),
-        ndarr.strides
+        ndarr.strides,
+        writeable=False
     )
 
 def decode2(out, src, width, height, params):
@@ -326,15 +327,19 @@ def process_block(out, stream, yloc, xloc, size):
     code = ord(stream.read(1))
 
     if size == 1:
-        out[:, :] = np.asarray([[code]], dtype=np.uint8)
+        out[:, :] = code
 
     if code < 0xf8:
         mx, my = motion_vectors[code]
         by, bx = my + yloc, mx + xloc
-        by, bx = by + bx // _width, bx % _width
 
+        by, bx = by + bx // _width, bx % _width
         assert 0 <= by <= _height, (by, _height)
         assert 0 <= bx <= _width, (bx, _width)
+
+        if (by + size) * _width + bx + size > _width * _height:
+            raise IndexError('out of bounds')
+
         out[:, :] = _strided[by:by + size, bx:bx + size]
 
     elif code == 0xff:

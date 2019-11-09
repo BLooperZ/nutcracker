@@ -2,8 +2,10 @@
 import io
 import os
 import struct
-
+import glob
 from functools import partial
+
+from nutcracker.utils import funcutils
 
 FLAG_UNSIGNED = 1 << 0
 FLAG_16BITS = 1 << 1
@@ -30,7 +32,7 @@ def handle_sound_frame(chunk, frame_no):
         print(f'unsigned: {flags & FLAG_UNSIGNED}')
         print(f'16bit: {flags & FLAG_16BITS}')
         print(f'le: {flags & FLAG_LITTLE_ENDIAN}')
-    handle_sound_buffer(track_id, index, max_frames, flags, vol, pan, chunk[10:], frame_no)
+    return track_id, index, max_frames, flags, vol, pan, chunk[10:], frame_no
 
 def verify_nframes(frames, nframes):
     for idx, frame in enumerate(frames):
@@ -46,8 +48,14 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
+    parser.add_argument('--target', '-t', help='target directory', default='sound')
     args = parser.parse_args()
 
+
+    basename = os.path.basename(args.filename)
+    output_dir = os.path.join(args.target, basename)
+    os.makedirs(output_dir, exist_ok=True)
+    print(f'Decoding file: {basename}')
     with open(args.filename, 'rb') as res:
 
         header, frames = anim.parse(res)
@@ -55,6 +63,10 @@ if __name__ == '__main__':
         for idx, frame in enumerate(frames):
             for _, (tag, chunk) in smush.print_chunks(frame, level=1):
                 if tag == 'PSAD':
-                    handle_sound_frame(chunk, idx)
+                    track_id, index, max_frames, flags, vol, pan, chunk, frame_no = handle_sound_frame(chunk, idx)
+                    fname = os.path.join(output_dir, f'PSAD_{track_id:04d}.SAD')
+                    mode = 'ab' if index != 0 else 'wb'
+                    with open(fname, mode) as aud:
+                        aud.write(chunk)
                 else:
                     continue         

@@ -14,4 +14,4 @@ def decode_line_stream(stream, decoded_size):
             out.write(line)
         if out.tell() > decoded_size:
             raise ValueError('out of bounds')
-        return [x for x in out.getvalue()]
+        return list(out.getvalue())

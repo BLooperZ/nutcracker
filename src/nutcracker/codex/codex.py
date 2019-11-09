@@ -2,7 +2,8 @@
 import io
 import struct
 
-from .codex37 import fake_encode37, decode37
+from .codex37 import fake_encode37  #, decode37
+from .codex37_np import decode37 as e_decode37
 from .codex47_np import decode47 as e_decode47
 # from codex37_old import decode37
 
@@ -65,6 +66,9 @@ def decode1(width, height, f):
 
 def decode47(width, height, f):
     return e_decode47(f, width, height)
+
+def decode37(width, height, f):
+    return e_decode37(f, width, height)
 
 def unidecoder_factory(width, height):
     return unidecoder
