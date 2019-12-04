@@ -337,8 +337,8 @@ def process_block(out, stream, yloc, xloc, size):
         assert 0 <= by <= _height, (by, _height)
         assert 0 <= bx <= _width, (bx, _width)
 
-        if (by + size) * _width + bx + size > _width * _height:
-            raise IndexError('out of bounds')
+        if (by + size - 1) * _width + bx + size - 1 >= _width * _height:
+            raise IndexError(f'out of bounds: {by}, {bx}, {size}')
 
         out[:, :] = _strided[by:by + size, bx:bx + size]
 
