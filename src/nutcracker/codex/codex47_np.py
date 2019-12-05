@@ -392,9 +392,10 @@ def encode2(frame, width, height, params):
         return stream.getvalue()
 
 def encode_block(frame, stream, yloc, xloc, size):
-    for idx, color in enumerate(params[:4]):
+    for idx, color in enumerate(_params[:4]):
+        assert 0 <= idx < 4
         if np.all(frame == color):
-            stream.write(bytes([color + 0xf8]))
+            stream.write(bytes([idx + 0xf8]))
             return
     if np.array_equal(frame, _bprev1[yloc:yloc + size, xloc:xloc + size]):
         stream.write(bytes([0xfc]))
@@ -403,16 +404,14 @@ def encode_block(frame, stream, yloc, xloc, size):
         by, bx = my + yloc, mx + xloc
 
         by, bx = by + bx // _width, bx % _width
-        assert 0 <= by <= _height, (by, _height)
-        assert 0 <= bx <= _width, (bx, _width)
+        if (0 <= by <= _height) and (0 <= bx <= _width):
+            if (by + size - 1) * _width + bx + size - 1 >= _width * _height:
+                print(f'out of bounds: {by}, {bx}, {size}')
+                continue
 
-        if (by + size - 1) * _width + bx + size - 1 >= _width * _height:
-            print(f'out of bounds: {by}, {bx}, {size}')
-            continue
-
-        if np.array_equal(frame, _strided[by:by + size, bx:bx + size]):
-            stream.write(bytes([idx]))
-            return
+            if np.array_equal(frame, _strided[by:by + size, bx:bx + size]):
+                stream.write(bytes([idx]))
+                return
 
     if (frame == frame[0, 0]).sum() == len(frame.ravel()):
         stream.write(bytes([0xfe, frame[0, 0]]))
@@ -421,16 +420,16 @@ def encode_block(frame, stream, yloc, xloc, size):
     if size > 2:
         glyphs = _p8x8glyphs if size == 8 else _p4x4glyphs
         colors = np.asarray(list(set(frame.ravel())), dtype=np.uint8)
-        if len(colors) == 2
-        for idx, glyph in enumerate(glyphs):
-            cglyph == colors[1 - glyph]
-            if np.array_equal(cglyph, frame):
-                stream.write(bytes([0xfd, *colors]))
-                return
-            rglyph == colors[glyph]
-            if np.array_equal(rglyph, frame):
-                stream.write(bytes([0xfd, *colors[::-1]]))
-                return
+        if len(colors) == 2:
+            for idx, glyph in enumerate(glyphs):
+                cglyph = colors[1 - glyph]
+                if np.array_equal(cglyph, frame):
+                    stream.write(bytes([0xfd, *colors]))
+                    return
+                rglyph = colors[glyph]
+                if np.array_equal(rglyph, frame):
+                    stream.write(bytes([0xfd, *colors[::-1]]))
+                    return
 
     stream.write(bytes([0xff]))
     if size == 2:
