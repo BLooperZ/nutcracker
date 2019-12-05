@@ -267,6 +267,8 @@ def decode47(src, width, height):
     elif compression == 2:
         if seq_nb == _prev_seq + 1:
             decode2(out, gfx_data, width, height, params)
+
+            newgfx = encode2(out, width, height, params)
             # out[:, :] = decode2(out, gfx_data, width, height, params)
     elif compression == 3:
         out[:, :] = _bprev2
@@ -367,3 +369,76 @@ def process_block(out, stream, yloc, xloc, size):
     else:
         val = _params[code & 7]
         out[:, :] = val
+
+
+def encode2(frame, width, height, params):
+    global _params
+    global _strided
+
+    _params = params
+    _strided = rollable_view(_bprev2, max_overflow=8)
+
+    assert npoff(_strided) == npoff(_bprev2)
+
+    start = datetime.now()
+    with io.BytesIO() as stream:
+        for (yloc, xloc) in get_locs(width, height, 8):
+            encode_block(
+                frame[yloc:yloc + 8, xloc:xloc + 8],
+                stream,
+                yloc, xloc, 8
+            )
+        print('processing time', str(datetime.now() - start))
+        return stream.getvalue()
+
+def encode_block(frame, stream, yloc, xloc, size):
+    for idx, color in enumerate(params[:4]):
+        if np.all(frame == color):
+            stream.write(bytes([color + 0xf8]))
+            return
+    if np.array_equal(frame, _bprev1[yloc:yloc + size, xloc:xloc + size]):
+        stream.write(bytes([0xfc]))
+        return
+    for idx, (mx, my) in enumerate(motion_vectors[:0xf8]):
+        by, bx = my + yloc, mx + xloc
+
+        by, bx = by + bx // _width, bx % _width
+        assert 0 <= by <= _height, (by, _height)
+        assert 0 <= bx <= _width, (bx, _width)
+
+        if (by + size - 1) * _width + bx + size - 1 >= _width * _height:
+            print(f'out of bounds: {by}, {bx}, {size}')
+            continue
+
+        if np.array_equal(frame, _strided[by:by + size, bx:bx + size]):
+            stream.write(bytes([idx]))
+            return
+
+    if (frame == frame[0, 0]).sum() == len(frame.ravel()):
+        stream.write(bytes([0xfe, frame[0, 0]]))
+        return
+
+    if size > 2:
+        glyphs = _p8x8glyphs if size == 8 else _p4x4glyphs
+        colors = np.asarray(list(set(frame.ravel())), dtype=np.uint8)
+        if len(colors) == 2
+        for idx, glyph in enumerate(glyphs):
+            cglyph == colors[1 - glyph]
+            if np.array_equal(cglyph, frame):
+                stream.write(bytes([0xfd, *colors]))
+                return
+            rglyph == colors[glyph]
+            if np.array_equal(rglyph, frame):
+                stream.write(bytes([0xfd, *colors[::-1]]))
+                return
+
+    stream.write(bytes([0xff]))
+    if size == 2:
+        stream.write(frame.tobytes())
+        return
+    size >>= 1
+    encode_block(frame[:size, :size], stream, yloc, xloc, size)
+    encode_block(frame[:size, size:], stream, yloc, xloc + size, size)
+    encode_block(frame[size:, :size], stream, yloc + size, xloc, size)
+    encode_block(frame[size:, size:], stream, yloc + size, xloc + size, size)
+    return
