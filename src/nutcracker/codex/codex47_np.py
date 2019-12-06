@@ -279,6 +279,7 @@ def decode47(src, width, height):
             print('SECOND DECODE')
             decode2(out2, newgfx, width, height, params)
             assert np.array_equal(out, out2)
+            exit(0)
             # out[:, :] = decode2(out, gfx_data, width, height, params)
     elif compression == 3:
         out[:, :] = _bprev2
@@ -410,17 +411,6 @@ def encode2(frame, width, height, params):
 
 def encode_block(frame, stream, yloc, xloc, size):
     print(stream.tell())
-    for idx, color in enumerate(_params[:4]):
-        assert 0 <= idx < 4
-        if np.all(frame == color):
-            stream.write(bytes([idx + 0xf8]))
-            print(size, bytes([idx + 0xf8]))
-            return
-
-    if np.array_equal(frame, _bprev1[yloc:yloc + size, xloc:xloc + size]):
-        stream.write(bytes([0xfc]))
-        print(size, bytes([0xfc]))
-        return
 
     for idx, (mx, my) in enumerate(motion_vectors[:0xf8]):
         by, bx = my + yloc, mx + xloc
@@ -435,6 +425,20 @@ def encode_block(frame, stream, yloc, xloc, size):
                 stream.write(bytes([idx]))
                 print(size, bytes([idx]))
                 return
+        else:
+            print('else')
+
+    if np.array_equal(frame, _bprev1[yloc:yloc + size, xloc:xloc + size]):
+        stream.write(bytes([0xfc]))
+        print(size, bytes([0xfc]))
+        return
+
+    for idx, color in enumerate(_params[:4]):
+        assert 0 <= idx < 4
+        if np.all(frame == color):
+            stream.write(bytes([idx + 0xf8]))
+            print(size, bytes([idx + 0xf8]))
+            return
 
     if (frame == frame[0, 0]).sum() == len(frame.ravel()):
         stream.write(bytes([0xfe, frame[0, 0]]))
