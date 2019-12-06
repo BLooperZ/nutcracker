@@ -1,4 +1,5 @@
 import io
+import logging
 import struct
 from enum import Enum
 from datetime import datetime
@@ -266,18 +267,18 @@ def decode47(src, width, height):
         out[:, :] = gfx.repeat(2, axis=0).repeat(2, axis=1)
     elif compression == 2:
         if seq_nb == _prev_seq + 1:
-            print('FIRST DECODE')
+            logging.debug('FIRST DECODE')
             decode2(out, gfx_data, width, height, params)
 
             # TEST ENCODING DIFF:
-            # print('==========================================================')
-            # print('ENCODE')
+            # logging.debug('==========================================================')
+            # logging.debug('ENCODE')
             # newgfx = encode2(out, width, height, params)
 
             # assert len(newgfx) <= len(gfx_data)
             # out2 = np.zeros((_height, _width), dtype=np.uint8)
-            # print('==========================================================')
-            # print('SECOND DECODE')
+            # logging.debug('==========================================================')
+            # logging.debug('SECOND DECODE')
             # decode2(out2, newgfx, width, height, params)
             # assert np.array_equal(out, out2)
             # exit(0)
@@ -340,7 +341,7 @@ def decode2(out, src, width, height, params):
 
 def process_block(out, stream, yloc, xloc, size):
     pos = stream.tell()
-    print(pos, yloc, xloc, size)
+    logging.debug(pos, yloc, xloc, size)
     code = ord(stream.read(1))
 
     if size == 1:
@@ -358,11 +359,11 @@ def process_block(out, stream, yloc, xloc, size):
             raise IndexError(f'out of bounds: {by}, {bx}, {size}')
 
         out[:, :] = _strided[by:by + size, bx:bx + size]
-        print(out[:, :])
-        print(size, bytes([code]))
+        logging.debug(out[:, :])
+        logging.debug(size, bytes([code]))
 
     elif code == 0xff:
-        print(size, bytes([code]))
+        logging.debug(size, bytes([code]))
         if size == 2:
             buf = stream.read(4)
             out[:, :] = np.frombuffer(buf, dtype=np.uint8).reshape(size, size)
@@ -375,8 +376,8 @@ def process_block(out, stream, yloc, xloc, size):
     elif code == 0xfe:
         val = ord(stream.read(1))
         out[:, :] = val
-        print(out[:, :])
-        print(size, bytes([code, val]))
+        logging.debug(out[:, :])
+        logging.debug(size, bytes([code, val]))
     elif code == 0xfd:
         assert size > 2, stream.tell()
         glyphs = _p8x8glyphs if size == 8 else _p4x4glyphs
@@ -384,17 +385,17 @@ def process_block(out, stream, yloc, xloc, size):
         pglyph = glyphs[gcode]
         colors = np.frombuffer(stream.read(2), dtype=np.uint8)
         out[:, :] = colors[1 - pglyph]
-        print(out[:, :])
-        print(size, bytes([code, gcode, *colors]))
+        logging.debug(out[:, :])
+        logging.debug(size, bytes([code, gcode, *colors]))
     elif code == 0xfc:
         out[:, :] = _bprev1[yloc:yloc + size, xloc:xloc + size]
-        print(out[:, :])
-        print(size, bytes([code]))
+        logging.debug(out[:, :])
+        logging.debug(size, bytes([code]))
     else:
         val = _params[code & 7]
         out[:, :] = val
-        print(out[:, :])
-        print(size, bytes([code]))
+        logging.debug(out[:, :])
+        logging.debug(size, bytes([code]))
 
 
 def encode2(frame, width, height, params):
@@ -418,39 +419,39 @@ def encode2(frame, width, height, params):
         return stream.getvalue()
 
 def encode_block(frame, stream, yloc, xloc, size):
-    print(stream.tell(), yloc, xloc, size)
+    logging.debug(stream.tell(), yloc, xloc, size)
 
     for idx, (mx, my) in enumerate(motion_vectors[:0xf8]):
         by, bx = my + yloc, mx + xloc
         by, bx = by + bx // _width, bx % _width
         if (0 <= by < _height) and (0 <= bx < _width):
             if (by + size - 1) * _width + bx + size - 1 >= _width * _height:
-                print(f'out of bounds: {by}, {bx}, {size}')
+                logging.debug(f'out of bounds: {by}, {bx}, {size}')
                 continue
             if np.array_equal(frame, _strided[by:by + size, bx:bx + size]):
                 stream.write(bytes([idx]))
-                print(frame)
-                print(size, bytes([idx]))
+                logging.debug(frame)
+                logging.debug(size, bytes([idx]))
                 return
 
     if np.array_equal(frame, _bprev1[yloc:yloc + size, xloc:xloc + size]):
         stream.write(bytes([0xfc]))
-        print(frame)
-        print(size, bytes([0xfc]))
+        logging.debug(frame)
+        logging.debug(size, bytes([0xfc]))
         return
 
     for idx, color in enumerate(_params[:4]):
         assert 0 <= idx < 4
         if np.all(frame == color):
             stream.write(bytes([idx + 0xf8]))
-            print(frame)
-            print(size, bytes([idx + 0xf8]))
+            logging.debug(frame)
+            logging.debug(size, bytes([idx + 0xf8]))
             return
 
     if (frame == frame[0, 0]).sum() == len(frame.ravel()):
         stream.write(bytes([0xfe, frame[0, 0]]))
-        print(frame)
-        print(size, bytes([0xfe, frame[0, 0]]))
+        logging.debug(frame)
+        logging.debug(size, bytes([0xfe, frame[0, 0]]))
         return
 
     if size > 2:
@@ -461,22 +462,22 @@ def encode_block(frame, stream, yloc, xloc, size):
                 cglyph = colors[1 - glyph]
                 if np.array_equal(cglyph, frame):
                     stream.write(bytes([0xfd, idx, *colors]))
-                    print(frame)
-                    print(size, bytes([0xfd, idx, *colors]))
+                    logging.debug(frame)
+                    logging.debug(size, bytes([0xfd, idx, *colors]))
                     return
                 rglyph = colors[glyph]
                 if np.array_equal(rglyph, frame):
                     stream.write(bytes([0xfd, idx, *colors[::-1]]))
-                    print(frame)
-                    print(size, bytes([0xfd, idx, *colors[::-1]]))
+                    logging.debug(frame)
+                    logging.debug(size, bytes([0xfd, idx, *colors[::-1]]))
                     return
 
     stream.write(bytes([0xff]))
-    print(size, bytes([0xff]))
+    logging.debug(size, bytes([0xff]))
     if size == 2:
         stream.write(frame.tobytes())
-        print(frame)
-        print(frame.tobytes())
+        logging.debug(frame)
+        logging.debug(frame.tobytes())
         return
     size >>= 1
     encode_block(frame[:size, :size], stream, yloc, xloc, size)
