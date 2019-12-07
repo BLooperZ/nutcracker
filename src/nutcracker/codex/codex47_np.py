@@ -10,7 +10,7 @@ import numpy as np
 from nutcracker.utils import funcutils
 from . import bomb
 
-logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+# logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
 glyph4_xy = tuple(zip(
     (0, 1, 2, 3, 3, 3, 3, 2, 1, 0, 0, 0, 1, 2, 2, 1),
@@ -274,19 +274,19 @@ def decode47(src, width, height):
             logging.debug('FIRST DECODE')
             decode2(out, gfx_data, width, height, params)
 
-            # TEST ENCODING DIFF:
-            logging.debug('==========================================================')
-            logging.debug('ENCODE')
-            newgfx = encode2(out, width, height, params)
+            # # TEST ENCODING DIFF:
+            # logging.debug('==========================================================')
+            # logging.debug('ENCODE')
+            # newgfx = encode2(out, width, height, params)
 
-            assert len(newgfx) <= len(gfx_data)
-            out2 = np.zeros((_height, _width), dtype=np.uint8)
-            logging.debug('==========================================================')
-            logging.debug('SECOND DECODE')
-            decode2(out2, newgfx, width, height, params)
-            assert np.array_equal(out, out2)
-            exit(0)
-            out[:, :] = decode2(out, gfx_data, width, height, params)
+            # assert len(newgfx) <= len(gfx_data)
+            # out2 = np.zeros((_height, _width), dtype=np.uint8)
+            # logging.debug('==========================================================')
+            # logging.debug('SECOND DECODE')
+            # decode2(out2, newgfx, width, height, params)
+            # assert np.array_equal(out, out2)
+            # exit(0)
+            # out[:, :] = decode2(out, gfx_data, width, height, params)
 
     elif compression == 3:
         out[:, :] = _bprev2
