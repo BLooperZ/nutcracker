@@ -1,6 +1,11 @@
 import io
 from typing import IO
 
+def assert_zero(pad: bytes) -> None:
+    if pad and set(pad) != {0}:
+        raise ValueError(f'non-zero padding between chunks: {pad}')
+    return pad
+
 def calc_align(offset: int, align: int) -> int:
     """Calculate difference from given offset to next aligned offset."""
     return (align - offset) % align
@@ -13,8 +18,7 @@ def align_read_stream(stream: IO[bytes], align: int = 1) -> None:
     if pos % align == 0:
         return
     pad = stream.read(calc_align(pos, align))
-    if pad and set(pad) != {0}:
-        raise ValueError(f'non-zero padding between chunks: {pad}')
+    assert_zero(pad)
 
 def align_write_stream(stream: IO[bytes], align: int = 1) -> None:
     """Align given write stream to next aligned position.

@@ -48,10 +48,13 @@ if __name__ == '__main__':
                     os.makedirs('ROOMS', exist_ok=True)
                     with open(os.path.join('ROOMS', f'ROOM_{cidx:04d}_{idx:04d}'), 'wb') as out:
                         out.write(sputm.mktag('ROOM', data))
-
                 if tag == 'SOUN':
                     os.makedirs('SOUNDS', exist_ok=True)
                     with open(os.path.join('SOUNDS', f'{hoff + off + 16:08x}.voc'), 'wb') as out:
                         out.write(data)
+                if tag == 'AKOS':
+                    os.makedirs('AKOS', exist_ok=True)
+                    with open(os.path.join('AKOS', f'AKOS{cidx:04d}_{idx:04d}'), 'wb') as out:
+                        out.write(sputm.mktag('AKOS', data))
             # save raw
             print('==========')
