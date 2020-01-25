@@ -44,7 +44,7 @@ if __name__ == '__main__':
                     os.makedirs('CHARS', exist_ok=True)
                     with open(os.path.join('CHARS', f'CHAR_{cidx:04d}_{idx:04d}'), 'wb') as out:
                         out.write(sputm.mktag('CHAR', data))
-                if tag == 'RMDA':
+                if tag in ('RMDA', 'ROOM'):
                     os.makedirs('ROOMS', exist_ok=True)
                     with open(os.path.join('ROOMS', f'ROOM_{cidx:04d}_{idx:04d}'), 'wb') as out:
                         out.write(sputm.mktag('ROOM', data))
