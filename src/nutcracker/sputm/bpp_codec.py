@@ -25,8 +25,8 @@ def decode_bpp_char(data: bytes, width: int, height: int, bpp: int = 1) -> Seque
 def encode_bpp_char(bmap: Sequence[Sequence[int]], bpp = 1) -> bytes:
     # height = len(bmap)
     # width = len(bmap[0])
-    bits = flatten(''.join(f'{x:0{bpp}b}' for x in flatten(bmap)))
-    bits = list(bits)
+    fbits = flatten(''.join(f'{x:0{bpp}b}' for x in flatten(bmap)))
+    bits = list(fbits)
     gbits = grouper(bits, 8, fillvalue='0')
     # gbits = list(gbits)
     # print([''.join(x) for x in gbits])
