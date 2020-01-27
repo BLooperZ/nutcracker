@@ -208,8 +208,18 @@ if __name__ == '__main__':
                 robjects = int.from_bytes(data[4:], signed=False, byteorder='little')
             if tag == 'TRNS':
                 transparent = data[0]
-            if tag in ('CLUT', 'PALS'):
+            if tag == 'CLUT':
                 palette = data
+            if tag == 'PALS':
+                rchunks = sputm.print_chunks(sputm.read_chunks(data), level=2)
+                for ridx, (roff, (rtag, rdata)) in enumerate(rchunks):
+                    if rtag == 'WRAP':
+                        wchunks = sputm.print_chunks(sputm.read_chunks(rdata), level=3)
+                        for widx, (woff, (wtag, wdata)) in enumerate(wchunks):
+                            if wtag == 'OFFS':
+                                pass
+                            if wtag == 'APAL':
+                                palette = wdata
             if tag == 'RMIM':
                 assert palette
                 rchunks = sputm.print_chunks(sputm.read_chunks(data), level=1)
@@ -242,12 +252,13 @@ if __name__ == '__main__':
                             obj_y = read_uint16le(stream)
                             obj_width = read_uint16le(stream)
                             obj_height = read_uint16le(stream)
-                            assert not stream.read()
+                            # assert not stream.read()
                     if rtag == f'IM{1 + curr_obj:02d}':
+                        print(rtag)
                         roombg = read_room_background(data, obj_width, obj_height, None)
                         im = convert_to_pil_image(roombg)
                         im.putpalette(palette)
-                        im.save(f'obj_{rtag}_{os.path.basename(args.filename)}.png')
+                        im.save(f'obj_{cidx:05d}_{ridx:05d}_{rtag}_{os.path.basename(args.filename)}.png')
                         curr_obj += 1
                 assert curr_obj == obj_num_imnn, (curr_obj, obj_num_imnn)
         # save raw
