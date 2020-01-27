@@ -17,38 +17,6 @@ def read_uint16le(stream):
 def read_uint32le(stream):
     return int.from_bytes(stream.read(4), byteorder='little', signed=False)
 
-def get_method_info(code):
-    method = None
-    if code in (0x01, 0x95):
-    # if code in (1, 149):
-        method = 'RAW'
-    elif 0x0e <= code <= 0x30:
-    # elif 14 <= code <= 48:
-        method = 'BASIC'
-    elif 0x40 <= code <= 0x80:
-    # elif 64 <= code <=128:
-        method = 'COMPLEX'
-    elif 0x86 <= code <= 0x94:
-    # elif 134 <= code <=148:
-        method = 'HE'
-    print(method)
-
-    direction = 'HORIZONTAL'
-    if 0x03 <= code <= 0x12 or 0x22 <= code <= 0x26:
-    # if 3 <= code <= 18 or 34 <= code <= 38:
-        direction = 'VERTICAL'
-
-    tr = None
-    if 0x22 <= code <= 0x30 or 0x54 <= code <= 0x80 or code >= 0x8f:
-    # if 34 <= code <= 48 or 84 <= code <= 128 or code >= 143:
-        tr = TRANSPARENCY
-
-    pals = [0x0e, 0x18, 0x22, 0x2c, 0x40, 0x54, 0x68, 0x7c]
-    ln = ((code - (p - 4)) for p in pals if p <= code <= p + 4)
-    palen = next(ln, 255)
-    # assert 0 <= palen <= 8
-    return method, direction, tr, palen
-
 def create_bitsream(stream):
     sd = stream.read()
     bits = ''.join(f'{x:08b}'[::-1] for x in sd)
@@ -58,7 +26,7 @@ def get_bits(bitstream, count):
     # TODO: check if special handling needed when count > 8
     return int(''.join(str(next(bitstream)) for _ in range(count))[::-1], 2)
 
-def decode_basic(stream, palen, height):
+def decode_basic(stream, height, palen):
     color = stream.read(1)[0]
     sub = 1
 
@@ -78,7 +46,7 @@ def decode_basic(stream, palen, height):
             out.write(bytes([color % 256]))
         return out.getvalue()
 
-def decode_complex(stream, palen, height):
+def decode_complex(stream, height, palen):
     color = stream.read(1)[0]
     sub = 1
 
@@ -100,25 +68,65 @@ def decode_complex(stream, palen, height):
             out.write(bytes([color % 256]))
         return out.getvalue()
 
+def decode_raw(stream, height, *args):
+    return stream.read(8 * height)
+
+def unknown_decoder(*args):
+    raise ValueError('Unknown Decoder')
+
+def decode_he(stream, height, palen):
+    raise NotImplementedError('WIP')
+
+def get_method_info(code):
+    direction = 'HORIZONTAL'
+    if 0x03 <= code <= 0x12 or 0x22 <= code <= 0x26:
+    # if 3 <= code <= 18 or 34 <= code <= 38:
+        direction = 'VERTICAL'
+
+    method = unknown_decoder
+    if code in (0x01, 0x95):
+    # if code in (1, 149):
+        assert direction == 'HORIZONTAL'
+        method = decode_raw
+    elif 0x0e <= code <= 0x30:
+    # elif 14 <= code <= 48:
+        method = decode_basic
+    elif 0x40 <= code <= 0x80:
+    # elif 64 <= code <=128:
+        assert direction == 'HORIZONTAL'
+        method = decode_complex
+    elif 0x86 <= code <= 0x94:
+    # elif 134 <= code <=148:
+        method = decode_he
+    print(method)
+
+    tr = None
+    if 0x22 <= code <= 0x30 or 0x54 <= code <= 0x80 or code >= 0x8f:
+    # if 34 <= code <= 48 or 84 <= code <= 128 or code >= 143:
+        tr = TRANSPARENCY
+
+    pals = [0x0e, 0x18, 0x22, 0x2c, 0x40, 0x54, 0x68, 0x7c]
+    ln = ((code - (p - 4)) for p in pals if p <= code <= p + 4)
+    palen = next(ln, 255)
+    # assert 0 <= palen <= 8
+    return method, direction, tr, palen
+
 def read_strip(data, height):
     with io.BytesIO(data) as s:
         code = s.read(1)[0]
         print(code)
 
-        method, direction, tr, palen = get_method_info(code)
+        decode_method, direction, tr, palen = get_method_info(code)
         # TODO: handle transparency
+
         # assert not tr
-        if method == 'RAW':
-            # TODO: handle transparency
-            # SUGGESTION: return [(x if x != tr else None) for x in s.read(8) for h in range(height)]
-            direction = 'HORIZONTAL'
-            return direction, s.read(8 * height), s.read()
-        if method == 'BASIC':
-            # return direction, bytes([0 for _ in range(height * 8)]), b''
-            return direction, decode_basic(s, palen, height), s.read()
-        if method == 'COMPLEX':
-            assert direction == 'HORIZONTAL'
-            return direction, decode_complex(s, palen, height), s.read()
+        decoded = decode_method(s, height, palen)
+
+        # Verify nothing left in stream
+        assert not s.read()
+
+        order = 'C' if direction == 'HORIZONTAL' else 'F'
+        return np.frombuffer(decoded, dtype=np.uint8).reshape((height, 8), order=order)
 
 def read_room_background(data, width, height, zbuffers):
     smap, *zplanes = sputm.print_chunks(sputm.read_chunks(rdata), level=2)
@@ -138,10 +146,7 @@ def read_room_background(data, width, height, zbuffers):
         for num, (offset, end) in enumerate(index):
             s.seek(offset, io.SEEK_SET)
             strip_data = s.read(end - offset)
-            dr, st, left = read_strip(strip_data, height)
-            assert not left
-            order = 'C' if dr == 'HORIZONTAL' else 'F'
-            ni = np.frombuffer(st, dtype=np.uint8).reshape((height, 8), order=order)
+            ni = read_strip(strip_data, height)
             imarr.append(ni)
         print(index)
         return np.hstack(imarr)
