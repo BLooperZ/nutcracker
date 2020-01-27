@@ -26,7 +26,7 @@ def get_bits(bitstream, count):
     # TODO: check if special handling needed when count > 8
     return int(''.join(str(next(bitstream)) for _ in range(count))[::-1], 2)
 
-def decode_basic(stream, height, palen):
+def decode_basic(stream, height, palen, *args):
     color = stream.read(1)[0]
     sub = 1
 
@@ -46,7 +46,7 @@ def decode_basic(stream, height, palen):
             out.write(bytes([color % 256]))
         return out.getvalue()
 
-def decode_complex(stream, height, palen):
+def decode_complex(stream, height, palen, *args):
     color = stream.read(1)[0]
     sub = 1
 
@@ -74,8 +74,26 @@ def decode_raw(stream, height, *args):
 def unknown_decoder(*args):
     raise ValueError('Unknown Decoder')
 
-def decode_he(stream, height, palen):
+def decode_he(stream, height, palen, width):
     raise NotImplementedError('WIP')
+    # delta_color = [-4, -3, -2, -1, 1, 2, 3, 4]
+
+    # color = stream.read(1)[0]
+    # sub = 1
+
+    # bitstream = create_bitsream(stream)
+
+    # with io.BytesIO() as out:
+    #     out.write(bytes([color % 256]))
+    #     while out.tell() < 8 * height:
+    #         if next(bitstream) == 1:
+    #             if next(bitstream) == 1:
+    #                 shift = get_bits(bitstream, 3) - 4
+    #                 if shift != 0:
+    #                     color += delta_color[shift % 7]
+    #             else:
+    #                 color = get_bits(bitstream, palen)
+    #     return out.getvalue()
 
 def get_method_info(code):
     direction = 'HORIZONTAL'
@@ -111,7 +129,7 @@ def get_method_info(code):
     # assert 0 <= palen <= 8
     return method, direction, tr, palen
 
-def read_strip(data, height):
+def read_strip(data, height, width):
     with io.BytesIO(data) as s:
         code = s.read(1)[0]
         print(code)
@@ -120,7 +138,7 @@ def read_strip(data, height):
         # TODO: handle transparency
 
         # assert not tr
-        decoded = decode_method(s, height, palen)
+        decoded = decode_method(s, height, palen, width)
 
         # Verify nothing left in stream
         assert not s.read()
@@ -146,7 +164,7 @@ def read_room_background(data, width, height, zbuffers):
         for num, (offset, end) in enumerate(index):
             s.seek(offset, io.SEEK_SET)
             strip_data = s.read(end - offset)
-            ni = read_strip(strip_data, height)
+            ni = read_strip(strip_data, height, width)
             imarr.append(ni)
         print(index)
         return np.hstack(imarr)
@@ -176,7 +194,7 @@ if __name__ == '__main__':
                 robjects = int.from_bytes(data[4:], signed=False, byteorder='little')
             if tag == 'TRNS':
                 transparent = data[0]
-            if tag == 'CLUT':
+            if tag in ('CLUT', 'PALS'):
                 palette = data
             if tag == 'RMIM':
                 assert palette
@@ -193,5 +211,17 @@ if __name__ == '__main__':
                         im = convert_to_pil_image(roombg)
                         im.putpalette(palette)
                         im.save(f'room_{os.path.basename(args.filename)}.png')
+            # if tag == 'OBIM':
+            #     assert palette
+            #     rchunks = sputm.print_chunks(sputm.read_chunks(data), level=1)
+            #     for ridx, (roff, (rtag, rdata)) in enumerate(rchunks):
+            #         if rtag == 'IMHD':
+            #             # TODO: get object dimensions
+            #             pass
+            #         if rtag == 'IM01':
+            #             roombg = read_room_background(data, rwidth, rheight, zbuffers)
+            #             im = convert_to_pil_image(roombg)
+            #             im.putpalette(palette)
+            #             im.save(f'obj_{os.path.basename(args.filename)}.png')
         # save raw
         print('==========')
