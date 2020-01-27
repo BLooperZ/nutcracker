@@ -427,7 +427,7 @@ def encode_block(frame, stream, yloc, xloc, size):
 
     for idx, (mx, my) in enumerate(motion_vectors[:0xf8]):
         by, bx = my + yloc, mx + xloc
-        # by, bx = by + bx // _width, bx % _width
+        by, bx = by + bx // _width, bx % _width
         if (0 <= by < _height) and (0 <= bx < _width):
             if (by + size - 1) * _width + bx + size - 1 >= _width * _height:
                 logging.debug(f'out of bounds: {by}, {bx}, {size}')

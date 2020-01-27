@@ -8,6 +8,7 @@ from functools import partial
 import numpy as np
 
 from nutcracker.graphics.image import convert_to_pil_image
+from nutcracker.codex.codex import decode1
 
 TRANSPARENCY = 255
 
@@ -69,7 +70,9 @@ def decode_complex(stream, height, palen, *args):
         return out.getvalue()
 
 def decode_raw(stream, height, *args):
-    return stream.read(8 * height)
+    res = stream.read(8 * height)
+    print(stream.read())
+    return res
 
 def unknown_decoder(*args):
     raise ValueError('Unknown Decoder')
@@ -147,28 +150,39 @@ def read_strip(data, height, width):
         return np.frombuffer(decoded, dtype=np.uint8).reshape((height, 8), order=order)
 
 def read_room_background(data, width, height, zbuffers):
-    smap, *zplanes = sputm.print_chunks(sputm.read_chunks(rdata), level=2)
+    image, *zplanes = sputm.drop_offsets(sputm.print_chunks(sputm.read_chunks(rdata), level=2))
     # print(smap)
     for c in zplanes:
         pass
 
-    smap_data = sputm.assert_tag('SMAP', smap[1])
-
-    strips = width // 8
-    with io.BytesIO(smap_data) as s:
-        # slen = read_uint32le(s)
-        # print(slen)
-        offs = [(read_uint32le(s) - 8)  for _ in range(strips)]
-        index = list(zip(offs, offs[1:] + [len(smap_data)]))
-        imarr = []
-        for num, (offset, end) in enumerate(index):
-            s.seek(offset, io.SEEK_SET)
-            strip_data = s.read(end - offset)
-            ni = read_strip(strip_data, height, width)
-            imarr.append(ni)
-        print(index)
-        return np.hstack(imarr)
-        # print(s.read())
+    tag, data = image
+    if tag == 'SMAP':
+        strips = width // 8
+        with io.BytesIO(data) as s:
+            # slen = read_uint32le(s)
+            # print(slen)
+            offs = [(read_uint32le(s) - 8)  for _ in range(strips)]
+            index = list(zip(offs, offs[1:] + [len(data)]))
+            imarr = []
+            for num, (offset, end) in enumerate(index):
+                s.seek(offset, io.SEEK_SET)
+                strip_data = s.read(end - offset)
+                ni = read_strip(strip_data, height, width)
+                imarr.append(ni)
+            print(index)
+            return np.hstack(imarr)
+            # print(s.read())
+    elif tag == 'BOMP':
+        with io.BytesIO(data) as s:
+            unk = read_uint16le(s)
+            width = read_uint16le(s)
+            height = read_uint16le(s)
+            # TODO: check if x,y or y,x
+            xpad, ypad = read_uint16le(s), read_uint16le(s)
+            im = decode1(width, height, s.read())
+        return np.asarray(im, dtype=np.uint8)
+    else:
+        raise ValueError('Unknown image codec')
 
 if __name__ == '__main__':
     import argparse
@@ -211,17 +225,30 @@ if __name__ == '__main__':
                         im = convert_to_pil_image(roombg)
                         im.putpalette(palette)
                         im.save(f'room_{os.path.basename(args.filename)}.png')
-            # if tag == 'OBIM':
-            #     assert palette
-            #     rchunks = sputm.print_chunks(sputm.read_chunks(data), level=1)
-            #     for ridx, (roff, (rtag, rdata)) in enumerate(rchunks):
-            #         if rtag == 'IMHD':
-            #             # TODO: get object dimensions
-            #             pass
-            #         if rtag == 'IM01':
-            #             roombg = read_room_background(data, rwidth, rheight, zbuffers)
-            #             im = convert_to_pil_image(roombg)
-            #             im.putpalette(palette)
-            #             im.save(f'obj_{os.path.basename(args.filename)}.png')
+            if tag == 'OBIM':
+                assert palette
+                rchunks = sputm.print_chunks(sputm.read_chunks(data), level=1)
+                curr_obj = 0
+                for ridx, (roff, (rtag, rdata)) in enumerate(rchunks):
+                    if rtag == 'IMHD':
+                        with io.BytesIO(rdata) as stream:
+                            obj_id = read_uint16le(stream)
+                            obj_num_imnn = read_uint16le(stream)
+                            # should be per imnn, but at least 1
+                            obj_nums_zpnn = read_uint16le(stream)
+                            obj_flags = stream.read(1)[0]
+                            obj_unknown = stream.read(1)[0]
+                            obj_x = read_uint16le(stream)
+                            obj_y = read_uint16le(stream)
+                            obj_width = read_uint16le(stream)
+                            obj_height = read_uint16le(stream)
+                            assert not stream.read()
+                    if rtag == f'IM{1 + curr_obj:02d}':
+                        roombg = read_room_background(data, obj_width, obj_height, None)
+                        im = convert_to_pil_image(roombg)
+                        im.putpalette(palette)
+                        im.save(f'obj_{rtag}_{os.path.basename(args.filename)}.png')
+                        curr_obj += 1
+                assert curr_obj == obj_num_imnn, (curr_obj, obj_num_imnn)
         # save raw
         print('==========')
