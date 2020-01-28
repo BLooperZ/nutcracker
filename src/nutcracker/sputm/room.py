@@ -77,26 +77,26 @@ def decode_raw(stream, height, *args):
 def unknown_decoder(*args):
     raise ValueError('Unknown Decoder')
 
-def decode_he(stream, height, palen, width):
-    raise NotImplementedError('WIP')
-    # delta_color = [-4, -3, -2, -1, 1, 2, 3, 4]
+def decode_he(stream, height, palen, width, code):
+    delta_color = [-4, -3, -2, -1, 1, 2, 3, 4]
+    color = stream.read(1)[0]
 
-    # color = stream.read(1)[0]
-    # sub = 1
+    _decomp_shr = code % 10
+    _decomp_mask = 0xFF >> (8 - _decomp_shr)
 
-    # bitstream = create_bitsream(stream)
+    bitstream = create_bitsream(stream)
 
-    # with io.BytesIO() as out:
-    #     out.write(bytes([color % 256]))
-    #     while out.tell() < 8 * height:
-    #         if next(bitstream) == 1:
-    #             if next(bitstream) == 1:
-    #                 shift = get_bits(bitstream, 3) - 4
-    #                 if shift != 0:
-    #                     color += delta_color[shift % 7]
-    #             else:
-    #                 color = get_bits(bitstream, palen)
-    #     return out.getvalue()
+    with io.BytesIO() as out:
+        while out.tell() < width * height:
+            out.write(bytes([color % 256]))
+            if not out.tell() < width * height:
+                break
+            if next(bitstream) == 1:
+                if next(bitstream) == 1:
+                    color += delta_color[get_bits(bitstream, 3) & 7]
+                else:
+                    color = get_bits(bitstream, _decomp_shr) & _decomp_mask
+        return out.getvalue()
 
 def get_method_info(code):
     direction = 'HORIZONTAL'
@@ -129,6 +129,7 @@ def get_method_info(code):
     pals = [0x0e, 0x18, 0x22, 0x2c, 0x40, 0x54, 0x68, 0x7c]
     ln = ((code - (p - 4)) for p in pals if p <= code <= p + 4)
     palen = next(ln, 255)
+
     # assert 0 <= palen <= 8
     return method, direction, tr, palen
 
@@ -141,13 +142,14 @@ def read_strip(data, height, width):
         # TODO: handle transparency
 
         # assert not tr
-        decoded = decode_method(s, height, palen, width)
+        decoded = decode_method(s, height, palen, 8, code)
 
         # Verify nothing left in stream
         assert not s.read()
 
         order = 'C' if direction == 'HORIZONTAL' else 'F'
         return np.frombuffer(decoded, dtype=np.uint8).reshape((height, 8), order=order)
+        # return np.zeros((height, 8), dtype=np.uint8)
 
 def read_room_background(data, width, height, zbuffers):
     image, *zplanes = sputm.drop_offsets(sputm.print_chunks(sputm.read_chunks(rdata), level=2))
@@ -182,7 +184,7 @@ def read_room_background(data, width, height, zbuffers):
             im = decode1(width, height, s.read())
         return np.asarray(im, dtype=np.uint8)
     else:
-        raise ValueError('Unknown image codec')
+        raise ValueError(f'Unknown image codec: {tag}')
 
 if __name__ == '__main__':
     import argparse
