@@ -252,7 +252,10 @@ if __name__ == '__main__':
                             obj_y = read_uint16le(stream)
                             obj_width = read_uint16le(stream)
                             obj_height = read_uint16le(stream)
-                            # assert not stream.read()
+                            obj_hotspots = stream.read()
+                            if obj_hotspots:
+                                # TODO: read hotspots
+                                pass
                     if rtag == f'IM{1 + curr_obj:02d}':
                         print(rtag)
                         roombg = read_room_background(data, obj_width, obj_height, None)
