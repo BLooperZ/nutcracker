@@ -183,6 +183,18 @@ def read_room_background(data, width, height, zbuffers):
             xpad, ypad = read_uint16le(s), read_uint16le(s)
             im = decode1(width, height, s.read())
         return np.asarray(im, dtype=np.uint8)
+    elif tag == 'BMAP':
+        with io.BytesIO(data) as s:
+            code = s.read(1)[0]
+            if 134 <= code <= 138:
+                res = decode_he(s, height, palen, width, code)
+                return np.frombuffer(res, dtype=np.uint8).reshape((height, width))
+            elif 144 <= code <= 148:
+                tr = TRANSPARENCY
+                res = decode_he(s, height, palen, width, code)
+                return np.frombuffer(res, dtype=np.uint8).reshape((height, width))
+            elif code == 150:
+                return np.full((height, width), s.read(1)[0], dtype=np.uint8)
     else:
         raise ValueError(f'Unknown image codec: {tag}')
 
