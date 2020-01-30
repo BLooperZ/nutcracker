@@ -23,7 +23,7 @@ def create_bitsream(stream):
     bits = ''.join(f'{x:08b}'[::-1] for x in sd)
     return (int(x) for x in bits)
 
-def get_bits(bitstream, count):
+def collect_bits(bitstream, count):
     # TODO: check if special handling needed when count > 8
     return int(''.join(str(next(bitstream)) for _ in range(count))[::-1], 2)
 
@@ -42,7 +42,7 @@ def decode_basic(stream, height, palen, *args):
                         sub = -sub
                     color -= sub
                 else:
-                    color = get_bits(bitstream, palen)
+                    color = collect_bits(bitstream, palen)
                     sub = 1
             out.write(bytes([color % 256]))
         return out.getvalue()
@@ -58,14 +58,14 @@ def decode_complex(stream, height, palen, *args):
         while out.tell() < 8 * height:
             if next(bitstream) == 1:
                 if next(bitstream) == 1:
-                    shift = get_bits(bitstream, 3) - 4
+                    shift = collect_bits(bitstream, 3) - 4
                     if shift != 0:
                         color += shift
                     else:
-                        ln = get_bits(bitstream, 8) - 1
+                        ln = collect_bits(bitstream, 8) - 1
                         out.write(bytes([color % 256]) * ln)
                 else:
-                    color = get_bits(bitstream, palen)
+                    color = collect_bits(bitstream, palen)
             out.write(bytes([color % 256]))
         return out.getvalue()
 
@@ -93,9 +93,9 @@ def decode_he(stream, height, palen, width, code):
                 break
             if next(bitstream) == 1:
                 if next(bitstream) == 1:
-                    color += delta_color[get_bits(bitstream, 3) & 7]
+                    color += delta_color[collect_bits(bitstream, 3) & 7]
                 else:
-                    color = get_bits(bitstream, _decomp_shr) & _decomp_mask
+                    color = collect_bits(bitstream, _decomp_shr) & _decomp_mask
         return out.getvalue()
 
 def get_method_info(code):
