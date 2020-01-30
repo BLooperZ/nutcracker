@@ -27,15 +27,17 @@ def collect_bits(bitstream, count):
     # TODO: check if special handling needed when count > 8
     return int(''.join(str(next(bitstream)) for _ in range(count))[::-1], 2)
 
-def decode_basic(stream, height, palen, *args):
+def decode_basic(stream, height, palen, width):
     color = stream.read(1)[0]
     sub = 1
 
     bitstream = create_bitsream(stream)
 
     with io.BytesIO() as out:
-        out.write(bytes([color % 256]))
-        while out.tell() < 8 * height:
+        while out.tell() < width * height:
+            out.write(bytes([color % 256]))
+            if not out.tell() < width * height:
+                break
             if next(bitstream) == 1:
                 if next(bitstream) == 1:
                     if next(bitstream) == 1:
@@ -44,18 +46,19 @@ def decode_basic(stream, height, palen, *args):
                 else:
                     color = collect_bits(bitstream, palen)
                     sub = 1
-            out.write(bytes([color % 256]))
         return out.getvalue()
 
-def decode_complex(stream, height, palen, *args):
+def decode_complex(stream, height, palen, width):
     color = stream.read(1)[0]
     sub = 1
 
     bitstream = create_bitsream(stream)
 
     with io.BytesIO() as out:
-        out.write(bytes([color % 256]))
-        while out.tell() < 8 * height:
+        while out.tell() < width * height:
+            out.write(bytes([color % 256]))
+            if not out.tell() < width * height:
+                break
             if next(bitstream) == 1:
                 if next(bitstream) == 1:
                     shift = collect_bits(bitstream, 3) - 4
@@ -66,23 +69,19 @@ def decode_complex(stream, height, palen, *args):
                         out.write(bytes([color % 256]) * ln)
                 else:
                     color = collect_bits(bitstream, palen)
-            out.write(bytes([color % 256]))
         return out.getvalue()
 
-def decode_raw(stream, height, *args):
-    res = stream.read(8 * height)
+def decode_raw(stream, height, palen, width):
+    res = stream.read(width * height)
     print(stream.read())
     return res
 
 def unknown_decoder(*args):
     raise ValueError('Unknown Decoder')
 
-def decode_he(stream, height, palen, width, code):
+def decode_he(stream, height, palen, width):
     delta_color = [-4, -3, -2, -1, 1, 2, 3, 4]
     color = stream.read(1)[0]
-
-    _decomp_shr = code % 10
-    _decomp_mask = 0xFF >> (8 - _decomp_shr)
 
     bitstream = create_bitsream(stream)
 
@@ -95,7 +94,8 @@ def decode_he(stream, height, palen, width, code):
                 if next(bitstream) == 1:
                     color += delta_color[collect_bits(bitstream, 3) & 7]
                 else:
-                    color = collect_bits(bitstream, _decomp_shr) & _decomp_mask
+                    color = collect_bits(bitstream, palen)
+                    assert color & (0xFF >> (8 - palen)) == color
         return out.getvalue()
 
 def get_method_info(code):
@@ -126,9 +126,7 @@ def get_method_info(code):
     # if 34 <= code <= 48 or 84 <= code <= 128 or code >= 143:
         tr = TRANSPARENCY
 
-    pals = [0x0e, 0x18, 0x22, 0x2c, 0x40, 0x54, 0x68, 0x7c]
-    ln = ((code - (p - 4)) for p in pals if p <= code <= p + 4)
-    palen = next(ln, 255)
+    palen = code % 10
 
     # assert 0 <= palen <= 8
     return method, direction, tr, palen
@@ -142,7 +140,7 @@ def read_strip(data, height, width):
         # TODO: handle transparency
 
         # assert not tr
-        decoded = decode_method(s, height, palen, 8, code)
+        decoded = decode_method(s, height, palen, 8)
 
         # Verify nothing left in stream
         assert not s.read()
