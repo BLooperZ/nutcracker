@@ -10,6 +10,8 @@ import numpy as np
 from nutcracker.graphics.image import convert_to_pil_image
 from nutcracker.codex.codex import decode1
 
+from . import sputm
+
 TRANSPARENCY = 255
 
 def read_uint16le(stream):
@@ -17,6 +19,9 @@ def read_uint16le(stream):
 
 def read_uint32le(stream):
     return int.from_bytes(stream.read(4), byteorder='little', signed=False)
+
+def to_byte(num):
+    return bytes([num % 256])
 
 def create_bitsream(stream):
     sd = stream.read()
@@ -27,75 +32,72 @@ def collect_bits(bitstream, count):
     # TODO: check if special handling needed when count > 8
     return int(''.join(str(next(bitstream)) for _ in range(count))[::-1], 2)
 
-def decode_basic(stream, height, palen, width):
-    color = stream.read(1)[0]
+def decode_basic(stream, decoded_size, palen):
     sub = 1
 
-    bitstream = create_bitsream(stream)
-
     with io.BytesIO() as out:
-        while out.tell() < width * height:
-            out.write(bytes([color % 256]))
-            if not out.tell() < width * height:
-                break
-            if next(bitstream) == 1:
-                if next(bitstream) == 1:
-                    if next(bitstream) == 1:
+
+        color = stream.read(1)[0]
+        bitstream = create_bitsream(stream)
+        out.write(to_byte(color))
+
+        while out.tell() < decoded_size:
+            if next(bitstream):
+                if next(bitstream):
+                    if next(bitstream):
                         sub = -sub
                     color -= sub
                 else:
                     color = collect_bits(bitstream, palen)
                     sub = 1
+            out.write(to_byte(color))
         return out.getvalue()
 
-def decode_complex(stream, height, palen, width):
-    color = stream.read(1)[0]
-    sub = 1
-
-    bitstream = create_bitsream(stream)
-
+def decode_complex(stream, decoded_size, palen):
     with io.BytesIO() as out:
-        while out.tell() < width * height:
-            out.write(bytes([color % 256]))
-            if not out.tell() < width * height:
-                break
-            if next(bitstream) == 1:
-                if next(bitstream) == 1:
+
+        color = stream.read(1)[0]
+        bitstream = create_bitsream(stream)
+        out.write(to_byte(color))
+
+        while out.tell() < decoded_size:
+            if next(bitstream):
+                if next(bitstream):
                     shift = collect_bits(bitstream, 3) - 4
                     if shift != 0:
                         color += shift
                     else:
                         ln = collect_bits(bitstream, 8) - 1
-                        out.write(bytes([color % 256]) * ln)
+                        out.write(to_byte(color) * ln)
                 else:
                     color = collect_bits(bitstream, palen)
+            out.write(to_byte(color))
         return out.getvalue()
 
-def decode_raw(stream, height, palen, width):
-    res = stream.read(width * height)
+def decode_raw(stream, decoded_size, width):
+    res = stream.read(decoded_size)
     print(stream.read())
     return res
 
 def unknown_decoder(*args):
     raise ValueError('Unknown Decoder')
 
-def decode_he(stream, height, palen, width):
+def decode_he(stream, decoded_size, palen):
     delta_color = [-4, -3, -2, -1, 1, 2, 3, 4]
-    color = stream.read(1)[0]
-
-    bitstream = create_bitsream(stream)
 
     with io.BytesIO() as out:
-        while out.tell() < width * height:
-            out.write(bytes([color % 256]))
-            if not out.tell() < width * height:
-                break
-            if next(bitstream) == 1:
-                if next(bitstream) == 1:
-                    color += delta_color[collect_bits(bitstream, 3) & 7]
+
+        color = stream.read(1)[0]
+        bitstream = create_bitsream(stream)
+        out.write(to_byte(color))
+
+        while out.tell() < decoded_size:
+            if next(bitstream):
+                if next(bitstream):
+                    color += delta_color[collect_bits(bitstream, 3)]
                 else:
                     color = collect_bits(bitstream, palen)
-                    assert color & (0xFF >> (8 - palen)) == color
+            out.write(to_byte(color))
         return out.getvalue()
 
 def get_method_info(code):
@@ -131,25 +133,55 @@ def get_method_info(code):
     # assert 0 <= palen <= 8
     return method, direction, tr, palen
 
-def read_strip(data, height, width):
+def fake_encode_strip(data, height, width):
+    with io.BytesIO() as s:
+        s.write(b'\01')
+        s.write(bytes(data))
+        return s.getvalue()
+
+def parse_strip(height, width, data):
     with io.BytesIO(data) as s:
         code = s.read(1)[0]
         print(code)
 
         decode_method, direction, tr, palen = get_method_info(code)
         # TODO: handle transparency
-
         # assert not tr
-        decoded = decode_method(s, height, palen, 8)
+
+        decoded = decode_method(s, width * height, palen)
+
+        # if decode_method == decode_basic:
+        #     with io.BytesIO(decoded) as dec_stream:
+        #         print(decoded)
+        #         print(data[1:])
+        #         assert encode_basic(dec_stream, height, palen, 8) == data[1:]
 
         # Verify nothing left in stream
         assert not s.read()
 
         order = 'C' if direction == 'HORIZONTAL' else 'F'
-        return np.frombuffer(decoded, dtype=np.uint8).reshape((height, 8), order=order)
+        return np.frombuffer(decoded, dtype=np.uint8).reshape((height, width), order=order)
         # return np.zeros((height, 8), dtype=np.uint8)
 
-def read_room_background(data, width, height, zbuffers):
+def read_strip(stream, offset, end):
+    stream.seek(offset, io.SEEK_SET)
+    return stream.read(end - offset)
+    return 
+
+def decode_smap(height, width, data):
+    strip_width = 8
+
+    strips = width // strip_width
+    with io.BytesIO(data) as s:
+        # slen = read_uint32le(s)
+        # print(slen)
+        offs = [(read_uint32le(s) - 8)  for _ in range(strips)]
+        index = list(zip(offs, offs[1:] + [len(data)]))
+        strips = (read_strip(s, offset, end) for offset, end in index)
+        return np.hstack([parse_strip(height, strip_width, data) for data in strips])
+        # print(s.read())
+
+def read_room_background(rdata, width, height, zbuffers):
     image, *zplanes = sputm.drop_offsets(sputm.print_chunks(sputm.read_chunks(rdata), level=2))
     # print(smap)
     for c in zplanes:
@@ -157,21 +189,7 @@ def read_room_background(data, width, height, zbuffers):
 
     tag, data = image
     if tag == 'SMAP':
-        strips = width // 8
-        with io.BytesIO(data) as s:
-            # slen = read_uint32le(s)
-            # print(slen)
-            offs = [(read_uint32le(s) - 8)  for _ in range(strips)]
-            index = list(zip(offs, offs[1:] + [len(data)]))
-            imarr = []
-            for num, (offset, end) in enumerate(index):
-                s.seek(offset, io.SEEK_SET)
-                strip_data = s.read(end - offset)
-                ni = read_strip(strip_data, height, width)
-                imarr.append(ni)
-            print(index)
-            return np.hstack(imarr)
-            # print(s.read())
+        return decode_smap(height, width, data)
     elif tag == 'BOMP':
         with io.BytesIO(data) as s:
             unk = read_uint16le(s)
@@ -184,17 +202,58 @@ def read_room_background(data, width, height, zbuffers):
     elif tag == 'BMAP':
         with io.BytesIO(data) as s:
             code = s.read(1)[0]
+            palen = code % 10
             if 134 <= code <= 138:
-                res = decode_he(s, height, palen, width, code)
+                res = decode_he(s, width * height, palen)
                 return np.frombuffer(res, dtype=np.uint8).reshape((height, width))
             elif 144 <= code <= 148:
                 tr = TRANSPARENCY
-                res = decode_he(s, height, palen, width, code)
+                res = decode_he(s, width * height, palen)
                 return np.frombuffer(res, dtype=np.uint8).reshape((height, width))
             elif code == 150:
                 return np.full((height, width), s.read(1)[0], dtype=np.uint8)
     else:
-        raise ValueError(f'Unknown image codec: {tag}')
+        print(tag, data)
+        # raise ValueError(f'Unknown image codec: {tag}')
+
+def decode_rmim(data, width, height):
+    rchunks = sputm.print_chunks(sputm.read_chunks(data), level=1)
+    zbuffers = None
+    for roff, (rtag, rdata) in rchunks:
+        if rtag == 'RMIH':
+            assert len(rdata) == 2
+            zbuffers = 1 + int.from_bytes(rdata, signed=False, byteorder='little')
+            assert 1 <= zbuffers <= 8
+        if rtag == 'IM00':
+            assert zbuffers
+            roombg = read_room_background(rdata, width, height, zbuffers)
+            yield convert_to_pil_image(roombg)
+
+def parse_room_noimgs(room):
+    chunks = sputm.print_chunks(sputm.read_chunks(room))
+    transparent = 255  # default
+    for cidx, (off, (tag, data)) in enumerate(chunks):
+        if tag == 'RMHD':
+            # only for games < v7
+            assert len(data) == 6, 'Game Version < 7'
+            rwidth = int.from_bytes(data[:2], signed=False, byteorder='little')
+            rheight = int.from_bytes(data[2:4], signed=False, byteorder='little')
+            robjects = int.from_bytes(data[4:], signed=False, byteorder='little')
+        if tag == 'TRNS':
+            transparent = data[0]
+        if tag == 'CLUT':
+            palette = data
+        if tag == 'PALS':
+            rchunks = sputm.print_chunks(sputm.read_chunks(data), level=2)
+            for ridx, (roff, (rtag, rdata)) in enumerate(rchunks):
+                if rtag == 'WRAP':
+                    wchunks = sputm.print_chunks(sputm.read_chunks(rdata), level=3)
+                    for widx, (woff, (wtag, wdata)) in enumerate(wchunks):
+                        if wtag == 'OFFS':
+                            pass
+                        if wtag == 'APAL':
+                            palette = wdata
+    return {'palette': palette, 'transparent': transparent, 'width': rwidth, 'height': rheight}
 
 if __name__ == '__main__':
     import argparse
@@ -233,20 +292,9 @@ if __name__ == '__main__':
                             if wtag == 'APAL':
                                 palette = wdata
             if tag == 'RMIM':
-                assert palette
-                rchunks = sputm.print_chunks(sputm.read_chunks(data), level=1)
-                zbuffers = None
-                for ridx, (roff, (rtag, rdata)) in enumerate(rchunks):
-                    if rtag == 'RMIH':
-                        assert len(rdata) == 2
-                        zbuffers = 1 + int.from_bytes(rdata, signed=False, byteorder='little')
-                        assert 1 <= zbuffers <= 8
-                    if rtag == 'IM00':
-                        assert zbuffers
-                        roombg = read_room_background(data, rwidth, rheight, zbuffers)
-                        im = convert_to_pil_image(roombg)
-                        im.putpalette(palette)
-                        im.save(f'room_{os.path.basename(args.filename)}.png')
+                for im in decode_rmim(data, rwidth, rheight):
+                    im.putpalette(palette)
+                    im.save(f'room_{os.path.basename(args.filename)}.png')
             if tag == 'OBIM':
                 assert palette
                 rchunks = sputm.print_chunks(sputm.read_chunks(data), level=1)
@@ -270,7 +318,7 @@ if __name__ == '__main__':
                                 pass
                     if rtag == f'IM{1 + curr_obj:02d}':
                         print(rtag)
-                        roombg = read_room_background(data, obj_width, obj_height, None)
+                        roombg = read_room_background(rdata, obj_width, obj_height, None)
                         im = convert_to_pil_image(roombg)
                         im.putpalette(palette)
                         im.save(f'obj_{cidx:05d}_{ridx:05d}_{rtag}_{os.path.basename(args.filename)}.png')

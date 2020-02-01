@@ -9,6 +9,7 @@ if __name__ == '__main__':
     import argparse
 
     from . import sputm
+    from .room import decode_rmim, parse_room_noimgs
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
@@ -26,6 +27,7 @@ if __name__ == '__main__':
                 with open('CHUNK_0087.DAT', 'wb') as f:
                     f.write(chunk)
                 continue
+            rmim = None
             print([tag for _, (tag, _) in sputm.read_chunks(chunk)])
             for cidx, (off, (tag, data)) in enumerate(sputm.read_chunks(chunk)):
                 if tag == 'SCRP':
@@ -44,10 +46,21 @@ if __name__ == '__main__':
                     os.makedirs('CHARS', exist_ok=True)
                     with open(os.path.join('CHARS', f'CHAR_{cidx:04d}_{idx:04d}'), 'wb') as out:
                         out.write(sputm.mktag('CHAR', data))
-                if tag in ('RMDA', 'ROOM'):
+                if tag == 'RMIM':
+                    rmim = data
+                if tag == 'ROOM':
                     os.makedirs('ROOMS', exist_ok=True)
                     with open(os.path.join('ROOMS', f'ROOM_{cidx:04d}_{idx:04d}'), 'wb') as out:
-                        out.write(sputm.mktag('ROOM', data))
+                        out.write(sputm.mktag(tag, data))
+                if tag == 'RMDA': # ROOM without RMIM
+                    os.makedirs('RMDAS', exist_ok=True)
+                    with open(os.path.join('RMDAS', f'RMDA_{cidx:04d}_{idx:04d}'), 'wb') as out:
+                        out.write(sputm.mktag(tag, data))
+                    ctx = parse_room_noimgs(data)
+                    assert rmim
+                    for ridx, im in enumerate(decode_rmim(rmim, ctx['width'], ctx['height'])):
+                        im.putpalette(ctx['palette'])
+                        im.save(f'room_{idx:05d}_{cidx:05d}_{ridx:05d}_{tag}_{os.path.basename(args.filename)}.png')
                 if tag == 'SOUN':
                     os.makedirs('SOUNDS', exist_ok=True)
                     with open(os.path.join('SOUNDS', f'{hoff + off + 16:08x}.voc'), 'wb') as out:
