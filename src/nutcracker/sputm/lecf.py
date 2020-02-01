@@ -58,9 +58,9 @@ if __name__ == '__main__':
                         out.write(sputm.mktag(tag, data))
                     ctx = parse_room_noimgs(data)
                     assert rmim
-                    for ridx, im in enumerate(decode_rmim(rmim, ctx['width'], ctx['height'])):
-                        im.putpalette(ctx['palette'])
-                        im.save(f'room_{idx:05d}_{cidx:05d}_{ridx:05d}_{tag}_{os.path.basename(args.filename)}.png')
+                    im = decode_rmim(rmim, ctx['width'], ctx['height'])
+                    im.putpalette(ctx['palette'])
+                    im.save(f'room_{idx:05d}_{cidx:05d}_{tag}_{os.path.basename(args.filename)}.png')
                 if tag == 'SOUN':
                     os.makedirs('SOUNDS', exist_ok=True)
                     with open(os.path.join('SOUNDS', f'{hoff + off + 16:08x}.voc'), 'wb') as out:

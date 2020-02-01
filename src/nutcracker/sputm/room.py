@@ -217,17 +217,19 @@ def read_room_background(rdata, width, height, zbuffers):
         # raise ValueError(f'Unknown image codec: {tag}')
 
 def decode_rmim(data, width, height):
-    rchunks = sputm.print_chunks(sputm.read_chunks(data), level=1)
-    zbuffers = None
-    for roff, (rtag, rdata) in rchunks:
-        if rtag == 'RMIH':
-            assert len(rdata) == 2
-            zbuffers = 1 + int.from_bytes(rdata, signed=False, byteorder='little')
-            assert 1 <= zbuffers <= 8
-        if rtag == 'IM00':
-            assert zbuffers
-            roombg = read_room_background(rdata, width, height, zbuffers)
-            yield convert_to_pil_image(roombg)
+    rchunks = sputm.drop_offsets(
+        sputm.print_chunks(sputm.read_chunks(data), level=1)
+    )
+
+    rmih = sputm.assert_tag('RMIH', next(rchunks))
+    assert len(rmih) == 2
+    zbuffers = 1 + int.from_bytes(rmih, signed=False, byteorder='little')
+    assert 1 <= zbuffers <= 8
+
+    image_data = sputm.assert_tag('IM00', next(rchunks))
+    roombg = read_room_background(image_data, width, height, zbuffers)
+    assert not list(rchunks)
+    return convert_to_pil_image(roombg)
 
 def parse_room_noimgs(room):
     chunks = sputm.print_chunks(sputm.read_chunks(room))
@@ -292,9 +294,9 @@ if __name__ == '__main__':
                             if wtag == 'APAL':
                                 palette = wdata
             if tag == 'RMIM':
-                for im in decode_rmim(data, rwidth, rheight):
-                    im.putpalette(palette)
-                    im.save(f'room_{os.path.basename(args.filename)}.png')
+                im = decode_rmim(data, rwidth, rheight)
+                im.putpalette(palette)
+                im.save(f'room_{os.path.basename(args.filename)}.png')
             if tag == 'OBIM':
                 assert palette
                 rchunks = sputm.print_chunks(sputm.read_chunks(data), level=1)
