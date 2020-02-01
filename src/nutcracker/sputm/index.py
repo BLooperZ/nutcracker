@@ -73,14 +73,38 @@ LEAF_CHUNKS = {
     'DSOU',
     'DCOS',
     'DCHR',
-    'DOBJ'
+    'DOBJ',
+    'DIRI',
+    'DIRR',
+    'DIRS',
+    'DIRN',
+    'DIRC',
+    'DIRF',
+    'DIRM',
+    'DIRT',
+    'DLFL',
+    'DISK',
+    'SVER',
+    'AARY',
+    'NOTE'
 }
+
+def read_index(data, level=0, base_offset=0):
+    chunks = sputm.print_chunks(sputm.read_chunks(data), level=level, base=base_offset)
+    for idx, (hoff, (tag, chunk)) in enumerate(chunks):
+        if tag == 'DCHR':
+            with io.BytesIO(chunk) as s:
+                num = int.from_bytes(s.read(2), byteorder='little', signed=False)
+                rnums = [int.from_bytes(s.read(1), byteorder='little', signed=False) for i in range(num)]
+                offs = [int.from_bytes(s.read(4), byteorder='little', signed=False) for i in range(num)]
+                for rnum, off in zip(rnums, offs):
+                    print(rnum, off)
 
 def map_chunks(data, level=0, base_offset=0):
     chunks = sputm.print_chunks(sputm.read_chunks(data), level=level, base=base_offset)
     for idx, (hoff, (tag, chunk)) in enumerate(chunks):
         if tag not in LEAF_CHUNKS:
-            map_chunks(chunk, level=level + 1, base_offset=hoff + 8)
+            map_chunks(chunk, level=level + 1, base_offset=0)  # hoff + 8)
 
 if __name__ == '__main__':
     import argparse
