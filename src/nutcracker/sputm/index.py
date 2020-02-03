@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
+
 import io
 import os
 import struct
-from typing import Sequence, NamedTuple
-
+from typing import Sequence, NamedTuple, Optional, Iterator
+from dataclasses import dataclass
 
 LEAF_CHUNKS = {
     'LOFF',
@@ -89,25 +90,28 @@ LEAF_CHUNKS = {
     'NOTE'
 }
 
-def findall(tag, root):
+@dataclass
+class Element:
+    tag: str
+    attribs: dict
+    children: Sequence['Element']
+
+def findall(tag: str, root: Optional[Element]) -> Iterator[Element]:
+    if not root:
+        return
     for c in root.children:
         if c.tag == tag:
             yield c
 
-def find(tag, root):
+def find(tag: str, root: Optional[Element]) -> Optional[Element]:
     return next(findall(tag, root), None)
 
-def findpath(path, root):
+def findpath(path: str, root: Optional[Element]) -> Optional[Element]:
     path = os.path.normpath(path)
     if not path or path == '.':
         return root
     dirname, basename = os.path.split(path)
     return find(basename, findpath(dirname, root))
-
-class Element(NamedTuple):
-    tag: str
-    attribs: dict
-    children: Sequence[NamedTuple]
 
 def read_index(data, level=0, base_offset=0):
     chunks = sputm.print_chunks(sputm.read_chunks(data), level=level, base=base_offset)
@@ -170,6 +174,7 @@ if __name__ == '__main__':
         for lflf in findall('LFLF', root):
             tree = findpath('RMIM/IM00', lflf)
             # print(read_element(tree, res))
-            h(tree)
+            if tree:
+                h(tree)
 
         # print('==========')
