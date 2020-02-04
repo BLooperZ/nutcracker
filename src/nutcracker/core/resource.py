@@ -8,9 +8,17 @@ from typing import IO, Iterator, Optional, Tuple
 
 from .align import align_read_stream, align_write_stream
 from .types import Chunk
+from .stream import StreamView, Stream
 
 INCLUSIVE = 8
 EXCLUSIVE = 0
+
+def stream_size(stream: Stream) -> int:
+    pos = stream.tell()
+    stream.read()
+    size = stream.tell()
+    stream.seek(pos, io.SEEK_SET)
+    return size
 
 def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE) -> Optional[Chunk]:
     """Read next chunk from given stream.
@@ -24,25 +32,28 @@ def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE) -> Optional[Chunk]:
     if not tag:
         return None
     size = struct.unpack('>I', stream.read(4))[0] - size_fix
-    data = stream.read(size)
-    if len(data) != size:
-        raise ValueError(f'got EOF while reading chunk {tag}: expected {size}, got {len(data)}')
+    data = StreamView(stream, size)
+
+    # verify stream size
+    actual = stream_size(data)
+    if actual != size:
+        raise ValueError(f'got EOF while reading chunk {tag}: expected {size}, got {actual}')
+
     return Chunk(tag.decode(), data)
 
-def read_chunks(data: bytes, align: int = 2, size_fix: int = EXCLUSIVE) -> Iterator[Tuple[int, Chunk]]:
+def read_chunks(stream: IO[bytes], align: int = 2, size_fix: int = EXCLUSIVE) -> Iterator[Tuple[int, Chunk]]:
     """Read all chunks from given bytes.
 
     align: data alignment for chunk start offsets.
     """
-    with io.BytesIO(data) as stream:
-        offsets = iter(stream.tell, len(data))
-        chunks = iter(partial(untag, stream, size_fix=size_fix), None)
-        for offset, chunk in zip(offsets, chunks):
-            assert chunk
-            yield offset, chunk
-            align_read_stream(stream, align=align)
-        assert stream.read() == b''
-        assert not list(itertools.zip_longest(chunks, offsets))
+    offsets = iter(stream.tell, stream_size(stream))
+    chunks = iter(partial(untag, stream, size_fix=size_fix), None)
+    for offset, chunk in zip(offsets, chunks):
+        assert chunk
+        yield offset, chunk
+        align_read_stream(stream, align=align)
+    assert stream.read() == b''
+    assert not list(itertools.zip_longest(chunks, offsets))
 
 def mktag(tag: str, data: bytes, size_fix: int = EXCLUSIVE) -> bytes:
     """Format chunk bytes from given 4CC tag and data.

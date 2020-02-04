@@ -1,7 +1,7 @@
 import io
 from typing import IO
 
-def assert_zero(pad: bytes) -> None:
+def assert_zero(pad: bytes) -> bytes:
     if pad and set(pad) != {0}:
         raise ValueError(f'non-zero padding between chunks: {pad}')
     return pad

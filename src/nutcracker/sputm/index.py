@@ -6,6 +6,8 @@ import struct
 from typing import Sequence, NamedTuple, Optional, Iterator
 from dataclasses import dataclass
 
+from nutcracker.core.stream import StreamView
+
 LEAF_CHUNKS = {
     'LOFF',
     'RMHD',
@@ -95,6 +97,7 @@ class Element:
     tag: str
     attribs: dict
     children: Sequence['Element']
+    data: StreamView
 
 def findall(tag: str, root: Optional[Element]) -> Iterator[Element]:
     if not root:
@@ -136,31 +139,21 @@ def render(element, level=0):
             render(c, level=level + 1)
         print(f'{indent}</{element.tag}>')
 
-def map_chunks(data, base_offset=0):
-    chunks = sputm.read_chunks(data)
-    return [Element(
-        tag,
-        {'offset': hoff, 'size': len(chunk), 'absolute': base_offset + hoff},
-        [] if tag in LEAF_CHUNKS else map_chunks(chunk, base_offset=base_offset + hoff + 8)
-    ) for hoff, (tag, chunk) in chunks]
-
-def map_chunks_poc(data, base_offset=0):
+def map_chunks(data):
     try:
         chunks = sputm.read_chunks(data)
-        return [Element(
-            tag,
-            {'offset': hoff, 'size': len(chunk), 'absolute': base_offset + hoff},
-            map_chunks(chunk, base_offset=base_offset + hoff + 8)
-        ) for hoff, (tag, chunk) in chunks]
-    except:
+        for hoff, (tag, chunk) in chunks:
+            yield Element(
+                tag,
+                {'offset': hoff, 'size': len(chunk)},
+                list(map_chunks(chunk)),
+                chunk
+            )
+    except (ValueError, struct.error) as e:
         return []
 
 def create_maptree(data):
-    return map_chunks_poc(data)[0]
-
-def read_element(elem, stream):
-    stream.seek(elem.attribs['absolute'], io.SEEK_SET)
-    return stream.read(elem.attribs['size'])
+    return next(map_chunks(data), None)
 
 if __name__ == '__main__':
     import argparse
@@ -172,10 +165,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     with open(args.filename, 'rb') as res:
-        root = create_maptree(res.read())
+        root = create_maptree(res)
         for lflf in findall('LFLF', root):
             tree = findpath('RMIM/IM00', lflf)
-            # print(read_element(tree, res))
             render(tree)
 
         # print('==========')
