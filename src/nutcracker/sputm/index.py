@@ -124,14 +124,16 @@ def read_index(data, level=0, base_offset=0):
                 for rnum, off in zip(rnums, offs):
                     print(rnum, off)
 
-def h(element, level=0):
+def render(element, level=0):
+    if not element:
+        return
     attribs = ''.join(f' {key}="{value}"' for key, value in element.attribs.items())
     indent = '    ' * level
     closing = '' if element.children else ' /'
     print(f'{indent}<{element.tag}{attribs}{closing}>')
     if element.children:
         for c in element.children:
-            h(c, level=level + 1)
+            render(c, level=level + 1)
         print(f'{indent}</{element.tag}>')
 
 def map_chunks(data, base_offset=0):
@@ -174,7 +176,6 @@ if __name__ == '__main__':
         for lflf in findall('LFLF', root):
             tree = findpath('RMIM/IM00', lflf)
             # print(read_element(tree, res))
-            if tree:
-                h(tree)
+            render(tree)
 
         # print('==========')
