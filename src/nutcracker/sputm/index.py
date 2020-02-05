@@ -25,7 +25,7 @@ if __name__ == '__main__':
         for t in root:
             # sputm.render(t)
             for lflf in sputm.findall('LFLF', t):
-                tree = sputm.findpath('ROOM/RMIM/IM00', lflf)
+                tree = sputm.findpath('ROOM/OBIM/IM{:02x}', lflf)
                 sputm.render(tree)
 
         print('==========')

@@ -7,6 +7,8 @@ import struct
 from typing import Sequence, NamedTuple, Optional, Iterator
 from dataclasses import dataclass
 
+from parse import parse
+
 from .resource import read_chunks
 from .stream import StreamView
 
@@ -21,7 +23,7 @@ def findall(tag: str, root: Optional[Element]) -> Iterator[Element]:
     if not root:
         return
     for c in root.children:
-        if c.tag == tag:
+        if parse(tag, c.tag):
             yield c
 
 def find(tag: str, root: Optional[Element]) -> Optional[Element]:
