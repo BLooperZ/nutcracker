@@ -6,9 +6,9 @@
 import functools
 from typing import IO, Iterator, Optional, Tuple  # ,Callable
 
-from nutcracker.core import resource, chunk
-
+from nutcracker.core import resource, index, chunk
 from .types import Chunk
+from .schema import SCHEMA
 
 ALIGN = 2
 SIZE_FIX = resource.EXCLUSIVE
@@ -33,6 +33,16 @@ def mktag(tag: str, data: bytes, size_fix: int = SIZE_FIX) -> bytes:
 def write_chunks(chunks: Iterator[bytes], align: int = ALIGN) -> bytes:
     return resource.write_chunks_bytes(chunks, align=align)
 
+@functools.wraps(index.map_chunks)
+def map_chunks(data: IO[bytes], schema: dict = SCHEMA, ptag: Optional[str] = None, align: int = ALIGN, size_fix: int = SIZE_FIX, **kwargs):
+    return index.map_chunks(data, schema=schema, align=align, size_fix=size_fix, **kwargs)
+
 assert_tag = chunk.assert_tag
 drop_offsets = chunk.drop_offsets
 print_chunks = chunk.print_chunks
+
+find = index.find
+findall = index.findall
+findpath = index.findpath
+render = index.render
+create_maptree = index.create_maptree
