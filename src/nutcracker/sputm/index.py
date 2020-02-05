@@ -64,7 +64,6 @@ def map_chunks(data, schema=SCHEMA, ptag=None):
             tag,
             {'offset': hoff, 'size': len(chunk)},
             list(map_chunks(chunk, schema=schema, ptag=tag)) if schema.get(tag) else [],
-            # list(map_chunks(chunk, ptag=tag)) if tag not in LEAF_CHUNKS else [],
             chunk
         )
         if ptag and tag not in schema[ptag]:
