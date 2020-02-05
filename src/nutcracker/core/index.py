@@ -23,7 +23,7 @@ def findall(tag: str, root: Optional[Element]) -> Iterator[Element]:
     if not root:
         return
     for c in root.children:
-        if parse(tag, c.tag):
+        if parse(tag, c.tag, evaluate_result=False):
             yield c
 
 def find(tag: str, root: Optional[Element]) -> Optional[Element]:
