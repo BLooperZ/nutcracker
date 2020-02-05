@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import io
+import logging
 import os
 import struct
 from typing import Sequence, NamedTuple, Optional, Iterator
@@ -60,19 +61,18 @@ def render(element, level=0):
 def map_chunks(data, schema=SCHEMA, ptag=None):
     chunks = sputm.read_chunks(data)
     for hoff, (tag, chunk) in chunks:
-        elem = Element(
+        if ptag and tag not in schema[ptag]:
+            logging.warning('Missing entry for {} in {} schema'.format(tag, ptag))
+            exit(1)
+        if tag not in schema:
+            logging.warning('Missing key in schema: {}'.format(tag))
+            exit(1)
+        yield Element(
             tag,
             {'offset': hoff, 'size': len(chunk)},
             list(map_chunks(chunk, schema=schema, ptag=tag)) if schema.get(tag) else [],
             chunk
         )
-        if ptag and tag not in schema[ptag]:
-            print('WARNING: Missing entry for {} in {} schema'.format(tag, ptag))
-            exit(1)
-        if tag not in schema:
-            print('WARNING: Missing key in schema: {}'.format(tag))
-            exit(1)
-        yield elem
 
 def create_maptree(data):
     return next(map_chunks(data), None)
