@@ -8,89 +8,7 @@ from dataclasses import dataclass
 
 from nutcracker.core.stream import StreamView
 
-LEAF_CHUNKS = {
-    'LOFF',
-    'RMHD',
-    'CYCL',
-    'TRNS',
-    'EPAL',
-    'BOXD',
-    'BOXM',
-    'CLUT',
-    'SCAL',
-    'RMIH',
-    'SMAP',
-    'ZP01',
-    'ZP02',
-    'ZP03',
-    'IMHD',
-    'CDHD',
-    'VERB',
-    'OBNA',
-    'EXCD',
-    'ENCD',
-    'NLSC',
-    'LSCR',
-    'SCRP',
-    'SOUN',
-    'COST',
-    'CHAR',
-    'BOMP',
-    'BMAP',
-    'OFFS',
-    'APAL',
-    'LSC2',
-    'HSHD',
-    'SDAT',
-    'AKHD',
-    'AKPL',
-    'RGBS',
-    'AKSQ',
-    'AKCH',
-    'AKOF',
-    'AKCI',
-    'AKCD',
-    'AKLC',
-    'WIZH',
-    'WIZD',
-    'CNVS',
-    'SPOT',
-    'RELO',
-    'POLD',
-    'AKST',
-    'AKCT',
-    'SP2C',
-    'SPLF',
-    'CLRS',
-    'IMGL',
-    'NAME',
-    'STOF',
-    'SQLC',
-    'SIZE',
-    'AKFO',
-    'SBNG',
-    'RNAM',
-    'MAXS',
-    'DROO',
-    'DSCR',
-    'DSOU',
-    'DCOS',
-    'DCHR',
-    'DOBJ',
-    'DIRI',
-    'DIRR',
-    'DIRS',
-    'DIRN',
-    'DIRC',
-    'DIRF',
-    'DIRM',
-    'DIRT',
-    'DLFL',
-    'DISK',
-    'SVER',
-    'AARY',
-    'NOTE'
-}
+from .schema import SCHEMA
 
 @dataclass
 class Element:
@@ -139,18 +57,23 @@ def render(element, level=0):
             render(c, level=level + 1)
         print(f'{indent}</{element.tag}>')
 
-def map_chunks(data):
-    try:
-        chunks = sputm.read_chunks(data)
-        for hoff, (tag, chunk) in chunks:
-            yield Element(
-                tag,
-                {'offset': hoff, 'size': len(chunk)},
-                list(map_chunks(chunk)),
-                chunk
-            )
-    except (ValueError, struct.error) as e:
-        return []
+def map_chunks(data, schema=SCHEMA, ptag=None):
+    chunks = sputm.read_chunks(data)
+    for hoff, (tag, chunk) in chunks:
+        elem = Element(
+            tag,
+            {'offset': hoff, 'size': len(chunk)},
+            list(map_chunks(chunk, schema=schema, ptag=tag)) if schema.get(tag) else [],
+            # list(map_chunks(chunk, ptag=tag)) if tag not in LEAF_CHUNKS else [],
+            chunk
+        )
+        if ptag and tag not in schema[ptag]:
+            print('WARNING: Missing entry for {} in {} schema'.format(tag, ptag))
+            exit(1)
+        if tag not in schema:
+            print('WARNING: Missing key in schema: {}'.format(tag))
+            exit(1)
+        yield elem
 
 def create_maptree(data):
     return next(map_chunks(data), None)
@@ -165,9 +88,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     with open(args.filename, 'rb') as res:
-        root = create_maptree(res)
-        for lflf in findall('LFLF', root):
-            tree = findpath('RMIM/IM00', lflf)
-            render(tree)
+        root = map_chunks(res)
+        for t in root:
+            render(t)
+        # for lflf in findall('LFLF', root):
+        #     tree = findpath('RMIM/IM00', lflf)
+        #     render(tree)
 
         # print('==========')

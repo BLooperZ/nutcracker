@@ -37,7 +37,7 @@ def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE) -> Optional[Chunk]:
     # verify stream size
     actual = stream_size(data)
     if actual != size:
-        raise ValueError(f'got EOF while reading chunk {tag}: expected {size}, got {actual}')
+        raise EOFError(f'got EOF while reading chunk {tag}: expected {size}, got {actual}')
 
     return Chunk(tag.decode(), data)
 
