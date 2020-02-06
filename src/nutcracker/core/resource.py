@@ -13,6 +13,8 @@ from .stream import StreamView, Stream
 INCLUSIVE = 8
 EXCLUSIVE = 0
 
+UINT32BE = struct.Struct('>I')
+
 def stream_size(stream: Stream) -> int:
     pos = stream.tell()
     stream.read()
@@ -20,7 +22,7 @@ def stream_size(stream: Stream) -> int:
     stream.seek(pos, io.SEEK_SET)
     return size
 
-def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE) -> Optional[Chunk]:
+def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE, frmt: struct.Struct = UINT32BE) -> Optional[Chunk]:
     """Read next chunk from given stream.
 
     size_fix: can be used to determine whether size from chunk header
@@ -28,14 +30,14 @@ def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE) -> Optional[Chunk]:
 
     * size of chunk header = 4CC tag (4) + uint32_be size (4) = 8 bytes
     """
-    tag = stream.read(4)
+    tag = stream.read(frmt.size)
     if not tag:
         return None
     if set(tag) != {0}:
-        size = struct.unpack('>I', stream.read(4))[0] - size_fix
+        size = frmt.unpack(stream.read(frmt.size))[0] - size_fix
     else:
         # Collect rest of chunk as raw data with special tag '____'
-        assert set(stream.read(4)) == {0}
+        assert set(stream.read(frmt.size)) == {0}
         size = stream_size(stream) - stream.tell()
         tag = b'____'        
     data = StreamView(stream, size)
@@ -47,13 +49,13 @@ def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE) -> Optional[Chunk]:
 
     return Chunk(tag.decode(), data)
 
-def read_chunks(stream: IO[bytes], align: int = 2, size_fix: int = EXCLUSIVE) -> Iterator[Tuple[int, Chunk]]:
+def read_chunks(stream: IO[bytes], align: int = 2, size_fix: int = EXCLUSIVE, frmt: struct.Struct = UINT32BE) -> Iterator[Tuple[int, Chunk]]:
     """Read all chunks from given bytes.
 
     align: data alignment for chunk start offsets.
     """
     offsets = iter(stream.tell, stream_size(stream))
-    chunks = iter(partial(untag, stream, size_fix=size_fix), None)
+    chunks = iter(partial(untag, stream, size_fix=size_fix, frmt=frmt), None)
     for offset, chunk in zip(offsets, chunks):
         assert chunk
         yield offset, chunk
@@ -61,7 +63,7 @@ def read_chunks(stream: IO[bytes], align: int = 2, size_fix: int = EXCLUSIVE) ->
     assert stream.read() == b''
     assert not list(itertools.zip_longest(chunks, offsets))
 
-def mktag(tag: str, data: bytes, size_fix: int = EXCLUSIVE) -> bytes:
+def mktag(tag: str, data: bytes, size_fix: int = EXCLUSIVE, frmt: struct.Struct = UINT32BE) -> bytes:
     """Format chunk bytes from given 4CC tag and data.
 
     size_fix: can be used to determine whether size from chunk header
@@ -70,9 +72,9 @@ def mktag(tag: str, data: bytes, size_fix: int = EXCLUSIVE) -> bytes:
     * size of chunk header = 4CC tag (4) + uint32_be size (4) = 8 bytes
     """
     # TODO: handle special '____' chunks
-    return tag.encode() + struct.pack('>I', len(data) + size_fix) + data
+    return tag.encode() + frmt.pack(len(data) + size_fix) + data
 
-def write_chunks(stream: IO[bytes], chunks: Iterator[bytes], align: int = 2) -> None:
+def write_chunks(stream: IO[bytes], chunks: Iterator[bytes], align: int = 2, frmt: struct.Struct = UINT32BE) -> None:
     """Write chunks sequence with given data alignment into given stream.
 
     align: data alignment for chunk start offsets.
@@ -80,13 +82,13 @@ def write_chunks(stream: IO[bytes], chunks: Iterator[bytes], align: int = 2) -> 
     for chunk in chunks:
         assert chunk
         stream.write(chunk)
-        align_write_stream(stream, align=align)
+        align_write_stream(stream, align=align, frmt=frmt)
 
-def write_chunks_bytes(chunks: Iterator[bytes], align: int = 2) -> bytes:
+def write_chunks_bytes(chunks: Iterator[bytes], align: int = 2, frmt: struct.Struct = UINT32BE) -> bytes:
     """Write chunks sequence to bytes with given data alignment.
 
     align: data alignment for chunk start offsets.
     """
     with io.BytesIO() as stream:
-        write_chunks(stream, chunks, align=align)
+        write_chunks(stream, chunks, align=align, frmt=frmt)
         return stream.getvalue()

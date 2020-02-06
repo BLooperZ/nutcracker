@@ -104,7 +104,7 @@ def generate_schema(data, **kwargs):
     schema = {}
     DATA = frozenset()
     DUMMY = frozenset({10})
-    pos = 0  # TODO: check if partial iterations are possible
+    pos = data.tell()  # TODO: check if partial iterations are possible
     while True:
         data.seek(pos, io.SEEK_SET)
         try:

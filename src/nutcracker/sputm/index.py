@@ -26,9 +26,10 @@ if __name__ == '__main__':
         s = sputm.generate_schema(res)
         pprint.pprint(s)
 
-        # root = sputm.map_chunks(res)
-        # for t in root:
-        #     sputm.render(t)
+        res.seek(0, io.SEEK_SET)
+        root = sputm.map_chunks(res, schema=s)
+        for t in root:
+            sputm.render(t)
 
             # for lflf in sputm.findall('LFLF', t):
             #     tree = sputm.findpath('ROOM/OBIM/IM{:02x}', lflf)
