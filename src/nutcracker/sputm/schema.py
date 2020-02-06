@@ -1,6 +1,6 @@
 DATA = set()
 
-IM0d = {
+IMXX = {
     'SMAP',
     'BMAP',
     'BOMP',
@@ -101,7 +101,7 @@ SCHEMA = {
         'OBNA',
         'VERB'
     },
-    **{f'IM{i:02X}': IM0d for i in range(17)},
+    **{f'IM{i:02X}': IMXX for i in range(17)},
     **{f'ZP{i:02X}': DATA for i in range(1, 4)},
     'BOXD': DATA,
     'BOXM': DATA,
