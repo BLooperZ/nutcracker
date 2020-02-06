@@ -74,7 +74,7 @@ def mktag(tag: str, data: bytes, size_fix: int = EXCLUSIVE, frmt: struct.Struct 
     # TODO: handle special '____' chunks
     return tag.encode() + frmt.pack(len(data) + size_fix) + data
 
-def write_chunks(stream: IO[bytes], chunks: Iterator[bytes], align: int = 2, frmt: struct.Struct = UINT32BE) -> None:
+def write_chunks(stream: IO[bytes], chunks: Iterator[bytes], align: int = 2) -> None:
     """Write chunks sequence with given data alignment into given stream.
 
     align: data alignment for chunk start offsets.
@@ -82,13 +82,13 @@ def write_chunks(stream: IO[bytes], chunks: Iterator[bytes], align: int = 2, frm
     for chunk in chunks:
         assert chunk
         stream.write(chunk)
-        align_write_stream(stream, align=align, frmt=frmt)
+        align_write_stream(stream, align=align)
 
-def write_chunks_bytes(chunks: Iterator[bytes], align: int = 2, frmt: struct.Struct = UINT32BE) -> bytes:
+def write_chunks_bytes(chunks: Iterator[bytes], align: int = 2) -> bytes:
     """Write chunks sequence to bytes with given data alignment.
 
     align: data alignment for chunk start offsets.
     """
     with io.BytesIO() as stream:
-        write_chunks(stream, chunks, align=align, frmt=frmt)
+        write_chunks(stream, chunks, align=align)
         return stream.getvalue()

@@ -24,7 +24,7 @@ def delta_color(org_color, delta_color):
     return clip_byte((129 * org_color + delta_color) // 128)
 
 def convert_fobj(datam):
-    meta, data = unobj(datam)
+    meta, data = unobj(datam.read())
     width = meta['x2'] - meta['x1'] if meta['codec'] != 1 else meta['x2']
     height = meta['y2'] - meta['y1'] if meta['codec'] != 1 else meta['y2']
     decode = get_decoder(meta['codec'])

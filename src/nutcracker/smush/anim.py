@@ -30,7 +30,7 @@ def parse(stream: IO[bytes]) -> Tuple[AnimationHeader, Iterator[Iterator[Tuple[i
     assert stream.read() == b''
 
     anim_chunks = smush.print_chunks(smush.read_chunks(anim, align=2))
-    header = ahdr.from_bytes(smush.assert_tag('AHDR', next(chunk for _, chunk in anim_chunks)))
+    header = ahdr.from_bytes(smush.assert_tag('AHDR', next(chunk for _, chunk in anim_chunks)).read())
     assert not (header.dummy2 or header.dummy3)
 
     print(header)
