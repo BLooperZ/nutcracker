@@ -22,7 +22,7 @@ def stream_size(stream: Stream) -> int:
     stream.seek(pos, io.SEEK_SET)
     return size
 
-def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE, frmt: struct.Struct = UINT32BE) -> Optional[Chunk]:
+def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE, word: struct.Struct = UINT32BE) -> Optional[Chunk]:
     """Read next chunk from given stream.
 
     size_fix: can be used to determine whether size from chunk header
@@ -30,14 +30,14 @@ def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE, frmt: struct.Struct = UI
 
     * size of chunk header = 4CC tag (4) + uint32_be size (4) = 8 bytes
     """
-    tag = stream.read(frmt.size)
+    tag = stream.read(word.size)
     if not tag:
         return None
     if set(tag) != {0}:
-        size = frmt.unpack(stream.read(frmt.size))[0] - size_fix
+        size = word.unpack(stream.read(word.size))[0] - size_fix
     else:
         # Collect rest of chunk as raw data with special tag '____'
-        assert set(stream.read(frmt.size)) == {0}
+        assert set(stream.read(word.size)) == {0}
         size = stream_size(stream) - stream.tell()
         tag = b'____'        
     data = StreamView(stream, size)
@@ -49,13 +49,13 @@ def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE, frmt: struct.Struct = UI
 
     return Chunk(tag.decode(), data)
 
-def read_chunks(stream: IO[bytes], align: int = 2, size_fix: int = EXCLUSIVE, frmt: struct.Struct = UINT32BE) -> Iterator[Tuple[int, Chunk]]:
+def read_chunks(stream: IO[bytes], align: int = 2, size_fix: int = EXCLUSIVE, word: struct.Struct = UINT32BE) -> Iterator[Tuple[int, Chunk]]:
     """Read all chunks from given bytes.
 
     align: data alignment for chunk start offsets.
     """
     offsets = iter(stream.tell, stream_size(stream))
-    chunks = iter(partial(untag, stream, size_fix=size_fix, frmt=frmt), None)
+    chunks = iter(partial(untag, stream, size_fix=size_fix, word=word), None)
     for offset, chunk in zip(offsets, chunks):
         assert chunk
         yield offset, chunk
@@ -63,7 +63,7 @@ def read_chunks(stream: IO[bytes], align: int = 2, size_fix: int = EXCLUSIVE, fr
     assert stream.read() == b''
     assert not list(itertools.zip_longest(chunks, offsets))
 
-def mktag(tag: str, data: bytes, size_fix: int = EXCLUSIVE, frmt: struct.Struct = UINT32BE) -> bytes:
+def mktag(tag: str, data: bytes, size_fix: int = EXCLUSIVE, word: struct.Struct = UINT32BE) -> bytes:
     """Format chunk bytes from given 4CC tag and data.
 
     size_fix: can be used to determine whether size from chunk header
@@ -72,7 +72,7 @@ def mktag(tag: str, data: bytes, size_fix: int = EXCLUSIVE, frmt: struct.Struct 
     * size of chunk header = 4CC tag (4) + uint32_be size (4) = 8 bytes
     """
     # TODO: handle special '____' chunks
-    return tag.encode() + frmt.pack(len(data) + size_fix) + data
+    return tag.encode() + word.pack(len(data) + size_fix) + data
 
 def write_chunks(stream: IO[bytes], chunks: Iterator[bytes], align: int = 2) -> None:
     """Write chunks sequence with given data alignment into given stream.
