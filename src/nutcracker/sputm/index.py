@@ -23,9 +23,9 @@ if __name__ == '__main__':
     with open(args.filename, 'rb') as res:
         root = sputm.map_chunks(res)
         for t in root:
-            # sputm.render(t)
-            for lflf in sputm.findall('LFLF', t):
-                tree = sputm.findpath('ROOM/OBIM/IM{:02x}', lflf)
-                sputm.render(tree)
+            sputm.render(t)
+            # for lflf in sputm.findall('LFLF', t):
+            #     tree = sputm.findpath('ROOM/OBIM/IM{:02x}', lflf)
+            #     sputm.render(tree)
 
         print('==========')

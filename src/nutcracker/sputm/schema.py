@@ -4,10 +4,13 @@ IMXX = {
     'SMAP',
     'BMAP',
     'BOMP',
-    *[f'ZP{i:02X}' for i in range(1, 4)],
+    *[f'ZP{i:02X}' for i in range(1, 5)],
 }
 
+RAWD = '____'  # Collect rest of chunk as raw data
+
 SCHEMA = {
+    RAWD: DATA,
     'LECF': {
         'LOFF',
         'LFLF'
@@ -26,7 +29,8 @@ SCHEMA = {
         'DIGI',
         'MULT',
         'AWIZ',
-        'TALK'
+        'TALK',
+        RAWD
     },
     'ROOM': {
         'RMHD',
@@ -102,7 +106,7 @@ SCHEMA = {
         'VERB'
     },
     **{f'IM{i:02X}': IMXX for i in range(17)},
-    **{f'ZP{i:02X}': DATA for i in range(1, 4)},
+    **{f'ZP{i:02X}': DATA for i in range(1, 5)},
     'BOXD': DATA,
     'BOXM': DATA,
     'CLUT': DATA,
@@ -247,5 +251,8 @@ SCHEMA = {
         'DIGI'
     },
     'SGHD': DATA,
-    'SGEN': DATA
+    'SGEN': DATA,
+
+    # LA0
+    'ANAM': DATA,
 }

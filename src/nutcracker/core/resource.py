@@ -31,7 +31,13 @@ def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE) -> Optional[Chunk]:
     tag = stream.read(4)
     if not tag:
         return None
-    size = struct.unpack('>I', stream.read(4))[0] - size_fix
+    if set(tag) != {0}:
+        size = struct.unpack('>I', stream.read(4))[0] - size_fix
+    else:
+        # Collect rest of chunk as raw data with special tag '____'
+        assert set(stream.read(4)) == {0}
+        size = stream_size(stream) - stream.tell()
+        tag = b'____'        
     data = StreamView(stream, size)
 
     # verify stream size
@@ -63,6 +69,7 @@ def mktag(tag: str, data: bytes, size_fix: int = EXCLUSIVE) -> bytes:
 
     * size of chunk header = 4CC tag (4) + uint32_be size (4) = 8 bytes
     """
+    # TODO: handle special '____' chunks
     return tag.encode() + struct.pack('>I', len(data) + size_fix) + data
 
 def write_chunks(stream: IO[bytes], chunks: Iterator[bytes], align: int = 2) -> None:
