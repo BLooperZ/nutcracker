@@ -35,7 +35,11 @@ def write_chunks(chunks: Iterator[bytes], align: int = ALIGN) -> bytes:
 
 @functools.wraps(index.map_chunks)
 def map_chunks(data: IO[bytes], schema: dict = SCHEMA, ptag: Optional[str] = None, align: int = ALIGN, size_fix: int = SIZE_FIX, **kwargs):
-    return index.map_chunks(data, schema=schema, align=align, size_fix=size_fix, **kwargs)
+    return index.map_chunks(data, schema=schema, ptag=ptag, align=align, size_fix=size_fix, **kwargs)
+
+@functools.wraps(index.generate_schema)
+def generate_schema(data: IO[bytes], align: int = ALIGN, size_fix: int = SIZE_FIX, **kwargs):
+    return index.generate_schema(data, align=align, size_fix=size_fix, **kwargs)
 
 assert_tag = chunk.assert_tag
 drop_offsets = chunk.drop_offsets

@@ -13,6 +13,7 @@ def read_directory(data):
 
 if __name__ == '__main__':
     import argparse
+    import pprint
 
     from . import sputm
 
@@ -21,9 +22,14 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     with open(args.filename, 'rb') as res:
-        root = sputm.map_chunks(res)
-        for t in root:
-            sputm.render(t)
+
+        s = sputm.generate_schema(res)
+        pprint.pprint(s)
+
+        # root = sputm.map_chunks(res)
+        # for t in root:
+        #     sputm.render(t)
+
             # for lflf in sputm.findall('LFLF', t):
             #     tree = sputm.findpath('ROOM/OBIM/IM{:02x}', lflf)
             #     sputm.render(tree)

@@ -4,6 +4,7 @@ import io
 import logging
 import os
 import struct
+from contextlib import contextmanager
 from typing import Sequence, NamedTuple, Optional, Iterator
 from dataclasses import dataclass
 
@@ -48,21 +49,77 @@ def render(element, level=0):
             render(c, level=level + 1)
         print(f'{indent}</{element.tag}>')
 
-def map_chunks(data, schema={}, ptag=None, **kwargs):
-    chunks = read_chunks(data, **kwargs)
-    for hoff, (tag, chunk) in chunks:
+class MissingSchemaKey(Exception):
+    def __init__(self, tag):
+        super().__init__('Missing key in schema: {tag}'.format(tag=tag))
+        self.tag = tag
+
+class MissingSchemaEntry(Exception):
+    def __init__(self, ptag, tag):
+        super().__init__('Missing entry for {tag} in {ptag} schema'.format(ptag=ptag, tag=tag))
+        self.ptag = ptag
+        self.tag = tag
+
+@contextmanager
+def exception_ptag_context(ptag):
+    try:
+        yield
+    except Exception as e:
+        if not hasattr(e, 'ptag'):
+            e.ptag = ptag
+        raise e
+
+@contextmanager
+def schema_check(schema, ptag, tag, strict=False, logger=logging):
+    try:
         if ptag and tag not in schema[ptag]:
-            logging.warning('Missing entry for {} in {} schema'.format(tag, ptag))
-            exit(1)
+            raise MissingSchemaEntry(ptag, tag)
         if tag not in schema:
-            logging.warning('Missing key in schema: {}'.format(tag))
-            exit(1)
-        yield Element(
-            tag,
-            {'offset': hoff, 'size': len(chunk)},
-            list(map_chunks(chunk, schema=schema, ptag=tag, **kwargs)) if schema.get(tag) else [],
-            chunk
-        )
+            raise MissingSchemaKey(tag)
+    except (MissingSchemaKey, MissingSchemaEntry) as e:
+        if strict:
+            raise e
+        else:
+            logger.warning(e)
+    finally:
+        yield
+
+def create_element(schema, tag, offset, data, **kwargs):
+    return Element(
+        tag,
+        {'offset': offset, 'size': len(data)},
+        list(map_chunks(data, schema=schema, ptag=tag, **kwargs)) if schema.get(tag) else [],
+        data
+    )
+
+def map_chunks(data, schema=None, ptag=None, strict=False, **kwargs):
+    schema = schema or {}
+    chunks = read_chunks(data, **kwargs)
+    with exception_ptag_context(ptag):
+        for hoff, (tag, chunk) in chunks:
+            with schema_check(schema, ptag, tag, strict=strict):
+                yield create_element(schema, tag, hoff, chunk, strict=strict, **kwargs)
+
+def generate_schema(data, **kwargs):
+    schema = {}
+    DATA = set()
+    DUMMY = {10}
+    pos = 0  # TODO: check if partial iterations are possible
+    while True:
+        data.seek(pos, io.SEEK_SET)
+        try:
+            for elem in map_chunks(data, strict=True, schema=schema, ptag=None, **kwargs):
+                pass
+            return {ptag: tags for ptag, tags in schema.items() if tags != set(DUMMY)}
+        except MissingSchemaKey as miss:
+            schema[miss.tag] = set(DUMMY)  # creates new copy
+        except MissingSchemaEntry as miss:
+            schema[miss.ptag] -= set(DUMMY)
+            schema[miss.ptag] |= {miss.tag}
+        except Exception as e:
+            if schema.get(e.ptag) == DATA:
+                raise ValueError('Cannot create schema for given file with given configuration')
+            schema[e.ptag] = DATA
 
 def create_maptree(data):
     return next(map_chunks(data), None)
