@@ -102,19 +102,19 @@ def map_chunks(data, schema=None, ptag=None, strict=False, **kwargs):
 
 def generate_schema(data, **kwargs):
     schema = {}
-    DATA = set()
-    DUMMY = {10}
+    DATA = frozenset()
+    DUMMY = frozenset({10})
     pos = 0  # TODO: check if partial iterations are possible
     while True:
         data.seek(pos, io.SEEK_SET)
         try:
             for elem in map_chunks(data, strict=True, schema=schema, ptag=None, **kwargs):
                 pass
-            return {ptag: tags for ptag, tags in schema.items() if tags != set(DUMMY)}
+            return {ptag: set(tags) for ptag, tags in schema.items() if tags != DUMMY}
         except MissingSchemaKey as miss:
-            schema[miss.tag] = set(DUMMY)  # creates new copy
+            schema[miss.tag] = DUMMY  # creates new copy
         except MissingSchemaEntry as miss:
-            schema[miss.ptag] -= set(DUMMY)
+            schema[miss.ptag] -= DUMMY
             schema[miss.ptag] |= {miss.tag}
         except Exception as e:
             if schema.get(e.ptag) == DATA:
