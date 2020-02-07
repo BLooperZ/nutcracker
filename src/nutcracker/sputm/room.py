@@ -171,11 +171,11 @@ def read_strip(stream, offset, end):
 def decode_smap(height, width, data):
     strip_width = 8
 
-    strips = width // strip_width
+    num_strips = width // strip_width
     with io.BytesIO(data) as s:
         # slen = read_uint32le(s)
         # print(slen)
-        offs = [(read_uint32le(s) - 8)  for _ in range(strips)]
+        offs = [(read_uint32le(s) - 8)  for _ in range(num_strips)]
         index = list(zip(offs, offs[1:] + [len(data)]))
         strips = (read_strip(s, offset, end) for offset, end in index)
         return np.hstack([parse_strip(height, strip_width, data) for data in strips])
