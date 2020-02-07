@@ -18,7 +18,11 @@ class Element:
     tag: str
     attribs: dict
     children: Sequence['Element']
-    data: StreamView
+    _stream: StreamView
+
+    def read(self, *args, **kwargs):
+        self._stream.seek(0)
+        return self._stream.read(*args, **kwargs)
 
 def findall(tag: str, root: Optional[Element]) -> Iterator[Element]:
     if not root:

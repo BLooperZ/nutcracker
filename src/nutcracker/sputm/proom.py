@@ -3,10 +3,13 @@
 import io
 import os
 
-from .room import decode_smap, convert_to_pil_image, read_room_background
+import numpy as np
+
+from nutcracker.codex.codex import decode1
+from .room import decode_smap, convert_to_pil_image, read_room_background, decode_he, read_uint16le
 
 def read_room_background(image, width, height, zbuffers):
-    data = image.data.read()
+    data = image.read()
     if image.tag == 'SMAP':
         return decode_smap(height, width, data)
     elif image.tag == 'BOMP':
@@ -26,7 +29,8 @@ def read_room_background(image, width, height, zbuffers):
                 res = decode_he(s, width * height, palen)
                 return np.frombuffer(res, dtype=np.uint8).reshape((height, width))
             elif 144 <= code <= 148:
-                tr = TRANSPARENCY
+                # TODO: handle transparency
+                # tr = TRANSPARENCY
                 res = decode_he(s, width * height, palen)
                 return np.frombuffer(res, dtype=np.uint8).reshape((height, width))
             elif code == 150:
@@ -44,24 +48,57 @@ def read_rmhd(data):
 
 def read_room(lflf):
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
-    rwidth, rheight, _ = read_rmhd(sputm.find('RMHD', room).data.read())
-    trns = sputm.find('TRNS', room).data.read()
-    palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).data.read()
+    rwidth, rheight, _ = read_rmhd(sputm.find('RMHD', room).read())
+    trns = sputm.find('TRNS', room).read()
+    palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).read()
 
     rmim = sputm.find('RMIM', room) or sputm.find('RMIM', lflf)
-    rmih = sputm.find('RMIH', rmim).data.read()
+    rmih = sputm.find('RMIH', rmim).read()
     assert len(rmih) == 2
     zbuffers = 1 + int.from_bytes(rmih, signed=False, byteorder='little')
     assert 1 <= zbuffers <= 8
 
     imxx = sputm.find('IM00', rmim)
     im = convert_to_pil_image(
-        read_room_background(imxx.children[0], rwidth, rheight, 0)
+        read_room_background(imxx.children[0], rwidth, rheight, zbuffers)
     )
     zpxx = list(sputm.findall('ZP{:02x}', imxx))
     assert len(zpxx) == zbuffers - 1
     im.putpalette(palette)
     return im
+
+def read_imhd(data):
+    with io.BytesIO(data) as stream:
+        obj_id = read_uint16le(stream)
+        obj_num_imnn = read_uint16le(stream)
+        # should be per imnn, but at least 1
+        obj_nums_zpnn = read_uint16le(stream)
+        obj_flags = stream.read(1)[0]
+        obj_unknown = stream.read(1)[0]
+        obj_x = read_uint16le(stream)
+        obj_y = read_uint16le(stream)
+        obj_width = read_uint16le(stream)
+        obj_height = read_uint16le(stream)
+        obj_hotspots = stream.read()
+        if obj_hotspots:
+            # TODO: read hotspots
+            pass
+        return obj_height, obj_width
+
+def read_objects(lflf):
+    room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
+    trns = sputm.find('TRNS', room).read()
+    palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).read()
+
+    for obj_idx, obim in enumerate(sputm.findall('OBIM', room)):
+        obj_height, obj_width = read_imhd(sputm.find('IMHD', obim).read())
+
+        for imxx in sputm.findall('IM{:02x}', obim):
+            im = convert_to_pil_image(
+                read_room_background(imxx.children[0], obj_width, obj_height, 0)
+            )
+            im.putpalette(palette)
+            yield obj_idx, imxx.tag, im
 
 if __name__ == '__main__':
     import argparse
@@ -78,6 +115,9 @@ if __name__ == '__main__':
         assert root.tag == 'LECF', root.tag
         for idx, lflf in enumerate(sputm.findall('LFLF', root)):
             read_room(lflf).save(f'ROOM_{idx:04d}_BG.png')
+
+            for obj_idx, tag, im in read_objects(lflf):
+                im.save(f'ROOM_{idx:04d}_OBIM_{obj_idx:04d}_{tag}.png')
 
             # for lflf in sputm.findall('LFLF', t):
             #     tree = sputm.findpath('ROOM/OBIM/IM{:02x}', lflf)
