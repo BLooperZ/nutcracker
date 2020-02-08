@@ -12,8 +12,8 @@ PALETTE_SIZE = 3 * 256
 
 primary_fields = ('version', 'nframes', 'dummy')
 secondary_fields = ('framerate', 'maxframe', 'samplerate', 'dummy2', 'dummy3')
-primary_struct = Struct('<{}H'.format(len(primary_fields)))
-secondary_struct = Struct('<{}I'.format(len(secondary_fields)))
+primary_struct = Struct(f'<{len(primary_fields)}H')
+secondary_struct = Struct(f'<{len(secondary_fields)}I')
 
 read_primary = partial(structure.read, primary_fields, primary_struct)
 read_secondary = partial(structure.read, secondary_fields, secondary_struct)

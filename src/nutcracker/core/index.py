@@ -3,9 +3,8 @@
 import io
 import logging
 import os
-import struct
 from contextlib import contextmanager
-from typing import Sequence, NamedTuple, Optional, Iterator
+from typing import Sequence, Optional, Iterator
 from dataclasses import dataclass
 
 from parse import parse
@@ -20,7 +19,7 @@ class Element:
     children: Sequence['Element']
     _stream: StreamView
 
-    def read(self, *args, **kwargs):
+    def read(self, *args, **kwargs) -> bytes:
         self._stream.seek(0)
         return self._stream.read(*args, **kwargs)
 
@@ -55,12 +54,12 @@ def render(element, level=0):
 
 class MissingSchemaKey(Exception):
     def __init__(self, tag):
-        super().__init__('Missing key in schema: {tag}'.format(tag=tag))
+        super().__init__(f'Missing key in schema: {tag}')
         self.tag = tag
 
 class MissingSchemaEntry(Exception):
     def __init__(self, ptag, tag):
-        super().__init__('Missing entry for {tag} in {ptag} schema'.format(ptag=ptag, tag=tag))
+        super().__init__(f'Missing entry for {tag} in {ptag} schema')
         self.ptag = ptag
         self.tag = tag
 
@@ -112,7 +111,7 @@ def generate_schema(data, **kwargs):
     while True:
         data.seek(pos, io.SEEK_SET)
         try:
-            for elem in map_chunks(data, strict=True, schema=schema, ptag=None, **kwargs):
+            for _ in map_chunks(data, strict=True, schema=schema, ptag=None, **kwargs):
                 pass
             return {ptag: set(tags) for ptag, tags in schema.items() if tags != DUMMY}
         except MissingSchemaKey as miss:
@@ -121,12 +120,11 @@ def generate_schema(data, **kwargs):
             schema[miss.ptag] -= DUMMY
             schema[miss.ptag] |= {miss.tag}
         except Exception as e:
+            # pylint: disable=no-member
+            assert hasattr(e, 'ptag')
             if schema.get(e.ptag) == DATA:
                 raise ValueError('Cannot create schema for given file with given configuration')
             schema[e.ptag] = DATA
-
-def create_maptree(data):
-    return next(map_chunks(data), None)
 
 if __name__ == '__main__':
     import argparse

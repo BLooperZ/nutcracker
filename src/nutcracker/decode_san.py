@@ -48,7 +48,7 @@ def generate_frames(header, frames):
     delta_pal: Sequence[int] = []
 
     for idx, frame in enumerate(frames):
-        for cidx, (tag, chunk) in enumerate(drop_offsets(frame)):
+        for _, (tag, chunk) in enumerate(drop_offsets(frame)):
             if tag == 'NPAL':
                 palette = tuple(chunk)
                 continue

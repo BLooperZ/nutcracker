@@ -20,8 +20,8 @@ def untag(stream: IO[bytes], size_fix: int = SIZE_FIX) -> Optional[Chunk]:
 
 # read_chunks: Callable[[bytes], Iterator[Chunk]] = functools.partial(resource.read_chunks, align=ALIGN)
 @functools.wraps(resource.read_chunks)
-def read_chunks(data: bytes, align: int = ALIGN, size_fix: int = SIZE_FIX) -> Iterator[Tuple[int, Chunk]]:
-    return resource.read_chunks(data, align=align, size_fix=SIZE_FIX)
+def read_chunks(stream: IO[bytes], align: int = ALIGN, size_fix: int = SIZE_FIX) -> Iterator[Tuple[int, Chunk]]:
+    return resource.read_chunks(stream, align=align, size_fix=SIZE_FIX)
 
 # untag: Callable[[str, bytes], bytes] = functools.partial(resource.mktag, size_fix=SIZE_FIX)
 @functools.wraps(resource.mktag)
@@ -49,4 +49,3 @@ find = index.find
 findall = index.findall
 findpath = index.findpath
 render = index.render
-create_maptree = index.create_maptree

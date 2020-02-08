@@ -9,7 +9,7 @@ from typing import Mapping, Tuple
 from . import structure
 
 meta_fields = ('codec', 'x1', 'y1', 'x2', 'y2', 'unk1', 'unk2')
-meta_struct = Struct('<{}H'.format(len(meta_fields)))
+meta_struct = Struct(f'<{len(meta_fields)}H')
 
 read_meta = partial(structure.read, meta_fields, meta_struct)
 

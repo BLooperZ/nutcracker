@@ -2,9 +2,9 @@
 
 from typing import Iterator, Optional, Tuple
 
-from .types import Chunk
+from .types import Chunk, StreamView
 
-def assert_tag(target: str, chunk: Optional[Chunk]) -> bytes:
+def assert_tag(target: str, chunk: Optional[Chunk]) -> StreamView:
     """Return chunk data if chunk has target 4CC tag."""
     if not chunk:
         raise ValueError(f'no 4CC header')

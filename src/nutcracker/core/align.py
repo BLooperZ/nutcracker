@@ -3,7 +3,7 @@ from typing import IO
 
 def assert_zero(pad: bytes) -> bytes:
     if pad and set(pad) != {0}:
-        raise ValueError(f'non-zero padding between chunks: {pad}')
+        raise ValueError(f'non-zero padding between chunks: {str(pad)}')
     return pad
 
 def calc_align(offset: int, align: int) -> int:

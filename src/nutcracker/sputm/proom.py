@@ -6,7 +6,7 @@ import os
 import numpy as np
 
 from nutcracker.codex.codex import decode1
-from .room import decode_smap, convert_to_pil_image, read_room_background, decode_he, read_uint16le
+from .room import decode_smap, convert_to_pil_image, decode_he, read_uint16le
 
 def read_room_background(image, width, height, zbuffers):
     data = image.read()
@@ -14,6 +14,7 @@ def read_room_background(image, width, height, zbuffers):
         return decode_smap(height, width, data)
     elif image.tag == 'BOMP':
         with io.BytesIO(data) as s:
+            # pylint: disable=unused-variable
             unk = read_uint16le(s)
             width = read_uint16le(s)
             height = read_uint16le(s)
@@ -49,7 +50,7 @@ def read_rmhd(data):
 def read_room(lflf):
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
     rwidth, rheight, _ = read_rmhd(sputm.find('RMHD', room).read())
-    trns = sputm.find('TRNS', room).read()
+    trns = sputm.find('TRNS', room).read()  # pylint: disable=unused-variable
     palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).read()
 
     rmim = sputm.find('RMIM', room) or sputm.find('RMIM', lflf)
@@ -68,6 +69,7 @@ def read_room(lflf):
     return im
 
 def read_imhd(data):
+    # pylint: disable=unused-variable
     with io.BytesIO(data) as stream:
         obj_id = read_uint16le(stream)
         obj_num_imnn = read_uint16le(stream)
@@ -87,7 +89,7 @@ def read_imhd(data):
 
 def read_objects(lflf):
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
-    trns = sputm.find('TRNS', room).read()
+    trns = sputm.find('TRNS', room).read()  # pylint: disable=unused-variable
     palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).read()
 
     for obj_idx, obim in enumerate(sputm.findall('OBIM', room)):
@@ -112,6 +114,7 @@ if __name__ == '__main__':
 
     with open(args.filename, 'rb') as res:
         root = next(sputm.map_chunks(res), None)
+        assert root
         assert root.tag == 'LECF', root.tag
         for idx, lflf in enumerate(sputm.findall('LFLF', root)):
             read_room(lflf).save(f'ROOM_{idx:04d}_BG.png')
