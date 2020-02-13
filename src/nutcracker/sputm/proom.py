@@ -85,22 +85,22 @@ def read_imhd(data):
         if obj_hotspots:
             # TODO: read hotspots
             pass
-        return obj_height, obj_width
+        return obj_id, obj_height, obj_width
 
 def read_objects(lflf):
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
     trns = sputm.find('TRNS', room).read()  # pylint: disable=unused-variable
     palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).read()
 
-    for obj_idx, obim in enumerate(sputm.findall('OBIM', room)):
-        obj_height, obj_width = read_imhd(sputm.find('IMHD', obim).read())
+    for obim in sputm.findall('OBIM', room):
+        obj_id, obj_height, obj_width = read_imhd(sputm.find('IMHD', obim).read())
 
         for imxx in sputm.findall('IM{:02x}', obim):
             im = convert_to_pil_image(
                 read_room_background(imxx.children[0], obj_width, obj_height, 0)
             )
             im.putpalette(palette)
-            yield obj_idx, imxx.tag, im
+            yield obj_id, imxx.tag, im
 
 if __name__ == '__main__':
     import argparse
@@ -117,10 +117,10 @@ if __name__ == '__main__':
         assert root
         assert root.tag == 'LECF', root.tag
         for idx, lflf in enumerate(sputm.findall('LFLF', root)):
-            read_room(lflf).save(f'ROOM_{idx:04d}_BG.png')
+            read_room(lflf).save(f'LFLF_{1 + idx:04d}_ROOM_RMIM.png')
 
             for obj_idx, tag, im in read_objects(lflf):
-                im.save(f'ROOM_{idx:04d}_OBIM_{obj_idx:04d}_{tag}.png')
+                im.save(f'LFLF_{1 + idx:04d}_ROOM_OBIM_{obj_idx:04d}_{tag}.png')
 
             # for lflf in sputm.findall('LFLF', t):
             #     tree = sputm.findpath('ROOM/OBIM/IM{:02x}', lflf)
