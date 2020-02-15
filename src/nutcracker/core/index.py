@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from parse import parse
 
-from .resource import read_chunks
+from .resource import read_chunks, keep_position
 from .stream import StreamView
 
 @dataclass
@@ -43,7 +43,7 @@ def findpath(path: str, root: Optional[Element]) -> Optional[Element]:
 def render(element, level=0):
     if not element:
         return
-    attribs = ''.join(f' {key}="{value}"' for key, value in element.attribs.items())
+    attribs = ''.join(f' {key}="{value}"' for key, value in element.attribs.items() if value is not None)
     indent = '    ' * level
     closing = '' if element.children else ' /'
     print(f'{indent}<{element.tag}{attribs}{closing}>')
@@ -87,21 +87,25 @@ def schema_check(schema, ptag, tag, strict=False, logger=logging):
     finally:
         yield
 
-def create_element(schema, tag, offset, data, **kwargs):
+def create_element(schema, tag, offset, data, idgen, pid, **kwargs):
+    gid = idgen.get(tag)
+    with keep_position(data):
+        gid = gid and gid(pid, data, offset)
     return Element(
         tag,
-        {'offset': offset, 'size': len(data)},
-        list(map_chunks(data, schema=schema, ptag=tag, **kwargs)) if schema.get(tag) else [],
+        {'offset': offset, 'size': len(data), 'gid': gid and f'{gid:04d}'},
+        list(map_chunks(data, schema=schema, ptag=tag, idgen=idgen, pid=gid, **kwargs)) if schema.get(tag) else [],
         data
     )
 
-def map_chunks(data, schema=None, ptag=None, strict=False, **kwargs):
+def map_chunks(data, schema=None, ptag=None, strict=False, idgen=None, pid=None, **kwargs):
     schema = schema or {}
+    idgen = idgen or {}
     chunks = read_chunks(data, **kwargs)
     with exception_ptag_context(ptag):
         for hoff, (tag, chunk) in chunks:
             with schema_check(schema, ptag, tag, strict=strict):
-                yield create_element(schema, tag, hoff, chunk, strict=strict, **kwargs)
+                yield create_element(schema, tag, hoff, chunk, strict=strict, idgen=idgen, pid=pid, **kwargs)
 
 def generate_schema(data, **kwargs):
     schema = {}

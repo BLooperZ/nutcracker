@@ -3,6 +3,7 @@
 import io
 import itertools
 import struct
+from contextlib import contextmanager
 from functools import partial
 from typing import IO, Iterator, Optional, Tuple
 
@@ -21,6 +22,13 @@ def stream_size(stream: Stream) -> int:
     size = stream.tell()
     stream.seek(pos, io.SEEK_SET)
     return size
+
+@contextmanager
+def keep_position(stream: Stream) -> Iterator[None]:
+    pos = stream.tell()
+    yield
+    stream.seek(pos, io.SEEK_SET)
+    assert stream.tell() == pos
 
 def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE, word: struct.Struct = UINT32BE) -> Optional[Chunk]:
     """Read next chunk from given stream.
@@ -58,7 +66,8 @@ def read_chunks(stream: IO[bytes], align: int = 2, size_fix: int = EXCLUSIVE, wo
     chunks = iter(partial(untag, stream, size_fix=size_fix, word=word), None)
     for offset, chunk in zip(offsets, chunks):
         assert chunk
-        yield offset, chunk
+        with keep_position(stream):
+            yield offset, chunk
         align_read_stream(stream, align=align)
     assert stream.read() == b''
     assert not list(itertools.zip_longest(chunks, offsets))
