@@ -1,10 +1,8 @@
-#!/usr/bin/env python3
-
 from typing import Iterator, Optional, Tuple
 
-from .types import Chunk, StreamView
+from .types import Chunk
 
-def assert_tag(target: str, chunk: Optional[Chunk]) -> StreamView:
+def assert_tag(target: str, chunk: Optional[Chunk]) -> bytes:
     """Return chunk data if chunk has target 4CC tag."""
     if not chunk:
         raise ValueError(f'no 4CC header')
@@ -19,4 +17,5 @@ def print_chunks(chunks: Iterator[Tuple[int, Chunk]], level: int = 0, base: int 
         yield base + offset, chunk
 
 def drop_offsets(chunks: Iterator[Tuple[int, Chunk]]) -> Iterator[Chunk]:
+    """Drop offset from each (offset, chunk) tuple in given iterator"""
     return (chunk for _, chunk in chunks)

@@ -1,103 +1,61 @@
 #!/usr/bin/env python3
 
 import io
-import itertools
-import struct
-from contextlib import contextmanager
-from functools import partial
 from typing import IO, Iterator, Optional, Tuple
 
 from .align import align_read_stream, align_write_stream
 from .types import Chunk
-from .stream import StreamView, Stream
+from .settings import _ChunkSetting
 
-INCLUSIVE = 8
-EXCLUSIVE = 0
-
-UINT32BE = struct.Struct('>I')
-
-def stream_size(stream: Stream) -> int:
-    pos = stream.tell()
-    stream.read()
-    size = stream.tell()
-    stream.seek(pos, io.SEEK_SET)
-    return size
-
-@contextmanager
-def keep_position(stream: Stream) -> Iterator[None]:
-    pos = stream.tell()
-    yield
-    stream.seek(pos, io.SEEK_SET)
-    assert stream.tell() == pos
-
-def untag(stream: IO[bytes], size_fix: int = EXCLUSIVE, word: struct.Struct = UINT32BE) -> Optional[Chunk]:
-    """Read next chunk from given stream.
-
-    size_fix: can be used to determine whether size from chunk header
-    is INCLUSIVE* (8) or EXCLUSIVE (0).
-
-    * size of chunk header = 4CC tag (4) + uint32_be size (4) = 8 bytes
-    """
-    tag = stream.read(word.size)
+def untag(cfg: _ChunkSetting, stream: IO[bytes]) -> Optional[Chunk]:
+    """Read next chunk from given stream."""
+    tag = stream.read(cfg.word.size)
     if not tag:
         return None
     if set(tag) != {0}:
-        size = word.unpack(stream.read(word.size))[0] - size_fix
+        size = cfg.word.unpack(stream.read(cfg.word.size))[0] - cfg.size_fix
     else:
         # Collect rest of chunk as raw data with special tag '____'
-        assert set(stream.read(word.size)) == {0}
-        size = stream_size(stream) - stream.tell()
+        assert set(stream.read(cfg.word.size)) == {0}
+        size = None
         tag = b'____'        
-    data = StreamView(stream, size)
+    data = stream.read(size)
 
-    # verify stream size
-    actual = stream_size(data)
-    if actual != size:
-        raise EOFError(f'got EOF while reading chunk {str(tag)}: expected {size}, got {actual}')
+    # verify data length
+    if size and len(data) != size:
+        raise EOFError(f'got EOF while reading chunk {str(tag)}: expected {size}, got {len(data)}')
 
     return Chunk(tag.decode(), data)
 
-def read_chunks(stream: IO[bytes], align: int = 2, size_fix: int = EXCLUSIVE, word: struct.Struct = UINT32BE) -> Iterator[Tuple[int, Chunk]]:
-    """Read all chunks from given bytes.
-
-    align: data alignment for chunk start offsets.
-    """
-    offsets = iter(stream.tell, stream_size(stream))
-    chunks = iter(partial(untag, stream, size_fix=size_fix, word=word), None)
-    for offset, chunk in zip(offsets, chunks):
-        assert chunk
-        with keep_position(stream):
+def read_chunks(cfg: _ChunkSetting, data: bytes) -> Iterator[Tuple[int, Chunk]]:
+    """Read all chunks from given bytes."""
+    max_size = len(data)
+    with io.BytesIO(data) as stream:
+        offset = stream.tell()
+        assert offset == 0
+        while offset < max_size:
+            chunk = untag(cfg, stream)
+            if not chunk:
+                break
             yield offset, chunk
-        align_read_stream(stream, align=align)
-    assert stream.read() == b''
-    assert not list(itertools.zip_longest(chunks, offsets))
+            align_read_stream(stream, align=cfg.align)
+            offset = stream.tell()
+        assert stream.read() == b''
 
-def mktag(tag: str, data: bytes, size_fix: int = EXCLUSIVE, word: struct.Struct = UINT32BE) -> bytes:
-    """Format chunk bytes from given 4CC tag and data.
-
-    size_fix: can be used to determine whether size from chunk header
-    is INCLUSIVE* (8) or EXCLUSIVE (0).
-
-    * size of chunk header = 4CC tag (4) + uint32_be size (4) = 8 bytes
-    """
+def mktag(cfg: _ChunkSetting, tag: str, data: bytes) -> bytes:
+    """Format chunk bytes from given 4CC tag and data."""
     # TODO: handle special '____' chunks
-    return tag.encode() + word.pack(len(data) + size_fix) + data
+    return tag.encode() + cfg.word.pack(len(data) + cfg.size_fix) + data
 
-def write_chunks(stream: IO[bytes], chunks: Iterator[bytes], align: int = 2) -> None:
-    """Write chunks sequence with given data alignment into given stream.
-
-    align: data alignment for chunk start offsets.
-    """
+def write_chunks(cfg: _ChunkSetting, stream: IO[bytes], chunks: Iterator[bytes]) -> None:
+    """Write chunks sequence with given data alignment into given stream."""
     for chunk in chunks:
         assert chunk
         stream.write(chunk)
-        align_write_stream(stream, align=align)
+        align_write_stream(stream, align=cfg.align)
 
-def write_chunks_bytes(chunks: Iterator[bytes], align: int = 2) -> bytes:
-    """Write chunks sequence to bytes with given data alignment.
-
-    align: data alignment for chunk start offsets.
-    """
+def write_chunks_bytes(cfg: _ChunkSetting, chunks: Iterator[bytes]) -> bytes:
+    """Write chunks sequence to bytes with given data alignment."""
     with io.BytesIO() as stream:
-        write_chunks(stream, chunks, align=align)
+        write_chunks(cfg, stream, chunks)
         return stream.getvalue()

@@ -37,23 +37,20 @@ def read_anam(data):
 #         print(enumerate(merged))
 
 def counter(it):
-    def inner(pid, stream, off):
+    def inner(pid, data, off):
         return next(it)
     return inner
 
-def read_inner_uint16le(pid, stream, off):
-    stream.seek(8, io.SEEK_CUR)
-    res = int.from_bytes(stream.read(2), byteorder='little', signed=False)
-    stream.seek(-10, io.SEEK_CUR)
+def read_inner_uint16le(pid, data, off):
+    res = int.from_bytes(data[8:10], byteorder='little', signed=False)
     return res
 
-def read_uint8le(pid, stream, off):
-    res = int.from_bytes(stream.read(1), byteorder='little', signed=False)
-    stream.seek(-1, io.SEEK_CUR)
+def read_uint8le(pid, data, off):
+    res = int.from_bytes(data[:1], byteorder='little', signed=False)
     return res
 
 def compare_pid_off(directory):
-    def inner(pid, stream, off):
+    def inner(pid, data, off):
         return next((k for k, v in directory.items() if v == (pid, off)), None)
     return inner
 
@@ -61,29 +58,29 @@ def read_index_v5tov7(root):
     for t in root:
         sputm.render(t)
         if t.tag == 'RNAM':
-            rnam = dict(read_rnam(t.read(), key=0xFF))
+            rnam = dict(read_rnam(t.data, key=0xFF))
             pprint.pprint(rnam)
         elif t.tag == 'MAXS':
             print('MAXS not yet supported')
         elif t.tag == 'DROO':
-            droo = dict(read_directory_leg(t.read()))
+            droo = dict(read_directory_leg(t.data))
             pprint.pprint(droo)
         elif t.tag == 'DSCR':
-            dscr = dict(read_directory_leg(t.read()))
+            dscr = dict(read_directory_leg(t.data))
             pprint.pprint(dscr)
         elif t.tag == 'DSOU':
-            dsou = dict(read_directory_leg(t.read()))
+            dsou = dict(read_directory_leg(t.data))
             pprint.pprint(dsou)
         elif t.tag == 'DCOS':
-            dcos = dict(read_directory_leg(t.read()))
+            dcos = dict(read_directory_leg(t.data))
             pprint.pprint(dcos)
         elif t.tag == 'DCHR':
-            dchr = dict(read_directory_leg(t.read()))
+            dchr = dict(read_directory_leg(t.data))
             pprint.pprint(dchr)
         elif t.tag == 'DOBJ':
             print('DOBJ not yet supported')
         elif t.tag == 'ANAM':
-            anam = dict(read_anam(t.read()))
+            anam = dict(read_anam(t.data))
             pprint.pprint(anam)
     return {
         'LFLF': counter(k for k, v  in droo.items() if v != (0, 0)),
@@ -101,24 +98,24 @@ def read_index_he(root):
     for t in root:
         sputm.render(t)
         if t.tag == 'RNAM':
-            rnam = dict(read_rnam(t.read(), key=0x00))
+            rnam = dict(read_rnam(t.data, key=0x00))
             pprint.pprint(rnam)
         elif t.tag == 'MAXS':
             print('MAXS not yet supported')
         elif t.tag == 'DIRI':
-            droo = dict(read_directory_leg(t.read()))
+            droo = dict(read_directory_leg(t.data))
             pprint.pprint(droo)
         elif t.tag == 'DIRS':
-            dscr = dict(read_directory_leg(t.read()))
+            dscr = dict(read_directory_leg(t.data))
             pprint.pprint(dscr)
         elif t.tag == 'DIRC':
-            dcos = dict(read_directory_leg(t.read()))
+            dcos = dict(read_directory_leg(t.data))
             pprint.pprint(dcos)
         elif t.tag == 'DIRF':
-            dchr = dict(read_directory_leg(t.read()))
+            dchr = dict(read_directory_leg(t.data))
             pprint.pprint(dchr)
         elif t.tag == 'DIRN':
-            dsou = dict(read_directory_leg(t.read()))
+            dsou = dict(read_directory_leg(t.data))
             pprint.pprint(dsou)
     return {
         'LFLF': counter(k for k, v  in droo.items() if v != (0, 0)),
@@ -132,6 +129,10 @@ def read_index_he(root):
         'AKOS': counter(itertools.count(1))  # TODO
     }
 
+def read_file(path: str, key: int = 0x00) -> bytes:
+    with open(path, 'rb') as res:
+        return xor.read(res, key=key)
+
 if __name__ == '__main__':
     import argparse
     import pprint
@@ -143,38 +144,39 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Configuration for HE games
-    index_suffix = '.HE0.xor'
-    resource_suffix = '.(a).xor'
-    read_index = read_index_he
+    # index_suffix = '.HE0'
+    # resource_suffix = '.(a)'
+    # read_index = read_index_he
+    # chiper_key = 0x69
 
-    # # Configuration for SCUMM v5-v6 games
-    # index_suffix = '.000.xor'
-    # resource_suffix = '.001.xor'
-    # read_index = read_index_v5tov7
+    # Configuration for SCUMM v5-v6 games
+    index_suffix = '.000'
+    resource_suffix = '.001'
+    read_index = read_index_v5tov7
+    chiper_key = 0x69
 
     # # Configuration for SCUMM v7 games
     # index_suffix = '.LA0'
     # resource_suffix = '.LA1'
     # read_index = read_index_v5tov7
+    # chiper_key = 0x00
 
-    with open(args.filename + index_suffix, 'rb') as res:
+    index = read_file(args.filename + index_suffix, key=chiper_key)
 
-        s = sputm.generate_schema(res)
-        pprint.pprint(s)
-        res.seek(0, io.SEEK_SET)
+    s = sputm.generate_schema(index)
+    pprint.pprint(s)
 
-        root = sputm.map_chunks(res, schema=s)
+    root = sputm.map_chunks(index, schema=s)
 
-        idgens = read_index(root)
+    idgens = read_index(root)
 
-    with open(args.filename + resource_suffix, 'rb') as res:
+    resource = read_file(args.filename + resource_suffix, key=chiper_key)
 
-        # # commented out, use pre-calculated index instead, as calculating is time-consuming
-        # s = sputm.generate_schema(res)
-        # pprint.pprint(s)
-        # res.seek(0, io.SEEK_SET)
-        # root = sputm.map_chunks(res, idgen=idgens, schema=s)
+    # # commented out, use pre-calculated index instead, as calculating is time-consuming
+    # s = sputm.generate_schema(resource)
+    # pprint.pprint(s)
+    # root = sputm.map_chunks(resource, idgen=idgens, schema=s)
 
-        root = sputm.map_chunks(res, idgen=idgens)
-        for t in root:
-            sputm.render(t)
+    root = sputm.map_chunks(resource, idgen=idgens, max_depth=4)
+    for t in root:
+        sputm.render(t)
