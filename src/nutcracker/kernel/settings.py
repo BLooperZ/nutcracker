@@ -1,3 +1,4 @@
+import logging
 import struct
 from dataclasses import dataclass, field
 
@@ -41,3 +42,4 @@ class _IndexSetting(_ChunkSetting):
     schema: Mapping[str, Set[str]] = field(default_factory=dict)
     strict: bool = False
     max_depth: Optional[int] = None
+    logger: logging.Logger = logging  # type: ignore
