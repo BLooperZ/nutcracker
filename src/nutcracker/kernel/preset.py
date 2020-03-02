@@ -21,6 +21,9 @@ class _ChunkPreset(settings._ChunkSetting, _DefaultOverride):
     untag = resource.untag
     read_chunks = resource.read_chunks
 
+    mktag = resource.mktag
+    write_chunks = resource.write_chunks_bytes
+
 from . import tree, index
 
 @dataclass(frozen=True)

@@ -133,6 +133,19 @@ def read_file(path: str, key: int = 0x00) -> bytes:
     with open(path, 'rb') as res:
         return xor.read(res, key=key)
 
+
+def save_tree(cfg, element):
+    if not element:
+        return
+    if element.children:
+        os.makedirs(element.attribs['path'], exist_ok=True)
+        for c in element.children:
+            save_tree(cfg, c)
+    else:
+        with open(element.attribs['path'], 'wb') as f:
+            f.write(cfg.mktag(element.tag, element.data))
+
+
 if __name__ == '__main__':
     import argparse
     import pprint
@@ -199,3 +212,4 @@ if __name__ == '__main__':
     root = sputm(max_depth=4).map_chunks(resource, extra=update_element_path)
     for t in root:
         sputm.render(t)
+        save_tree(sputm, t)
