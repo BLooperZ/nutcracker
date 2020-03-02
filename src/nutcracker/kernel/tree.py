@@ -1,5 +1,7 @@
+import io
 import os
-from typing import Iterator, Optional
+import sys
+from typing import IO, Iterator, Optional
 
 from parse import parse
 
@@ -22,14 +24,18 @@ def findpath(path: str, root: Optional[Element]) -> Optional[Element]:
     dirname, basename = os.path.split(path)
     return find(basename, findpath(dirname, root))
 
-def render(element, level=0):
+def render(element, level=0, stream: IO[str] = sys.stdout):
     if not element:
         return
     attribs = ''.join(f' {key}="{value}"' for key, value in element.attribs.items() if value is not None)
     indent = '    ' * level
     closing = '' if element.children else ' /'
-    print(f'{indent}<{element.tag}{attribs}{closing}>')
+    print(f'{indent}<{element.tag}{attribs}{closing}>', file=stream)
     if element.children:
         for c in element.children:
-            render(c, level=level + 1)
-        print(f'{indent}</{element.tag}>')
+            render(c, level=level + 1, stream=stream)
+        print(f'{indent}</{element.tag}>', file=stream)
+
+def renders(element) -> str:
+    with io.StringIO() as stream:
+        return render(element, stream=stream)

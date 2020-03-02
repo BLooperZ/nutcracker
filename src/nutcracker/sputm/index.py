@@ -210,6 +210,7 @@ if __name__ == '__main__':
         return res
 
     root = sputm(max_depth=4).map_chunks(resource, extra=update_element_path)
-    for t in root:
-        sputm.render(t)
-        save_tree(sputm, t)
+    with open('rpdump.xml', 'w') as f:
+        for t in root:
+            sputm.render(t, stream=f)
+            save_tree(sputm, t)
