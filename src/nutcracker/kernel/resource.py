@@ -47,15 +47,15 @@ def mktag(cfg: _ChunkSetting, tag: str, data: bytes) -> bytes:
     # TODO: handle special '____' chunks
     return tag.encode() + cfg.word.pack(len(data) + cfg.size_fix) + data
 
-def write_chunks(cfg: _ChunkSetting, stream: IO[bytes], chunks: Iterator[bytes]) -> None:
+def write_chunks_into(cfg: _ChunkSetting, stream: IO[bytes], chunks: Iterator[bytes]) -> None:
     """Write chunks sequence with given data alignment into given stream."""
     for chunk in chunks:
         assert chunk
         stream.write(chunk)
         align_write_stream(stream, align=cfg.align)
 
-def write_chunks_bytes(cfg: _ChunkSetting, chunks: Iterator[bytes]) -> bytes:
+def write_chunks(cfg: _ChunkSetting, chunks: Iterator[bytes]) -> bytes:
     """Write chunks sequence to bytes with given data alignment."""
     with io.BytesIO() as stream:
-        write_chunks(cfg, stream, chunks)
+        write_chunks_into(cfg, stream, chunks)
         return stream.getvalue()

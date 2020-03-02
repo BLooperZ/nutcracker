@@ -1,8 +1,7 @@
 from dataclasses import dataclass, replace
 from typing import Any, TypeVar
 
-from . import resource, chunk, settings
-from .types import Chunk
+from . import chunk, settings, tree
 
 _SettingT = TypeVar('_SettingT', bound='_DefaultOverride')
 
@@ -18,13 +17,13 @@ class _ChunkPreset(settings._ChunkSetting, _DefaultOverride):
     assert_tag = staticmethod(chunk.assert_tag)
     drop_offsets = staticmethod(chunk.drop_offsets)
 
-    untag = resource.untag
-    read_chunks = resource.read_chunks
+    from .resource import (
+        untag,
+        read_chunks,
+        mktag,
+        write_chunks
+    )
 
-    mktag = resource.mktag
-    write_chunks = resource.write_chunks_bytes
-
-from . import tree, index
 
 @dataclass(frozen=True)
 class _ShellPreset(settings._IndexSetting, _ChunkPreset):
@@ -35,8 +34,11 @@ class _ShellPreset(settings._IndexSetting, _ChunkPreset):
     findpath = staticmethod(tree.findpath)
     render = staticmethod(tree.render)
 
-    map_chunks = index.map_chunks
-    generate_schema = index.generate_schema
+    from .index import (
+        map_chunks,
+        generate_schema
+    )
+
 
 preset = _ChunkPreset()
 shell = _ShellPreset()
