@@ -106,14 +106,14 @@ if __name__ == '__main__':
     import argparse
     import pprint
 
-    from . import sputm
+    from .preset import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
     args = parser.parse_args()
 
     with open(args.filename, 'rb') as res:
-        root = next(sputm.map_chunks(res), None)
+        root = next(sputm.map_chunks(res.read()), None)
         assert root
         assert root.tag == 'LECF', root.tag
         for idx, lflf in enumerate(sputm.findall('LFLF', root)):

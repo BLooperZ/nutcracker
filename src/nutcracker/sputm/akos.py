@@ -20,7 +20,7 @@ def assert_stop_iter(iter: Iterator) -> None:
     for chunk in chunks:
         raise ValueError(f'expected EOF, got {chunk}')
 
-def akos_header_from_bytes(data: bytes) -> dict:
+def akos_header_from_bytes(data: bytes) -> AkosHeader:
     with io.BytesIO(data) as stream:
         unk_1 = int.from_bytes(stream.read(2), signed=False, byteorder='little')
         flags = ord(stream.read(1))
@@ -37,7 +37,7 @@ def akos_header_from_bytes(data: bytes) -> dict:
         codec=codec
     )
 
-def akof_from_bytes(data: bytes) -> Sequence[Tuple[int, int]]:
+def akof_from_bytes(data: bytes) -> Iterator[Tuple[int, int]]:
     with io.BytesIO(data) as stream:
         while True:
             entry = stream.read(6)
@@ -51,7 +51,7 @@ def akof_from_bytes(data: bytes) -> Sequence[Tuple[int, int]]:
 if __name__ == '__main__':
     import argparse
 
-    from . import sputm
+    from .preset import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')

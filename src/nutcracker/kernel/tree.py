@@ -38,4 +38,5 @@ def render(element, level=0, stream: IO[str] = sys.stdout):
 
 def renders(element) -> str:
     with io.StringIO() as stream:
-        return render(element, stream=stream)
+        render(element, stream=stream)
+        return stream.getvalue()
