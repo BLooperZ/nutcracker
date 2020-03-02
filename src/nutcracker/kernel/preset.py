@@ -21,4 +21,19 @@ class _ChunkPreset(settings._ChunkSetting, _DefaultOverride):
     untag = resource.untag
     read_chunks = resource.read_chunks
 
+from . import tree, index
+
+@dataclass(frozen=True)
+class _ShellPreset(settings._IndexSetting, _ChunkPreset):
+
+    # static pass through
+    find = staticmethod(tree.find)
+    findall = staticmethod(tree.findall)
+    findpath = staticmethod(tree.findpath)
+    render = staticmethod(tree.render)
+
+    map_chunks = index.map_chunks
+    generate_schema = index.generate_schema
+
 preset = _ChunkPreset()
+shell = _ShellPreset()

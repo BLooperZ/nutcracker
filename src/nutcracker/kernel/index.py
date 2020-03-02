@@ -75,9 +75,8 @@ def map_chunks(
                 chunk,
                 **(extra(parent, chunk, offset) if extra else {})
             )
-            yield replace(
-                elem,
-                children=list(map_chunks(cfg, chunk.data, parent=elem, level=level + 1, extra=extra))
+            yield elem.content(
+                map_chunks(cfg, chunk.data, parent=elem, level=level + 1, extra=extra)
             )
 
 def generate_schema(cfg: _IndexSetting, data) -> Dict[str, Set[str]]:

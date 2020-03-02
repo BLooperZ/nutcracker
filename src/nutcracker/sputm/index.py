@@ -136,8 +136,10 @@ def read_file(path: str, key: int = 0x00) -> bytes:
 if __name__ == '__main__':
     import argparse
     import pprint
+    from typing import Dict
 
-    from . import sputm
+    from .preset import sputm
+    from .types import Chunk
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
@@ -166,7 +168,7 @@ if __name__ == '__main__':
     s = sputm.generate_schema(index)
     pprint.pprint(s)
 
-    root = sputm.map_chunks(index, schema=s)
+    root = sputm(schema=s).map_chunks(index)
 
     idgens = read_index(root)
 
@@ -177,6 +179,23 @@ if __name__ == '__main__':
     # pprint.pprint(s)
     # root = sputm.map_chunks(resource, idgen=idgens, schema=s)
 
-    root = sputm.map_chunks(resource, idgen=idgens, max_depth=4)
+    paths: Dict[str, Chunk] = {}
+
+    def update_element_path(parent, chunk, offset):
+        gid = idgens.get(chunk.tag)
+        gid = gid and gid(parent and parent.attribs['gid'], chunk.data, offset)
+
+        base = chunk.tag + (f'_{gid:04d}' if gid else '')
+
+        dirname = parent.attribs['path'] if parent else ''
+        path = os.path.join(dirname, base)
+        res = {'path': path, 'gid': gid}
+
+        assert path not in paths
+        paths[path] = chunk
+
+        return res
+
+    root = sputm(max_depth=4).map_chunks(resource, extra=update_element_path)
     for t in root:
         sputm.render(t)

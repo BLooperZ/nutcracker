@@ -1,1 +1,1 @@
-from nutcracker.core.types import Chunk
+from nutcracker.kernel.types import Chunk
