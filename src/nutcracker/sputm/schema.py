@@ -1,4 +1,4 @@
-DATA = set()
+DATA = set()  # type: ignore
 
 IMXX = {
     'SMAP',

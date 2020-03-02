@@ -1,1 +1,1 @@
-SCHEMA = {}
+SCHEMA = {}  # type: ignore
