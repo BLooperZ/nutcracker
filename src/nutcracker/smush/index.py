@@ -7,24 +7,18 @@ if __name__ == '__main__':
     import argparse
     import pprint
 
-    from . import smush
+    from .preset import smush
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
     args = parser.parse_args()
 
     with open(args.filename, 'rb') as res:
+        resource = res.read()
 
-        s = smush.generate_schema(res)
-        pprint.pprint(s)
+    s = smush.generate_schema(resource)
+    pprint.pprint(s)
 
-        res.seek(0, io.SEEK_SET)
-        root = smush.map_chunks(res, schema=s)
-        for t in root:
-            smush.render(t)
-
-            # for lflf in sputm.findall('LFLF', t):
-            #     tree = sputm.findpath('ROOM/OBIM/IM{:02x}', lflf)
-            #     sputm.render(tree)
-
-        print('==========')
+    root = smush(schema=s).map_chunks(resource) 
+    for t in root:
+        smush.render(t)
