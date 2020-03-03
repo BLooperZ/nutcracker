@@ -52,7 +52,6 @@ def compose(header: AnimationHeader, frames: Iterator[bytes]):
     return smush.mktag(
         'ANIM',
         smush.write_chunks(
-            itertools.chain([bheader], frames),
-            align=2
+            itertools.chain([bheader], frames)
         )
     )

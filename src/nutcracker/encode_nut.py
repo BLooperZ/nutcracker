@@ -5,7 +5,8 @@ from itertools import chain
 
 from nutcracker.smush.fobj import mkobj
 from nutcracker.codex.codex import get_encoder
-from nutcracker.smush import smush, anim, ahdr
+from nutcracker.smush.preset import smush
+from nutcracker.smush import anim, ahdr
 
 # LEGACY
 def write_nut_file(header, numChars, chars, filename):
