@@ -3,6 +3,7 @@ import io
 import struct
 
 from .codex37 import fake_encode37  #, decode37
+from .codex47 import fake_encode47  #, decode37
 from .codex37_np import decode37 as e_decode37
 from .codex47_np import decode47 as e_decode47
 # from codex37_old import decode37
@@ -155,10 +156,12 @@ def codec21(width, height, out):
 encoders = {
     21: codec21,
     44: codec44,
-    37: fake_encode37
+    37: fake_encode37,
+    47: fake_encode47,
 }
 
 def get_encoder(codec):
     if codec in encoders:
         return encoders[codec]
+    print(codec)
     return NotImplemented

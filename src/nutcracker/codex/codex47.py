@@ -369,3 +369,26 @@ def process_block(out, stream, dst, prev1, prev2, stride, params, size):
         for _ in range(size):
             out[dst:dst + size] = [t] * size
             dst += stride
+
+
+def fake_encode47(out, bg1=b'\0', bg2=b'\0'):
+    # from . import codex47_np as cdx
+
+    width = len(out[0])
+    height = len(out)
+    print(width, height)
+
+    seq_nb = b'\0\0'
+    compression = b'\0'
+    rotation = b'\0'
+    skip = b'\0'
+    _dummy = b'\0\0\0'
+    params = b'\0\0\0\0'
+    bg1 = bg1
+    bg2 = bg2
+
+    decoded_size = struct.pack('<I', width * height)
+
+    _dummy2 = b'\0' * 8
+
+    return seq_nb + compression + rotation + skip + _dummy + params + bg1 + bg2 + decoded_size + _dummy2 + b''.join(out)

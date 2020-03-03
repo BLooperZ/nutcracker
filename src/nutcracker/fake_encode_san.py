@@ -11,7 +11,8 @@ import numpy as np
 
 from nutcracker.codex.codex import get_decoder, get_encoder
 from nutcracker.image import save_single_frame_image
-from nutcracker.smush import smush, anim, ahdr, fobj
+from nutcracker.smush import anim, ahdr, fobj
+from nutcracker.smush.preset import smush
 
 from typing import List
 
@@ -37,11 +38,17 @@ if __name__ == '__main__':
             im = Image.open(f'out/{basename}/FRME_{idx:05d}.png')
             return list(np.asarray(im))
 
-        def encode_fake(image):
-            encode = get_encoder(37)
+        def encode_fake(image, chunk):
+            meta, data = fobj.unobj(chunk)
+            codec = meta['codec']
+            if codec == 1:
+                return chunk
+            encode = get_encoder(codec)
             loc = {'x1': 0, 'y1': 0, 'x2': len(image[0]), 'y2': len(image)}
-            meta = {'codec': 37, **loc, 'unk1': 0, 'unk2': 0}
-            return fobj.mkobj(meta, encode(image))
+            meta = {'codec': codec, **loc, 'unk1': 0, 'unk2': 0}
+            print('CODEC', meta)
+            encoded = encode(image)
+            return fobj.mkobj(meta, encoded)
 
         for idx, frame in enumerate(mframes):
             print(f'{idx} - {[tag for _, (tag, _) in frame]}')
@@ -49,13 +56,16 @@ if __name__ == '__main__':
             for _, (tag, chunk) in frame:
                 if tag == 'ZFOB':
                     image = get_frame_image(idx)
-                    encoded = encode_fake(image)
+                    decompressed_size = struct.unpack('>I', chunk[:4])[0]
+                    chunk = zlib.decompress(chunk[4:])
+                    assert len(chunk) == decompressed_size
+                    encoded = encode_fake(image, chunk)
                     decompressed_size = struct.pack('>I', len(encoded))
                     fdata += [smush.mktag('ZFOB', decompressed_size + zlib.compress(encoded, 9))]
                     continue
                 if tag == 'FOBJ':
                     image = get_frame_image(idx)
-                    fdata += [smush.mktag('FOBJ', encode_fake(image))]
+                    fdata += [smush.mktag('FOBJ', encode_fake(image, chunk))]
                     continue
                 else:
                     fdata += [smush.mktag(tag, chunk)]
