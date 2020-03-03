@@ -16,6 +16,7 @@ class _ChunkPreset(settings._ChunkSetting, _DefaultOverride):
     # static pass through
     assert_tag = staticmethod(chunk.assert_tag)
     drop_offsets = staticmethod(chunk.drop_offsets)
+    print_chunks = staticmethod(chunk.print_chunks)
 
     from .resource import (
         untag,

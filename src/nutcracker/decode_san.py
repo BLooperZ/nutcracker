@@ -8,7 +8,7 @@ from itertools import chain
 
 from nutcracker.smush import anim, ahdr
 from nutcracker.smush.fobj import unobj, mkobj
-from nutcracker.smush.smush import drop_offsets, print_chunks
+from nutcracker.smush.preset import smush
 from nutcracker.codex.codex import get_decoder
 from nutcracker.image import save_single_frame_image
 from nutcracker.utils.funcutils import flatten
@@ -24,7 +24,7 @@ def delta_color(org_color, delta_color):
     return clip_byte((129 * org_color + delta_color) // 128)
 
 def convert_fobj(datam):
-    meta, data = unobj(datam.read())
+    meta, data = unobj(datam)
     width = meta['x2'] - meta['x1'] if meta['codec'] != 1 else meta['x2']
     height = meta['y2'] - meta['y1'] if meta['codec'] != 1 else meta['y2']
     decode = get_decoder(meta['codec'])
@@ -48,7 +48,7 @@ def generate_frames(header, frames):
     delta_pal: Sequence[int] = []
 
     for idx, frame in enumerate(frames):
-        for _, (tag, chunk) in enumerate(drop_offsets(frame)):
+        for _, (tag, chunk) in enumerate(smush.drop_offsets(frame)):
             if tag == 'NPAL':
                 palette = tuple(chunk)
                 continue
@@ -106,7 +106,7 @@ if __name__ == '__main__':
         with open(filename, 'rb') as res:
             header, frames = anim.parse(res)
             if args.map:
-                list(print_chunks(chain.from_iterable(frames), level=1))
+                list(smush.print_chunks(chain.from_iterable(frames), level=1))
             elif not args.nut:
                 for idx, (palette, screen) in enumerate(generate_frames(header, frames)):
                     if screen:

@@ -1,7 +1,8 @@
 import itertools
 from typing import cast, IO, Iterable, Iterator, Mapping, Tuple, TypeVar
 
-from . import smush, ahdr
+from . import ahdr
+from .preset import smush
 from .types import Chunk, AnimationHeader
 
 T = TypeVar('T')
@@ -29,8 +30,8 @@ def parse(stream: IO[bytes]) -> Tuple[AnimationHeader, Iterator[Iterator[Tuple[i
     anim = smush.assert_tag('ANIM', smush.untag(stream))
     assert stream.read() == b''
 
-    anim_chunks = smush.print_chunks(smush.read_chunks(anim, align=2))
-    header = ahdr.from_bytes(smush.assert_tag('AHDR', next(chunk for _, chunk in anim_chunks)).read())
+    anim_chunks = smush.print_chunks(smush.read_chunks(anim))
+    header = ahdr.from_bytes(smush.assert_tag('AHDR', next(chunk for _, chunk in anim_chunks)))
     assert not (header.dummy2 or header.dummy3)
 
     print(header)
@@ -42,7 +43,7 @@ def parse(stream: IO[bytes]) -> Tuple[AnimationHeader, Iterator[Iterator[Tuple[i
         header.nframes
     )
 
-    chunked_frames = (smush.read_chunks(frame, align=2) for frame in frames)
+    chunked_frames = (smush.read_chunks(frame) for frame in frames)
 
     return header, chunked_frames
 
