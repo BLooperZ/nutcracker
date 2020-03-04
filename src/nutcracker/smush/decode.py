@@ -2,6 +2,20 @@
 
 import io
 import os
+from nutcracker.kernel.types import Element
+
+def check_tag(target: str, elem: Element):
+    if not elem:
+        raise ValueError(f'no 4CC header')
+    if elem.tag != target:
+        raise ValueError(f'expected tag to be {target} but got {elem.tag}')
+    return elem
+
+def read_elements(target: str, elem: Element):
+    return iter(check_tag(target, elem).children)
+
+def read_data(target: str, elem: Element):
+    return check_tag(target, elem).data
 
 if __name__ == '__main__':
     import argparse
@@ -19,10 +33,7 @@ if __name__ == '__main__':
     s = smush.generate_schema(resource)
     pprint.pprint(s)
 
-    anim = next(smush(schema=s).map_chunks(resource))
-    ahdr = smush.find(anim, 'AHDR')
-    for elem in smush.findall(anim, 'FRME'):
+    anim = read_elements('ANIM', next(smush(schema=s).map_chunks(resource)))
+    ahdr = read_data('AHDR', next(anim))
+    for elem in anim:
         smush.render(elem)
-        exit(1)
-
-
