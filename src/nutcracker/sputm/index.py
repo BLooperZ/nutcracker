@@ -163,18 +163,21 @@ if __name__ == '__main__':
     # resource_suffix = '.(a)'
     # read_index = read_index_he
     # chiper_key = 0x69
+    # max_depth = 4
 
-    # Configuration for SCUMM v5-v6 games
-    index_suffix = '.000'
-    resource_suffix = '.001'
-    read_index = read_index_v5tov7
-    chiper_key = 0x69
-
-    # # Configuration for SCUMM v7 games
-    # index_suffix = '.LA0'
-    # resource_suffix = '.LA1'
+    # # Configuration for SCUMM v5-v6 games
+    # index_suffix = '.000'
+    # resource_suffix = '.001'
     # read_index = read_index_v5tov7
-    # chiper_key = 0x00
+    # chiper_key = 0x69
+    # max_depth = 4
+
+    # Configuration for SCUMM v7 games
+    index_suffix = '.LA0'
+    resource_suffix = '.LA1'
+    read_index = read_index_v5tov7
+    chiper_key = 0x00
+    max_depth = 3
 
     index = read_file(args.filename + index_suffix, key=chiper_key)
 
@@ -198,18 +201,18 @@ if __name__ == '__main__':
         gid = idgens.get(chunk.tag)
         gid = gid and gid(parent and parent.attribs['gid'], chunk.data, offset)
 
-        base = chunk.tag + (f'_{gid:04d}' if gid else '')
+        base = chunk.tag + (f'_{gid:04d}' if gid is not None else '')
 
         dirname = parent.attribs['path'] if parent else ''
         path = os.path.join(dirname, base)
         res = {'path': path, 'gid': gid}
 
-        assert path not in paths
+        assert path not in paths, path
         paths[path] = chunk
 
         return res
 
-    root = sputm(max_depth=4).map_chunks(resource, extra=update_element_path)
+    root = sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
     with open('rpdump.xml', 'w') as f:
         for t in root:
             sputm.render(t, stream=f)
