@@ -67,7 +67,7 @@ if __name__ == '__main__':
 
     # akos = check_tag('AKOS', next(sputm.map_chunks(resource)))
     akos = sputm.find('AKOS', sputm.map_chunks(resource))
-    print(akos)
+    # akos = iter(akos)
     akhd = akos_header_from_bytes(sputm.find('AKHD', akos).data)
 
     # colors
