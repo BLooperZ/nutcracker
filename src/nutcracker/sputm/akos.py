@@ -20,20 +20,14 @@ class AkosHeader(NamedTuple):
 
 def akos_header_from_bytes(data: bytes) -> AkosHeader:
     with io.BytesIO(data) as stream:
-        unk_1 = int.from_bytes(stream.read(2), signed=False, byteorder='little')
-        flags = ord(stream.read(1))
-        unk_2 = ord(stream.read(1))
-        num_anims = int.from_bytes(stream.read(2), signed=False, byteorder='little')
-        unk_3 = int.from_bytes(stream.read(2), signed=False, byteorder='little')
-        codec = int.from_bytes(stream.read(2), signed=False, byteorder='little')
-    return AkosHeader(
-        unk_1=unk_1,
-        flags=flags,
-        unk_2=unk_2,
-        num_anims=num_anims,
-        unk_3=unk_3,
-        codec=codec
-    )
+        return AkosHeader(
+            unk_1=int.from_bytes(stream.read(2), signed=False, byteorder='little'),
+            flags=ord(stream.read(1)),
+            unk_2=ord(stream.read(1)),
+            num_anims=int.from_bytes(stream.read(2), signed=False, byteorder='little'),
+            unk_3=int.from_bytes(stream.read(2), signed=False, byteorder='little'),
+            codec=int.from_bytes(stream.read(2), signed=False, byteorder='little')
+        )
 
 def akof_from_bytes(data: bytes) -> Iterator[Tuple[int, int]]:
     with io.BytesIO(data) as stream:
@@ -45,13 +39,6 @@ def akof_from_bytes(data: bytes) -> Iterator[Tuple[int, int]]:
             ci_off = int.from_bytes(entry[4:6], signed=False, byteorder='little')
             print(cd_off, ci_off)
             yield cd_off, ci_off
-
-def check_tag(target: str, elem: Element):
-    if not elem:
-        raise ValueError(f'no 4CC header')
-    if elem.tag != target:
-        raise ValueError(f'expected tag to be {target} but got {elem.tag}')
-    return elem
 
 if __name__ == '__main__':
     import argparse
