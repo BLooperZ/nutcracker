@@ -1,20 +1,22 @@
 import io
 import os
 import sys
-from typing import IO, Iterator, Optional
+from typing import IO, Iterator, Optional, Union
 
 from parse import parse
 
 from .types import Element
 
-def findall(tag: str, root: Optional[Element]) -> Iterator[Element]:
+ElementTree = Union[Iterator[Element], Element, None]
+
+def findall(tag: str, root: ElementTree) -> Iterator[Element]:
     if not root:
         return
-    for c in root.children:
+    for c in root:
         if parse(tag, c.tag, evaluate_result=False):
             yield c
 
-def find(tag: str, root: Optional[Element]) -> Optional[Element]:
+def find(tag: str, root: ElementTree) -> Optional[Element]:
     return next(findall(tag, root), None)
 
 def findpath(path: str, root: Optional[Element]) -> Optional[Element]:

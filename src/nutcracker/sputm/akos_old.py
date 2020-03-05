@@ -8,8 +8,6 @@ from nutcracker.utils.funcutils import grouper, flatten
 
 from typing import Iterator, NamedTuple, Sequence, Tuple
 
-from nutcracker.kernel.types import Element
-
 class AkosHeader(NamedTuple):
     unk_1: int
     flags: int
@@ -17,6 +15,10 @@ class AkosHeader(NamedTuple):
     num_anims: int
     unk_3: int
     codec: int
+
+def assert_stop_iter(iter: Iterator) -> None:
+    for chunk in chunks:
+        raise ValueError(f'expected EOF, got {chunk}')
 
 def akos_header_from_bytes(data: bytes) -> AkosHeader:
     with io.BytesIO(data) as stream:
@@ -46,13 +48,6 @@ def akof_from_bytes(data: bytes) -> Iterator[Tuple[int, int]]:
             print(cd_off, ci_off)
             yield cd_off, ci_off
 
-def check_tag(target: str, elem: Element):
-    if not elem:
-        raise ValueError(f'no 4CC header')
-    if elem.tag != target:
-        raise ValueError(f'expected tag to be {target} but got {elem.tag}')
-    return elem
-
 if __name__ == '__main__':
     import argparse
 
@@ -63,34 +58,32 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     with open(args.filename, 'rb') as res:
-        resource = res.read()
+        akos = sputm.assert_tag('AKOS', sputm.untag(res))
+        assert res.read() == b''
+        # chunks = (assert_tag('LFLF', chunk) for chunk in read_chunks(tlkb))
+        chunks = sputm.drop_offsets(sputm.read_chunks(akos))
+        akhd = akos_header_from_bytes(sputm.assert_tag('AKHD', next(chunks)))
+        print(akhd)
 
-    # akos = check_tag('AKOS', next(sputm.map_chunks(resource)))
-    akos = sputm.find('AKOS', sputm.map_chunks(resource))
-    print(akos)
-    akhd = akos_header_from_bytes(sputm.find('AKHD', akos).data)
+        # colors
+        akpl = sputm.assert_tag('AKPL', next(chunks))
+        rgbs = grouper(sputm.assert_tag('RGBS', next(chunks)), 3)
+        palette = tuple(zip(akpl, rgbs))
+        print(palette)
 
-    # colors
-    akpl = sputm.find('AKPL', akos)
-    rgbs = sputm.find('RGBS', akos)
-    palette = tuple(zip(akpl, rgbs))
-    print(palette)
+        # scripts?
+        aksq = sputm.assert_tag('AKSQ', next(chunks))
+        akch = sputm.assert_tag('AKCH', next(chunks))
 
-    # scripts?
-    aksq = sputm.find('AKSQ', akos)
-    # akch = sputm.find('AKCH', akos)
+        # image
+        akof = list(akof_from_bytes(sputm.assert_tag('AKOF', next(chunks))))
+        akci = sputm.assert_tag('AKCI', next(chunks))
+        akcd = sputm.assert_tag('AKCD', next(chunks))
+        ends = akof[1:] + [(len(akcd), len(akci))]
+        for (cd_start, ci_start), (cd_end, ci_end) in zip(akof, ends):
+            ci = akci[ci_start:ci_end]
+            # print(len(ci))
+            cd = akcd[cd_start:cd_end]
+            # print(cd, ci)
 
-    # image
-    akof = list(akof_from_bytes(sputm.find('AKOF', akos).data))
-    akci = sputm.find('AKCI', akos)
-    akcd = sputm.find('AKCD', akos)
-    akct = sputm.find('AKCT', akos)
-
-    print(akof, akci, akcd)
-
-    ends = akof[1:] + [(len(akcd.data), len(akci.data))]
-    for (cd_start, ci_start), (cd_end, ci_end) in zip(akof, ends):
-        ci = akci.data[ci_start:ci_end]
-        print(len(ci))
-        cd = akcd.data[cd_start:cd_end]
-        print(cd, ci)
+        assert_stop_iter(chunks)
