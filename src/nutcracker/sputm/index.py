@@ -65,6 +65,9 @@ def read_index_v5tov7(root):
         elif t.tag == 'DROO':
             droo = dict(read_directory_leg(t.data))
             pprint.pprint(droo)
+        elif t.tag == 'DRSC':
+            drsc = dict(read_directory_leg(t.data))
+            pprint.pprint(drsc)
         elif t.tag == 'DSCR':
             dscr = dict(read_directory_leg(t.data))
             pprint.pprint(dscr)
