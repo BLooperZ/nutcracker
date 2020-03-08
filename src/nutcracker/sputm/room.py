@@ -10,7 +10,7 @@ import numpy as np
 from nutcracker.graphics.image import convert_to_pil_image
 from nutcracker.codex.codex import decode1
 
-from . import sputm
+from .preset import sputm
 
 TRANSPARENCY = 255
 
@@ -140,6 +140,7 @@ def fake_encode_strip(data, height, width):
         return s.getvalue()
 
 def parse_strip(height, width, data):
+    print((height, width))
     with io.BytesIO(data) as s:
         code = s.read(1)[0]
         print(code)
@@ -148,7 +149,9 @@ def parse_strip(height, width, data):
         # TODO: handle transparency
         # assert not tr
 
-        decoded = decode_method(s, width * height, palen)
+        # try:
+
+        decoded = decode_method(s, width * height, palen)  # [:width * height]
 
         # if decode_method == decode_basic:
         #     with io.BytesIO(decoded) as dec_stream:
@@ -161,25 +164,27 @@ def parse_strip(height, width, data):
 
         order = 'C' if direction == 'HORIZONTAL' else 'F'
         return np.frombuffer(decoded, dtype=np.uint8).reshape((height, width), order=order)
-        # return np.zeros((height, 8), dtype=np.uint8)
+        # # return np.zeros((height, 8), dtype=np.uint8)
+
+        # except Exception as exc:
+        #     logging.exception(exc)
+        #     return np.zeros((height, width), dtype=np.uint8)
 
 def read_strip(stream, offset, end):
     stream.seek(offset, io.SEEK_SET)
     return stream.read(end - offset)
-    return 
 
 def decode_smap(height, width, data):
     strip_width = 8
 
     num_strips = width // strip_width
     with io.BytesIO(data) as s:
-        # slen = read_uint32le(s)
-        # print(slen)
         offs = [(read_uint32le(s) - 8)  for _ in range(num_strips)]
         index = list(zip(offs, offs[1:] + [len(data)]))
-        strips = (read_strip(s, offset, end) for offset, end in index)
-        return np.hstack([parse_strip(height, strip_width, data) for data in strips])
-        # print(s.read())
+        print(s.tell(), index[0])
+
+    strips = (data[offset:end] for offset, end in index)
+    return np.hstack([parse_strip(height, strip_width, data) for data in strips])
 
 def read_room_background(rdata, width, height, zbuffers):
     image, *zplanes = sputm.drop_offsets(sputm.print_chunks(sputm.read_chunks(rdata), level=2))
@@ -260,7 +265,7 @@ def parse_room_noimgs(room):
 if __name__ == '__main__':
     import argparse
 
-    from . import sputm
+    from .preset import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
