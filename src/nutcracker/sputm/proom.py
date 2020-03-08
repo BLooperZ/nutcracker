@@ -160,20 +160,53 @@ def read_imhd(data):
             pass
         return obj_id, obj_height, obj_width
 
+def read_imhd_v8(data):
+    # pylint: disable=unused-variable
+    with io.BytesIO(data) as stream:
+        name = stream.read(32).split(b'\0')[0].decode()
+        unk_1 = read_uint32le(stream)
+        unk_2 = read_uint32le(stream)
+        version = read_uint32le(stream)
+        image_count = read_uint32le(stream)
+        obj_x = read_uint32le(stream)
+        obj_y = read_uint32le(stream)
+        obj_width = read_uint32le(stream)
+        obj_height = read_uint32le(stream)
+        actor_dir = read_uint32le(stream)
+        flags = read_uint32le(stream)
+        obj_hotspots = stream.read()
+        if obj_hotspots:
+            # TODO: read hotspots
+            pass
+        return name, obj_height, obj_width
+
 def read_objects(lflf):
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
     # trns = sputm.find('TRNS', room).data  # pylint: disable=unused-variable
     palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).data
 
     for obim in sputm.findall('OBIM', room):
-        obj_id, obj_height, obj_width = read_imhd(sputm.find('IMHD', obim).data)
+        imhd = sputm.find('IMHD', obim).data
+        if len(imhd) == 16:
+            obj_id, obj_height, obj_width = read_imhd(imhd)
 
-        for imxx in sputm.findall('IM{:02x}', obim):
-            im = convert_to_pil_image(
-                read_room_background(imxx.children[0], obj_width, obj_height, 0)
-            )
-            im.putpalette(palette)
-            yield obj_id, imxx.tag, im
+            for imxx in sputm.findall('IM{:02x}', obim):
+                im = convert_to_pil_image(
+                    read_room_background(imxx.children[0], obj_width, obj_height, 0)
+                )
+                im.putpalette(palette)
+                yield obj_id, imxx.tag, im
+        else:
+            # Game version == 8
+            name, obj_height, obj_width = read_imhd_v8(imhd)
+            print(name, obj_height, obj_width)
+            for idx, imag in enumerate(sputm.findall('IMAG', obim)):
+                iim = sputm.find('WRAP', imag)
+                im = convert_to_pil_image(
+                    read_room_background_v8(iim.children[1], obj_width, obj_height, 0)
+                )
+                im.putpalette(palette)
+                yield 0, f'{name}_STATE_{idx}', im
 
 if __name__ == '__main__':
     import argparse
