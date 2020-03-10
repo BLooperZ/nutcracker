@@ -121,25 +121,28 @@ def read_room(lflf):
         zbuffers = 1 + int.from_bytes(rmih.data, signed=False, byteorder='little')
         assert 1 <= zbuffers <= 8
 
-        imxx = sputm.find('IM00', rmim)
-        im = convert_to_pil_image(
-            read_room_background(imxx.children[0], rwidth, rheight, zbuffers)
-        )
-        zpxx = list(sputm.findall('ZP{:02x}', imxx))
-        assert len(zpxx) == zbuffers - 1
-        im.putpalette(palette)
-        return im
-
+        for idx, imxx in enumerate(sputm.find('IM{:02x}', rmim)):
+            assert idx == 0, idx
+            assert imxx.tag == 'IM00', imxx.tag
+            im = convert_to_pil_image(
+                read_room_background(imxx.children[0], rwidth, rheight, zbuffers)
+            )
+            zpxx = list(sputm.findall('ZP{:02x}', imxx))
+            assert len(zpxx) == zbuffers - 1
+            im.putpalette(palette)
+            yield im
     else:
         # TODO: check for multiple IMAG in room bg (different image state)
-        imag = sputm.findpath('IMAG/WRAP', room)
-        print(rwidth, rheight)
-        bgim = read_room_background_v8(imag.children[1], rwidth, rheight, 0)
-        if bgim is None:
-            return None
-        im = convert_to_pil_image(bgim)
-        im.putpalette(palette)
-        return im
+        for idx, imag in enumerate(sputm.findall('IMAG', room)):
+            wrap = sputm.find('WRAP', imag)
+            assert idx == 0
+            print(rwidth, rheight)
+            bgim = read_room_background_v8(wrap.children[1], rwidth, rheight, 0)
+            if bgim is None:
+                continue
+            im = convert_to_pil_image(bgim)
+            im.putpalette(palette)
+            yield idx, im
 
 def read_imhd(data):
     # pylint: disable=unused-variable
@@ -201,6 +204,7 @@ def read_objects(lflf):
             name, obj_height, obj_width = read_imhd_v8(imhd)
             print(name, obj_height, obj_width)
             for idx, imag in enumerate(sputm.findall('IMAG', obim)):
+                assert idx == 0
                 iim = sputm.find('WRAP', imag)
                 im = convert_to_pil_image(
                     read_room_background_v8(iim.children[1], obj_width, obj_height, 0)
@@ -222,9 +226,8 @@ if __name__ == '__main__':
         root = sputm.find('LECF', sputm.map_chunks(res.read()))
         assert root
         for idx, lflf in enumerate(sputm.findall('LFLF', root)):
-            room_bg = read_room(lflf)
-            if room_bg is not None:
-                room_bg.save(f'LFLF_{1 + idx:04d}_ROOM_RMIM.png')
+            for bg_idx, room_bg in read_room(lflf):
+                room_bg.save(f'LFLF_{1 + idx:04d}_ROOM_RMIM_{bg_idx:04d}.png')
 
             for obj_idx, tag, im in read_objects(lflf):
                 im.save(f'LFLF_{1 + idx:04d}_ROOM_OBIM_{obj_idx:04d}_{tag}.png')
