@@ -258,11 +258,11 @@ if __name__ == '__main__':
     root = sputm.find('LECF', sputm.map_chunks(resource))
     assert root
     for idx, lflf in enumerate(sputm.findall('LFLF', root)):
-        for bg_idx, room_bg in read_room(lflf):
-            room_bg.save(f'LFLF_{1 + idx:04d}_ROOM_RMIM_{bg_idx:04d}.png')
+        for oidx, (bg_idx, room_bg) in enumerate(read_room(lflf)):
+            room_bg.save(f'LFLF_{1 + idx:04d}_ROOM_RMIM_{bg_idx:04d}_{oidx:04d}.png')
 
-        for obj_idx, tag, im in read_objects(lflf):
-            im.save(f'LFLF_{1 + idx:04d}_ROOM_OBIM_{obj_idx:04d}_{tag}.png')
+        for oidx, (obj_idx, tag, im) in enumerate(read_objects(lflf)):
+            im.save(f'LFLF_{1 + idx:04d}_ROOM_OBIM_{obj_idx:04d}_{tag}_{oidx:04d}.png')
 
         # for lflf in sputm.findall('LFLF', t):
         #     tree = sputm.findpath('ROOM/OBIM/IM{:02x}', lflf)
