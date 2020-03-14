@@ -101,7 +101,7 @@ if __name__ == '__main__':
     import os
 
     from nutcracker.graphics import grid
-    from . import sputm
+    from .preset import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
