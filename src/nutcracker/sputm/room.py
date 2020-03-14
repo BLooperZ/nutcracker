@@ -177,6 +177,9 @@ def read_strip(stream, offset, end):
 def decode_smap(height, width, data):
     strip_width = 8
 
+    if width == 0 or height == 0:
+        return None
+
     num_strips = width // strip_width
     with io.BytesIO(data) as s:
         offs = [(read_uint32le(s) - 8)  for _ in range(num_strips)]

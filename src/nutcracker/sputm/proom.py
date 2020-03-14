@@ -49,7 +49,7 @@ def decode_smap_v8(height, width, data):
     # num_strips = len(offs.data) // 4
     # print(width, height, num_strips)
     if len(offs.data) == 0:
-        # assert height == 0 or width == 0
+        assert height == 0 or width == 0
         return None
 
     # strip_width = width // num_strips
@@ -121,16 +121,17 @@ def read_room(lflf):
         zbuffers = 1 + int.from_bytes(rmih.data, signed=False, byteorder='little')
         assert 1 <= zbuffers <= 8
 
-        for idx, imxx in enumerate(sputm.find('IM{:02x}', rmim)):
+        for idx, imxx in enumerate(sputm.findall('IM{:02x}', rmim)):
             assert idx == 0, idx
             assert imxx.tag == 'IM00', imxx.tag
-            im = convert_to_pil_image(
-                read_room_background(imxx.children[0], rwidth, rheight, zbuffers)
-            )
+            bgim = read_room_background(imxx.children[0], rwidth, rheight, zbuffers)
+            if bgim is None:
+                continue
+            im = convert_to_pil_image(bgim)
             zpxx = list(sputm.findall('ZP{:02x}', imxx))
             assert len(zpxx) == zbuffers - 1
             im.putpalette(palette)
-            yield im
+            yield idx, im
     else:
         # TODO: check for multiple IMAG in room bg (different image state)
         for idx, imag in enumerate(sputm.findall('IMAG', room)):
@@ -157,6 +158,25 @@ def read_imhd(data):
         obj_y = read_uint16le(stream)
         obj_width = read_uint16le(stream)
         obj_height = read_uint16le(stream)
+        obj_hotspots = stream.read()
+        if obj_hotspots:
+            # TODO: read hotspots
+            pass
+        return obj_id, obj_height, obj_width
+
+def read_imhd_v7(data):
+    # pylint: disable=unused-variable
+    with io.BytesIO(data) as stream:
+        version = read_uint32le(stream)
+        obj_id = read_uint16le(stream)
+        image_count = read_uint16le(stream)
+        obj_x = read_uint16le(stream)
+        obj_y = read_uint16le(stream)
+        obj_width = read_uint16le(stream)
+        obj_height = read_uint16le(stream)
+        obj_unknown = stream.read(3)
+        actor_dir = stream.read(1)[0]
+        num_hotspots = read_uint16le(stream)
         obj_hotspots = stream.read()
         if obj_hotspots:
             # TODO: read hotspots
@@ -194,9 +214,17 @@ def read_objects(lflf):
             obj_id, obj_height, obj_width = read_imhd(imhd)
 
             for imxx in sputm.findall('IM{:02x}', obim):
-                im = convert_to_pil_image(
-                    read_room_background(imxx.children[0], obj_width, obj_height, 0)
-                )
+                bgim = read_room_background(imxx.children[0], obj_width, obj_height, 0)
+                im = convert_to_pil_image(bgim)
+                im.putpalette(palette)
+                yield obj_id, imxx.tag, im
+        elif len(imhd) < 80:
+            # Game version == 7
+            obj_id, obj_height, obj_width = read_imhd_v7(imhd)
+
+            for imxx in sputm.findall('IM{:02x}', obim):
+                bgim = read_room_background(imxx.children[0], obj_width, obj_height, 0)
+                im = convert_to_pil_image(bgim)
                 im.putpalette(palette)
                 yield obj_id, imxx.tag, im
         else:
@@ -206,9 +234,8 @@ def read_objects(lflf):
             for idx, imag in enumerate(sputm.findall('IMAG', obim)):
                 assert idx == 0
                 iim = sputm.find('WRAP', imag)
-                im = convert_to_pil_image(
-                    read_room_background_v8(iim.children[1], obj_width, obj_height, 0)
-                )
+                bgim = read_room_background_v8(iim.children[1], obj_width, obj_height, 0)
+                im = convert_to_pil_image(bgim)
                 im.putpalette(palette)
                 yield 0, f'{name}_STATE_{idx}', im
 
@@ -216,24 +243,29 @@ if __name__ == '__main__':
     import argparse
     import pprint
 
+    from nutcracker.chiper import xor
+
     from .preset import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
+    parser.add_argument('--chiper-key', default='0x00', type=str, help='xor key')
     args = parser.parse_args()
 
     with open(args.filename, 'rb') as res:
-        root = sputm.find('LECF', sputm.map_chunks(res.read()))
-        assert root
-        for idx, lflf in enumerate(sputm.findall('LFLF', root)):
-            for bg_idx, room_bg in read_room(lflf):
-                room_bg.save(f'LFLF_{1 + idx:04d}_ROOM_RMIM_{bg_idx:04d}.png')
+        resource = xor.read(res, key=int(args.chiper_key, 16))
 
-            for obj_idx, tag, im in read_objects(lflf):
-                im.save(f'LFLF_{1 + idx:04d}_ROOM_OBIM_{obj_idx:04d}_{tag}.png')
+    root = sputm.find('LECF', sputm.map_chunks(resource))
+    assert root
+    for idx, lflf in enumerate(sputm.findall('LFLF', root)):
+        for bg_idx, room_bg in read_room(lflf):
+            room_bg.save(f'LFLF_{1 + idx:04d}_ROOM_RMIM_{bg_idx:04d}.png')
 
-            # for lflf in sputm.findall('LFLF', t):
-            #     tree = sputm.findpath('ROOM/OBIM/IM{:02x}', lflf)
-            #     sputm.render(tree)
+        for obj_idx, tag, im in read_objects(lflf):
+            im.save(f'LFLF_{1 + idx:04d}_ROOM_OBIM_{obj_idx:04d}_{tag}.png')
 
-        print('==========')
+        # for lflf in sputm.findall('LFLF', t):
+        #     tree = sputm.findpath('ROOM/OBIM/IM{:02x}', lflf)
+        #     sputm.render(tree)
+
+    print('==========')
