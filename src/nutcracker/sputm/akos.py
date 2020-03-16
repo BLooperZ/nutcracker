@@ -40,18 +40,20 @@ def akof_from_bytes(data: bytes) -> Iterator[Tuple[int, int]]:
             print(cd_off, ci_off)
             yield cd_off, ci_off
 
-if __name__ == '__main__':
-    import argparse
+def decode1(width, height, data):
+    print(data)
 
-    from .preset import sputm
+def decode_frame(akhd, ci, cd):
 
-    parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('filename', help='filename to read from')
-    args = parser.parse_args()
+    width = int.from_bytes(ci[0:2], signed=False, byteorder='little')
+    heigth = width = int.from_bytes(ci[2:4], signed=False, byteorder='little')
 
-    with open(args.filename, 'rb') as res:
-        resource = res.read()
+    if akhd.codec == 1:
+        return decode1(width, heigth, cd)
+    else:
+        raise NotImplementedError()
 
+def read_akos_resource(resource):
     # akos = check_tag('AKOS', next(sputm.map_chunks(resource)))
     akos = sputm.find('AKOS', sputm.map_chunks(resource))
     # akos = iter(akos)
@@ -77,7 +79,24 @@ if __name__ == '__main__':
 
     ends = akof[1:] + [(len(akcd.data), len(akci.data))]
     for (cd_start, ci_start), (cd_end, ci_end) in zip(akof, ends):
-        ci = akci.data[ci_start:ci_end]
-        print(len(ci))
+        ci = akci.data[ci_start:ci_start+8]
+        # print(len(ci))
         cd = akcd.data[cd_start:cd_end]
-        print(cd, ci)
+        decode_frame(akhd, ci, cd)
+
+    return akhd, palette, aksq
+
+
+if __name__ == '__main__':
+    import argparse
+
+    from .preset import sputm
+
+    parser = argparse.ArgumentParser(description='read smush file')
+    parser.add_argument('filename', help='filename to read from')
+    args = parser.parse_args()
+
+    with open(args.filename, 'rb') as res:
+        resource = res.read()
+
+    read_akos_resource(resource)

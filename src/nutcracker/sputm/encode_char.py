@@ -53,7 +53,7 @@ if __name__ == '__main__':
     import argparse
     import os
 
-    from . import sputm
+    from .preset import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
