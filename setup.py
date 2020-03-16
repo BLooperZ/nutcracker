@@ -5,7 +5,7 @@ with open('README.md', 'r') as fh:
 
 setuptools.setup(
     name='nutcracker',
-    version='0.3.11',
+    version='0.3.12',
     author='Niv Baehr (BLooperZ)',
     description='Tools for editing resources in SCUMM games.',
     long_description=long_description,
