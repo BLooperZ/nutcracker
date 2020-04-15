@@ -528,6 +528,7 @@ def fake_encode37(out):
     encoding = b'\0\1'
     seq_nb = b'\0\0'
     decoded_size = struct.pack('<I', width * height)
-    unknown = b'\0\0\0'
+    unknown = b'\0\0\0\0'
     mask_flags = b'\1'
-    return encoding + seq_nb + decoded_size + unknown + mask_flags + b'\0\0\0' + b''.join(out)
+    zeros = b'\0\0\0'
+    return encoding + seq_nb + decoded_size + unknown + mask_flags + zeros + b''.join(out)
