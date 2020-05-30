@@ -49,6 +49,8 @@ def counter(it):
 
 def read_inner_uint16le(pid, data, off):
     res = int.from_bytes(data[8:10], byteorder='little', signed=False)
+    # TODO: fix offset for FT + DIG as in the following commented line
+    # res = int.from_bytes(data[12:14], byteorder='little', signed=False)
     return res
 
 def read_uint8le(pid, data, off):
@@ -248,6 +250,7 @@ if __name__ == '__main__':
 
     basedir = os.path.basename(args.filename)
     root = sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
+    os.makedirs(basedir, exist_ok=True)
     with open(os.path.join(basedir, 'rpdump.xml'), 'w') as f:
         for t in root:
             sputm.render(t, stream=f)
