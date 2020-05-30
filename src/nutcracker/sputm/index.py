@@ -27,6 +27,12 @@ def read_anam(data):
         names = [s.read(9).split(b'\0')[0].decode() for i in range(num)]
         return enumerate(names)
 
+def read_dlfl(data):
+    with io.BytesIO(data) as s:
+        num = int.from_bytes(s.read(2), byteorder='little', signed=False)
+        offs = [int.from_bytes(s.read(4), byteorder='little', signed=False) for i in range(num)]
+        return enumerate(offs)
+
 # def read_directory(data):
 #     with io.BytesIO(data) as s:
 #         num = int.from_bytes(s.read(2), byteorder='little', signed=False)
@@ -87,17 +93,18 @@ def read_index_v5tov7(root):
             pprint.pprint(anam)
     return {
         'LFLF': counter(k for k, v  in droo.items() if v != (0, 0)),
-        'OBIM': read_inner_uint16le,
+        'OBIM': read_inner_uint16le,  # check gid for DIG and FT
         'OBCD': read_inner_uint16le,
         'LSCR': read_uint8le,
         'SCRP': compare_pid_off(dscr),
         'CHAR': compare_pid_off(dchr),
         'SOUN': compare_pid_off(dsou),
         'COST': compare_pid_off(dcos),
-        'AKOS': counter(itertools.count(1))  # TODO
+        'AKOS': compare_pid_off(dcos),
     }
 
 def read_index_he(root):
+    dtlk = None  # prevent `referenced before assignment` error
     for t in root:
         sputm.render(t)
         if t.tag == 'RNAM':
@@ -120,16 +127,39 @@ def read_index_he(root):
         elif t.tag == 'DIRN':
             dsou = dict(read_directory_leg(t.data))
             pprint.pprint(dsou)
+        elif t.tag == 'DIRT':
+            dtlk = dict(read_directory_leg(t.data))
+            pprint.pprint(dtlk)
+        elif t.tag == 'DIRM':
+            dmul = dict(read_directory_leg(t.data))
+            pprint.pprint(dmul)
+        elif t.tag == 'DIRR':
+            drmd = dict(read_directory_leg(t.data))
+            pprint.pprint(drmd)
+        elif t.tag == 'DISK':
+            # TODO
+            # all values are `idx: (1, 0)`
+            disk = dict(read_directory_leg(t.data))
+            pprint.pprint(disk)
+        elif t.tag == 'DLFL':
+            dlfl = dict(read_dlfl(t.data))
+            pprint.pprint(dlfl)
+            pass
     return {
         'LFLF': counter(k for k, v  in droo.items() if v != (0, 0)),
         'OBIM': read_inner_uint16le,
         'OBCD': read_inner_uint16le,
         'LSCR': read_uint8le,
+        'LSC2': read_uint8le,
         'SCRP': compare_pid_off(dscr),
         'CHAR': compare_pid_off(dchr),
+        'DIGI': compare_pid_off(dsou),
         'SOUN': compare_pid_off(dsou),
-        'COST': compare_pid_off(dcos),
-        'AKOS': counter(itertools.count(1))  # TODO
+        'AKOS': compare_pid_off(dcos),
+        'MULT': compare_pid_off(dmul),
+        'AWIZ': compare_pid_off(dmul),
+        'RMDA': compare_pid_off(drmd),
+        'TALK': compare_pid_off(dtlk),
     }
 
 def read_file(path: str, key: int = 0x00) -> bytes:
@@ -137,15 +167,16 @@ def read_file(path: str, key: int = 0x00) -> bytes:
         return xor.read(res, key=key)
 
 
-def save_tree(cfg, element):
+def save_tree(cfg, element, basedir='.'):
     if not element:
         return
+    path = os.path.join(basedir, element.attribs['path'])
     if element.children:
-        os.makedirs(element.attribs['path'], exist_ok=True)
+        os.makedirs(path, exist_ok=True)
         for c in element.children:
-            save_tree(cfg, c)
+            save_tree(cfg, c, basedir=basedir)
     else:
-        with open(element.attribs['path'], 'wb') as f:
+        with open(path, 'wb') as f:
             f.write(cfg.mktag(element.tag, element.data))
 
 
@@ -161,9 +192,9 @@ if __name__ == '__main__':
     parser.add_argument('filename', help='filename to read from')
     args = parser.parse_args()
 
-    # Configuration for HE games
+    # # Configuration for HE games
     # index_suffix = '.HE0'
-    # resource_suffix = '.(a)'
+    # resource_suffix = '.HE1' # '.(a)'
     # read_index = read_index_he
     # chiper_key = 0x69
     # max_depth = 4
@@ -201,10 +232,10 @@ if __name__ == '__main__':
     paths: Dict[str, Chunk] = {}
 
     def update_element_path(parent, chunk, offset):
-        gid = idgens.get(chunk.tag)
-        gid = gid and gid(parent and parent.attribs['gid'], chunk.data, offset)
+        get_gid = idgens.get(chunk.tag)
+        gid = get_gid and get_gid(parent and parent.attribs['gid'], chunk.data, offset)
 
-        base = chunk.tag + (f'_{gid:04d}' if gid is not None else '')
+        base = chunk.tag + (f'_{gid:04d}' if gid is not None else '' if not get_gid else f'_o_{offset:04X}')
 
         dirname = parent.attribs['path'] if parent else ''
         path = os.path.join(dirname, base)
@@ -215,8 +246,9 @@ if __name__ == '__main__':
 
         return res
 
+    basedir = os.path.basename(args.filename)
     root = sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
-    with open('rpdump.xml', 'w') as f:
+    with open(os.path.join(basedir, 'rpdump.xml'), 'w') as f:
         for t in root:
             sputm.render(t, stream=f)
-            save_tree(sputm, t)
+            save_tree(sputm, t, basedir=basedir)

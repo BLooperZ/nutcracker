@@ -63,6 +63,7 @@ SCHEMA = {
         'ENCD',
         'NLSC',
         'LSC2',
+        'LSCR',
         'POLD'
     },
     'RMHD': DATA,
