@@ -4,7 +4,13 @@ import os
 import struct
 from functools import partial
 
+import numpy as np
+
 from nutcracker.utils.funcutils import grouper, flatten
+from nutcracker.graphics.image import convert_to_pil_image
+from nutcracker.codex import codex
+from nutcracker.codex import bomb
+from nutcracker.sputm import bpp_codec
 
 from typing import Iterator, NamedTuple, Sequence, Tuple
 
@@ -40,17 +46,79 @@ def akof_from_bytes(data: bytes) -> Iterator[Tuple[int, int]]:
             print(cd_off, ci_off)
             yield cd_off, ci_off
 
-def decode1(width, height, data):
-    print(data)
+def decode1(width, height, pal, data):
+    if len(pal.data) == 32:
+        shift = 3
+        mask = 0x07
+    elif len(pal.data) == 64:
+        shift = 2
+        mask = 0x03
+    else:
+        shift = 4
+        mask = 0x0F
 
-def decode_frame(akhd, ci, cd):
+    _height = height
+    _width = width
+    _cur_x = 0
+    _dest_ptr = 0
+
+    out = [0 for _ in range(width) for _ in range(height)]
+
+    with io.BytesIO(data) as stream:
+        while True:
+            reps = stream.read(1)[0]
+            color = reps >> shift
+            reps &= mask
+
+            if reps == 0:
+                reps = stream.read(1)[0]
+
+            if reps == 0:
+                _width -= 1
+                continue
+
+            for b in range(reps):
+                out[_dest_ptr] = color
+                _dest_ptr += width
+
+                _height -= 1
+                if _height == 0:
+                    _height = height
+                    _cur_x += 1
+                    _dest_ptr = _cur_x
+
+                    _width -= 1
+                    if _width == 0:
+                        return convert_to_pil_image(out, size=(width, height))
+
+def decode5(width, height, pal, data):
+    with io.BytesIO(data) as stream:
+        lines = [
+            stream.read(
+                int.from_bytes(stream.read(2), signed=False, byteorder='little')
+            ) for _ in range(height)
+        ]
+
+    out = [bomb.decode_line(line, width) for line in lines]
+
+    return convert_to_pil_image(out, size=(width, height))
+
+
+def decode_frame(akhd, ci, cd, palette):
 
     width = int.from_bytes(ci[0:2], signed=False, byteorder='little')
-    heigth = width = int.from_bytes(ci[2:4], signed=False, byteorder='little')
+    height = int.from_bytes(ci[2:4], signed=False, byteorder='little')
 
     if akhd.codec == 1:
-        return decode1(width, heigth, cd)
+        try:
+            return decode1(width, height, palette, cd)
+        except IndexError:
+            # TODO: fix failure on COMI.LA2 at AKOS_0213
+            return convert_to_pil_image([[0]])
+    elif akhd.codec == 5:
+        return decode5(width, height, palette, cd)
     else:
+        print(akhd.codec)
         raise NotImplementedError()
 
 def read_akos_resource(resource):
@@ -61,9 +129,14 @@ def read_akos_resource(resource):
 
     # colors
     akpl = sputm.find('AKPL', akos)
+    print(akpl)
     rgbs = sputm.find('RGBS', akos)
-    palette = tuple(zip(akpl, rgbs))
-    print(palette)
+    print(rgbs)
+    # palette = tuple(zip(akpl, rgbs))
+    # for x in akpl.data:
+    #     print(x)
+    # print(palette)
+    # exit(1)
 
     # scripts?
     aksq = sputm.find('AKSQ', akos)
@@ -82,21 +155,35 @@ def read_akos_resource(resource):
         ci = akci.data[ci_start:ci_start+8]
         # print(len(ci))
         cd = akcd.data[cd_start:cd_end]
-        decode_frame(akhd, ci, cd)
+        decoded = decode_frame(akhd, ci, cd, akpl)
+        decoded.putpalette(rgbs.data)
+        yield decoded
 
-    return akhd, palette, aksq
+    return akhd, akpl, rgbs, aksq
 
 
 if __name__ == '__main__':
     import argparse
+    import os
+    import glob
 
     from .preset import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('filename', help='filename to read from')
+    parser.add_argument('files', nargs='+', help='files to read from')
     args = parser.parse_args()
 
-    with open(args.filename, 'rb') as res:
-        resource = res.read()
 
-    read_akos_resource(resource)
+    files = set(flatten(glob.iglob(r) for r in args.files))
+    print(files)
+    for filename in files:
+
+        print(filename)
+
+        with open(filename, 'rb') as res:
+            resource = res.read()
+
+        os.makedirs('AKOS_out', exist_ok=True)
+
+        for idx, im in enumerate(read_akos_resource(resource)):
+            im.save(f'AKOS_out/{os.path.basename(filename)}_aframe_{idx}.png')
