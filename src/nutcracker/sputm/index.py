@@ -3,7 +3,13 @@
 import io
 import itertools
 import os
+import pprint
+import operator
+from functools import partial
+from itertools import takewhile
+
 from nutcracker.chiper import xor
+from .preset import sputm
 
 def read_directory_leg(data):
     with io.BytesIO(data) as s:
@@ -20,6 +26,21 @@ def read_rnam(data, key=0xFF):
                 break
             name = xor.read(s, 9, key=key).split(b'\0')[0].decode()
             yield rnum, name
+
+def readcstr(stream, read_fn):
+    bound_read = iter(partial(read_fn, stream, 1), b'')
+    res = b''.join(takewhile(partial(operator.ne, b'\00'), bound_read))
+    return res.decode() if res else None
+
+def read_rnam_he(data, key=0xFF):
+    with io.BytesIO(data) as s:
+        while True:
+            rnum = int.from_bytes(s.read(2), byteorder='little', signed=False)
+            if not rnum:
+                break
+            name = readcstr(s, partial(xor.read, key=key))
+            yield rnum, name
+
 
 def read_anam(data):
     with io.BytesIO(data) as s:
@@ -110,7 +131,7 @@ def read_index_he(root):
     for t in root:
         sputm.render(t)
         if t.tag == 'RNAM':
-            rnam = dict(read_rnam(t.data, key=0x00))
+            rnam = dict(read_rnam_he(t.data, key=0x00))
             pprint.pprint(rnam)
         elif t.tag == 'MAXS':
             print('MAXS not yet supported')
@@ -184,15 +205,15 @@ def save_tree(cfg, element, basedir='.'):
 
 if __name__ == '__main__':
     import argparse
-    import pprint
     from typing import Dict
 
-    from .preset import sputm
     from .types import Chunk
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
     args = parser.parse_args()
+    
+    basedir = os.path.basename(args.filename)
 
     # # Configuration for HE games
     # index_suffix = '.HE0'
@@ -222,6 +243,13 @@ if __name__ == '__main__':
 
     root = sputm(schema=s).map_chunks(index)
 
+    # root = list(root)
+    # os.makedirs(basedir, exist_ok=True)
+    # with open(os.path.join(basedir, 'index.xml'), 'w') as f:
+    #     for t in root:
+    #         sputm.render(t, stream=f)
+    #         print(t, t.data)
+
     idgens = read_index(root)
 
     resource = read_file(args.filename + resource_suffix, key=chiper_key)
@@ -248,7 +276,6 @@ if __name__ == '__main__':
 
         return res
 
-    basedir = os.path.basename(args.filename)
     root = sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
     os.makedirs(basedir, exist_ok=True)
     with open(os.path.join(basedir, 'rpdump.xml'), 'w') as f:
