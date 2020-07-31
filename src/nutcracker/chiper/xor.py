@@ -5,6 +5,9 @@ CHIPER_KEY = 0x69
 def read(stream: IO[bytes], size: Optional[int] = None, key = CHIPER_KEY):
     return bytes(b ^ key for b in stream.read(size))  # type: ignore  # None reads until EOF
 
+def write(stream: IO[bytes], data: bytes, key = CHIPER_KEY):
+    return stream.write(bytes(b ^ key for b in data))  # type: ignore  # None reads until EOF
+
 if __name__ == '__main__':
     import argparse
     from functools import partial

@@ -215,12 +215,12 @@ if __name__ == '__main__':
     
     basedir = os.path.basename(args.filename)
 
-    # # Configuration for HE games
-    # index_suffix = '.HE0'
-    # resource_suffix = '.HE1' # '.(a)'
-    # read_index = read_index_he
-    # chiper_key = 0x69
-    # max_depth = 4
+    # Configuration for HE games
+    index_suffix = '.HE0'
+    resource_suffix = '.HE1' # '.(a)'
+    read_index = read_index_he
+    chiper_key = 0x69
+    max_depth = 4
 
     # # Configuration for SCUMM v5-v6 games
     # index_suffix = '.000'
@@ -229,12 +229,12 @@ if __name__ == '__main__':
     # chiper_key = 0x69
     # max_depth = 4
 
-    # Configuration for SCUMM v7 games
-    index_suffix = '.LA0'
-    resource_suffix = '.LA1'
-    read_index = read_index_v5tov7
-    chiper_key = 0x00
-    max_depth = 3
+    # # Configuration for SCUMM v7 games
+    # index_suffix = '.LA0'
+    # resource_suffix = '.LA1'
+    # read_index = read_index_v5tov7
+    # chiper_key = 0x00
+    # max_depth = 3
 
     index = read_file(args.filename + index_suffix, key=chiper_key)
 
