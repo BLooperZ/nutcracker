@@ -217,7 +217,8 @@ if __name__ == '__main__':
 
     # Configuration for HE games
     index_suffix = '.HE0'
-    resource_suffix = '.HE1' # '.(a)'
+    resource_suffix = '.HE1'
+    # resource_suffix = '.(a)'
     read_index = read_index_he
     chiper_key = 0x69
     max_depth = 4
