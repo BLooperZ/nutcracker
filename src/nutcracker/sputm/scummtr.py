@@ -314,7 +314,7 @@ def descumm(data: bytes, opcodes):
             try:
                 op = opcodes[opcode](opcode, stream)
                 bytecode[op.offset] = op
-                print(f'0x{op.offset:04x}', op)
+                # print(f'0x{op.offset:04x}', op)
 
             except Exception as e:
                 print(f'{type(e)}: {str(e)}')
@@ -368,6 +368,26 @@ def to_bytes(bytecode):
             stream.write(stat.to_bytes())
         return stream.getvalue()
 
+def parse_script(elem):
+    script = elem.data
+    if elem.tag in {
+        'LSCR',
+        # 'SCRP',
+        # 'ENCD',
+        # 'EXCD'
+    }:
+        # print(filename)
+        if elem.tag in {'LSCR'}:
+            serial = elem.data[0]
+            # print(f'Script #{serial}')
+            script = elem.data[1:]
+
+        bytecode = descumm(script, OPCODES_he80)
+        # print_bytecode(bytecode)
+
+        for msg in get_strings(bytecode):
+            print(msg.msg.decode('ansi', 'backslashreplace'))
+
 if __name__ == '__main__':
     import argparse
     import os
@@ -387,16 +407,4 @@ if __name__ == '__main__':
             resource = res.read()
 
         elem = next(sputm.map_chunks(resource))
-        script = elem.data
-        if elem.tag in {'LSCR', 'SCRP'}:
-            print(filename)
-            if elem.tag == 'LSCR':
-                serial = elem.data[0]
-                print(f'Script #{serial}')
-                script = elem.data[1:]
-
-            bytecode = descumm(script, OPCODES_he80)
-            print_bytecode(bytecode)
-
-        # for msg in get_strings(bytecode):
-        #     print(msg)
+        parse_script(elem)
