@@ -9,17 +9,108 @@ from typing import Iterable
 from nutcracker.chiper import xor
 from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file, read_directory_leg as read_dir, read_dlfl
 
+from .preset import sputm
+from .types import Chunk, Element
+
 def write_file(path: str, data: bytes, key: int = 0x00) -> bytes:
     with open(path, 'wb') as res:
         return xor.write(res, data, key=key)
+
+def write_dlfl(index):
+    yield len(index).to_bytes(2, byteorder='little', signed=False)
+    yield b''.join(off.to_bytes(4, byteorder='little', signed=False) for off in index.values())
+
+def write_dir(index):
+    yield len(index).to_bytes(2, byteorder='little', signed=False)
+    rooms, offsets = zip(*index.values())
+    yield b''.join(room.to_bytes(1, byteorder='little', signed=False) for room in rooms)
+    yield b''.join(off.to_bytes(4, byteorder='little', signed=False) for off in offsets)
+
+def bind_directory_changes(read, write, orig, mapping):
+    bound = {**dict(read(orig)), **mapping}
+    data = b''.join(write(bound))
+    return data + orig[len(data):]
+
+def make_index_from_resource(resource, ref):
+    maxs = {}
+    diri = {}
+    dirr = {}
+    dirs = {}
+    dirn = {}
+    dirc = {}
+    dirf = {}
+    dirm = {}
+    dlfl = {}
+    rnam = {}
+    dobj = {}
+    aary = {}
+
+
+    dirmap = {
+        'RMDA': dirr,
+        'SCRP': dirs,
+        'DIGI': dirn,
+        'SOUN': dirn,
+        'AKOS': dirc,
+        'CHAR': dirf,
+        'MULT': dirm,
+        'AWIZ': dirm,
+    }
+
+    for t in resource:
+        # sputm.render(t)
+        for lflf in sputm.findall('LFLF', t):
+            diri[lflf.attribs['gid']] = (lflf.attribs['gid'], 0)
+            dlfl[lflf.attribs['gid']] = lflf.attribs['offset'] + 16
+            for elem in lflf:
+                if elem.tag in dirmap and elem.attribs.get('gid'):
+                    dirmap[elem.tag][elem.attribs['gid']] = (lflf.attribs['gid'], elem.attribs['offset'])
+
+    def build_index(root: Iterable[Element]): 
+        for elem in root:
+            tag, data = elem.tag, elem.data
+            if tag == 'DIRI':
+                data = bind_directory_changes(read_dir, write_dir, elem.data, diri)
+            if tag == 'DIRR':
+                data = bind_directory_changes(read_dir, write_dir, elem.data, dirr)
+            if tag == 'DIRS':
+                data = bind_directory_changes(read_dir, write_dir, elem.data, dirs)
+            if tag == 'DIRN':
+                data = bind_directory_changes(read_dir, write_dir, elem.data, dirn)
+            if tag == 'DIRC':
+                data = bind_directory_changes(read_dir, write_dir, elem.data, dirc)
+            if tag == 'DIRF':
+                data = bind_directory_changes(read_dir, write_dir, elem.data, dirf)
+            if tag == 'DIRM':
+                data = bind_directory_changes(read_dir, write_dir, elem.data, dirm)
+            if tag == 'DLFL':
+                data = bind_directory_changes(read_dlfl, write_dlfl, elem.data, dlfl)
+            yield sputm.mktag(tag, data)
+
+    return build_index(ref)
+
+def update_element(elements, files):
+    offset = 0
+    for elem in elements:
+        elem.attribs['offset'] = offset
+        full_path = os.path.join(args.dirname, elem.attribs.get('path'))
+        if full_path in files:
+            print(elem.attribs.get('path'))
+            if os.path.isfile(full_path):
+                attribs = elem.attribs
+                elem = next(sputm.map_chunks(read_file(full_path)))
+                elem.attribs = attribs
+            else:
+                elem.children = list(update_element(elem, files))
+                elem.data = sputm.write_chunks(sputm.mktag(e.tag, e.data) for e in elem.children)
+        offset += len(elem.data) + 8
+        elem.attribs['size'] = len(elem.data)
+        yield elem
 
 if __name__ == '__main__':
     import argparse
     import pprint
     from typing import Dict
-
-    from .preset import sputm
-    from .types import Chunk, Element
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('dirname', help='directory to read from')
@@ -84,24 +175,6 @@ if __name__ == '__main__':
     files = set(glob.iglob(f'{args.dirname}/**/*', recursive=True))
     assert None not in files
 
-    def update_element(elements, files):
-        offset = 0
-        for elem in elements:
-            elem.attribs['offset'] = offset
-            full_path = os.path.join(args.dirname, elem.attribs.get('path'))
-            if full_path in files:
-                print(elem.attribs.get('path'))
-                if os.path.isfile(full_path):
-                    attribs = elem.attribs
-                    elem = next(sputm.map_chunks(read_file(full_path)))
-                    elem.attribs = attribs
-                else:
-                    elem.children = list(update_element(elem, files))
-                    elem.data = sputm.write_chunks(sputm.mktag(e.tag, e.data) for e in elem.children)
-            offset += len(elem.data) + 8
-            elem.attribs['size'] = len(elem.data)
-            yield elem
-
     updated_resource = list(update_element(root, files))
     write_file(
         f'{args.dirname}{resource_suffix}',
@@ -109,79 +182,9 @@ if __name__ == '__main__':
         key=chiper_key
     )
 
-    maxs = {}
-    diri = {}
-    dirr = {}
-    dirs = {}
-    dirn = {}
-    dirc = {}
-    dirf = {}
-    dirm = {}
-    dlfl = {}
-    rnam = {}
-    dobj = {}
-    aary = {}
-
-
-    dirmap = {
-        'RMDA': dirr,
-        'SCRP': dirs,
-        'DIGI': dirn,
-        'SOUN': dirn,
-        'AKOS': dirc,
-        'CHAR': dirf,
-        'MULT': dirm,
-        'AWIZ': dirm,
-    }
-
-    for t in updated_resource:
-        # sputm.render(t)
-        for lflf in sputm.findall('LFLF', t):
-            diri[lflf.attribs['gid']] = (lflf.attribs['gid'], 0)
-            dlfl[lflf.attribs['gid']] = lflf.attribs['offset'] + 16
-            for elem in lflf:
-                if elem.tag in dirmap and elem.attribs.get('gid'):
-                    dirmap[elem.tag][elem.attribs['gid']] = (lflf.attribs['gid'], elem.attribs['offset'])
-
-    def write_dlfl(index):
-        yield len(index).to_bytes(2, byteorder='little', signed=False)
-        yield b''.join(off.to_bytes(4, byteorder='little', signed=False) for off in index.values())
-
-    def write_dir(index):
-        yield len(index).to_bytes(2, byteorder='little', signed=False)
-        rooms, offsets = zip(*index.values())
-        yield b''.join(room.to_bytes(1, byteorder='little', signed=False) for room in rooms)
-        yield b''.join(off.to_bytes(4, byteorder='little', signed=False) for off in offsets)
-
-    def bind_directory_changes(read, write, orig, mapping):
-        bound = {**dict(read(orig)), **mapping}
-        data = b''.join(write(bound))
-        return data + orig[len(data):]
-
-    def build_index(root: Iterable[Element]): 
-        for elem in root:
-            tag, data = elem.tag, elem.data
-            if tag == 'DIRI':
-                data = bind_directory_changes(read_dir, write_dir, elem.data, diri)
-            if tag == 'DIRR':
-                data = bind_directory_changes(read_dir, write_dir, elem.data, dirr)
-            if tag == 'DIRS':
-                data = bind_directory_changes(read_dir, write_dir, elem.data, dirs)
-            if tag == 'DIRN':
-                data = bind_directory_changes(read_dir, write_dir, elem.data, dirn)
-            if tag == 'DIRC':
-                data = bind_directory_changes(read_dir, write_dir, elem.data, dirc)
-            if tag == 'DIRF':
-                data = bind_directory_changes(read_dir, write_dir, elem.data, dirf)
-            if tag == 'DIRM':
-                data = bind_directory_changes(read_dir, write_dir, elem.data, dirm)
-            if tag == 'DLFL':
-                data = bind_directory_changes(read_dlfl, write_dlfl, elem.data, dlfl)
-            yield sputm.mktag(tag, data)
-
     write_file(
         f'{args.dirname}{index_suffix}',
-        sputm.write_chunks(build_index(index_root)),
+        sputm.write_chunks(make_index_from_resource(updated_resource, index_root)),
         key=chiper_key
     )
 

@@ -386,7 +386,17 @@ def parse_script(elem):
         # print_bytecode(bytecode)
 
         for msg in get_strings(bytecode):
-            print(msg.msg.decode('ansi', 'backslashreplace'))
+            assert b'\n' not in msg.msg
+            assert b'\\x80' not in msg.msg
+            assert b'\\xd9' not in msg.msg
+            print(
+                msg.msg
+                    .replace(b'\r', b'\\r')
+                    .replace(b'\x80', b'\\x80')
+                    .replace(b'\xd9', b'\\xd9')
+                    .replace(b'\x7f', b'\\x7f')
+                    .decode()
+            )
 
 if __name__ == '__main__':
     import argparse

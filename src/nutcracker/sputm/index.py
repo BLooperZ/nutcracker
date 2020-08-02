@@ -129,44 +129,45 @@ def read_index_v5tov7(root):
 def read_index_he(root):
     dtlk = None  # prevent `referenced before assignment` error
     for t in root:
-        sputm.render(t)
+        # sputm.render(t)
         if t.tag == 'RNAM':
             rnam = dict(read_rnam_he(t.data, key=0x00))
-            pprint.pprint(rnam)
+            # pprint.pprint(rnam)
         elif t.tag == 'MAXS':
-            print('MAXS not yet supported')
+            pass
+            # print('MAXS not yet supported')
         elif t.tag == 'DIRI':
             droo = dict(read_directory_leg(t.data))
-            pprint.pprint(droo)
+            # pprint.pprint(droo)
         elif t.tag == 'DIRS':
             dscr = dict(read_directory_leg(t.data))
-            pprint.pprint(dscr)
+            # pprint.pprint(dscr)
         elif t.tag == 'DIRC':
             dcos = dict(read_directory_leg(t.data))
-            pprint.pprint(dcos)
+            # pprint.pprint(dcos)
         elif t.tag == 'DIRF':
             dchr = dict(read_directory_leg(t.data))
-            pprint.pprint(dchr)
+            # pprint.pprint(dchr)
         elif t.tag == 'DIRN':
             dsou = dict(read_directory_leg(t.data))
-            pprint.pprint(dsou)
+            # pprint.pprint(dsou)
         elif t.tag == 'DIRT':
             dtlk = dict(read_directory_leg(t.data))
-            pprint.pprint(dtlk)
+            # pprint.pprint(dtlk)
         elif t.tag == 'DIRM':
             dmul = dict(read_directory_leg(t.data))
-            pprint.pprint(dmul)
+            # pprint.pprint(dmul)
         elif t.tag == 'DIRR':
             drmd = dict(read_directory_leg(t.data))
-            pprint.pprint(drmd)
+            # pprint.pprint(drmd)
         elif t.tag == 'DISK':
             # TODO
             # all values are `idx: (1, 0)`
             disk = dict(read_directory_leg(t.data))
-            pprint.pprint(disk)
+            # pprint.pprint(disk)
         elif t.tag == 'DLFL':
             dlfl = dict(read_dlfl(t.data))
-            pprint.pprint(dlfl)
+            # pprint.pprint(dlfl)
             pass
     return {
         'LFLF': counter(k for k, v  in droo.items() if v != (0, 0)),
