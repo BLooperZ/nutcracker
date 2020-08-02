@@ -7,7 +7,7 @@ import os
 from typing import Iterable
 
 from nutcracker.chiper import xor
-from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file, read_directory_leg as read_dir, read_dlfl
+from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file
 from nutcracker.sputm.build import write_file, make_index_from_resource
 from nutcracker.sputm.scummtr import descumm, get_strings, update_strings, OPCODES_he80, to_bytes
 
