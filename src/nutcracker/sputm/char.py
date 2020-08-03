@@ -99,24 +99,31 @@ def handle_char(data):
 if __name__ == '__main__':
     import argparse
     import os
+    import glob
 
     from nutcracker.graphics import grid
+    from nutcracker.utils.funcutils import grouper, flatten
+
     from .preset import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('filename', help='filename to read from')
+    parser.add_argument('files', nargs='+', help='files to read from')
     args = parser.parse_args()
 
-    basename = os.path.basename(args.filename)
-    with open(args.filename, 'rb') as res:
-        data = sputm.assert_tag('CHAR', sputm.untag(res))
-        assert res.read() == b''
 
-        nchars, chars = handle_char(data)
-        palette = [((59 + x) ** 2 * 83 // 67) % 256 for x in range(256 * 3)]
+    files = set(flatten(glob.iglob(r) for r in args.files))
+    for filename in files:
 
-        chars = [(idx, (char.xoff, char.yoff, char.data)) for idx, char in chars]
+        basename = os.path.basename(filename)
+        with open(filename, 'rb') as res:
+            data = sputm.assert_tag('CHAR', sputm.untag(res))
+            assert res.read() == b''
 
-        bim = grid.create_char_grid(nchars, chars)
-        bim.putpalette(palette)
-        bim.save(f'{basename}.png')
+            nchars, chars = handle_char(data)
+            palette = [((59 + x) ** 2 * 83 // 67) % 256 for x in range(256 * 3)]
+
+            chars = [(idx, (char.xoff, char.yoff, char.data)) for idx, char in chars]
+
+            bim = grid.create_char_grid(nchars, chars)
+            bim.putpalette(palette)
+            bim.save(f'{basename}.png')
