@@ -32,7 +32,7 @@ if __name__ == '__main__':
     resource_suffix = '.HE1' # '.(a)'
     read_index = read_index_he
     chiper_key = 0x69
-    max_depth = 4
+    max_depth = 5
 
     # # Configuration for SCUMM v5-v6 games
     # index_suffix = '.000'
@@ -63,8 +63,6 @@ if __name__ == '__main__':
     # pprint.pprint(s)
     # root = sputm.map_chunks(resource, idgen=idgens, schema=s)
 
-    paths: Dict[str, Chunk] = {}
-
     def update_element_path(parent, chunk, offset):
         get_gid = idgens.get(chunk.tag)
         gid = get_gid and get_gid(parent and parent.attribs['gid'], chunk.data, offset)
@@ -75,9 +73,6 @@ if __name__ == '__main__':
         path = os.path.join(dirname, base)
         res = {'path': path, 'gid': gid}
 
-        assert path not in paths, path
-        paths[path] = chunk
-
         return res
 
     root = sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
@@ -85,11 +80,28 @@ if __name__ == '__main__':
     def get_all_scripts(root):
         for lecf in root:
             for lflf in sputm.findall('LFLF', lecf):
-                for rmda in sputm.findall('RMDA', lflf):
-                    for lscr in sputm.findall('LSCR', rmda):
-                        serial = lscr.data[0]
-                        script = lscr.data[1:]
-                        bytecode = descumm(script, OPCODES_he80)
+                for elem in lflf.children:
+                    if elem.tag == 'RMDA':
+                        for robj in elem.children:
+                            if robj.tag == 'LSCR':
+                                serial = robj.data[0]
+                                script = robj.data[1:]
+                                bytecode = descumm(script, OPCODES_he80)
+                                for msg in get_strings(bytecode):
+                                    yield msg.msg
+                            elif robj.tag == 'OBCD':
+                                for verb in sputm.findall('VERB', robj):
+                                    with io.BytesIO(verb.data) as stream:
+                                        while True:
+                                            key = stream.read(1)
+                                            if key in {b'\0', b'\xFF'}:
+                                                break
+                                            offset = stream.read(2)
+                                        bytecode = descumm(stream.read(), OPCODES_he80)
+                                        for msg in get_strings(bytecode):
+                                            yield msg.msg
+                    if elem.tag == 'SCRP':
+                        bytecode = descumm(elem.data, OPCODES_he80)
                         for msg in get_strings(bytecode):
                             yield msg.msg
 
@@ -97,13 +109,27 @@ if __name__ == '__main__':
         offset = 0
         for elem in root:
             elem.attribs['offset'] = offset
-            if elem.tag in {'LECF', 'LFLF', 'RMDA', 'LSCR'}:
-                if elem.tag in {'LSCR'}:
-                    serial = elem.data[0]
-                    bc = descumm(elem.data[1:], OPCODES_he80)
+            if elem.tag in {'LECF', 'LFLF', 'RMDA', 'SCRP', 'LSCR', 'OBCD', 'VERB'}:
+                if elem.tag in {'LSCR', 'SCRP', 'VERB'}:
+                    if elem.tag in {'LSCR'}:
+                        serial = bytes([elem.data[0]])
+                        bc = descumm(elem.data[1:], OPCODES_he80)
+                    elif elem.tag in {'VERB'}:
+                        serial = b''
+                        with io.BytesIO(elem.data) as stream:
+                            while True:
+                                key = stream.read(1)
+                                serial += key
+                                if key in {b'\0', b'\xFF'}:
+                                    break
+                                serial += stream.read(2)
+                            bc = descumm(stream.read(), OPCODES_he80)
+                    else:
+                        serial = b''
+                        bc = descumm(elem.data, OPCODES_he80)
                     updated = update_strings(bc, strings)
                     attribs = elem.attribs
-                    elem.data = bytes([serial]) + to_bytes(updated)
+                    elem.data = serial + to_bytes(updated)
                     elem.attribs = attribs
                 else:
                     elem.children = list(update_element_strings(elem, strings))
@@ -118,19 +144,23 @@ if __name__ == '__main__':
                 assert b'\n' not in msg
                 assert b'\\x80' not in msg
                 assert b'\\xd9' not in msg
+                assert b'\\r' not in msg
+                assert b'\\/t' not in msg
                 line = msg \
                     .replace(b'\r', b'\\r') \
+                    .replace(b'\t', b'\\/t') \
                     .replace(b'\x80', b'\\x80') \
                     .replace(b'\xd9', b'\\xd9') \
                     .replace(b'\x7f', b'\\x7f') \
-                    .decode()
+                    .decode('windows-1255')
                 f.write(line + '\n')
 
     elif args.inject:
         with open(args.textfile, 'r') as f:
             fixed_lines = (
-                line.replace('\r', '').replace('\n', '').encode()
+                line.replace('\r', '').replace('\n', '').encode('windows-1255')
                     .replace(b'\\r', b'\r')
+                    .replace(b'\\/t', b'\t')
                     .replace(b'\\x80', b'\x80')
                     .replace(b'\\xd9', b'\xd9')
                     .replace(b'\\x7f', b'\x7f')

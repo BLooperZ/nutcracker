@@ -338,7 +338,8 @@ def get_strings(bytecode):
     for off, stat in bytecode.items():
         for arg in stat.args:
             if isinstance(arg, CString):
-                yield arg
+                if arg.msg:
+                    yield arg
 
 def update_strings(bytecode, strings):
     for orig, upd in zip(get_strings(bytecode), strings):
