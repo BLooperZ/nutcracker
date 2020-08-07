@@ -9,7 +9,7 @@ from typing import Iterable
 from nutcracker.chiper import xor
 from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file
 from nutcracker.sputm.build import write_file, make_index_from_resource
-from nutcracker.sputm.scummtr import descumm, get_strings, update_strings, OPCODES_he80, to_bytes
+from nutcracker.sputm.scummtr import descumm, get_strings, update_strings, OPCODES_he80, OPCODES_v6, to_bytes
 
 if __name__ == '__main__':
     import argparse
@@ -29,10 +29,12 @@ if __name__ == '__main__':
 
     # Configuration for HE games
     index_suffix = '.HE0'
-    resource_suffix = '.HE1' # '.(a)'
+    resource_suffix = '.HE1'
+    # resource_suffix = '.(a)'
     read_index = read_index_he
     chiper_key = 0x69
     max_depth = 5
+    script_ops = OPCODES_he80
 
     # # Configuration for SCUMM v5-v6 games
     # index_suffix = '.000'
@@ -40,6 +42,7 @@ if __name__ == '__main__':
     # read_index = read_index_v5tov7
     # chiper_key = 0x69
     # max_depth = 4
+    # script_ops = OPCODES_v6
 
     # # Configuration for SCUMM v7 games
     # index_suffix = '.LA0'
@@ -77,7 +80,7 @@ if __name__ == '__main__':
 
     root = sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
 
-    def get_all_scripts(root):
+    def get_all_scripts(root, opcodes):
         for lecf in root:
             for lflf in sputm.findall('LFLF', lecf):
                 for elem in lflf.children:
@@ -86,7 +89,7 @@ if __name__ == '__main__':
                             if robj.tag == 'LSCR':
                                 serial = robj.data[0]
                                 script = robj.data[1:]
-                                bytecode = descumm(script, OPCODES_he80)
+                                bytecode = descumm(script, opcodes)
                                 for msg in get_strings(bytecode):
                                     yield msg.msg
                             elif robj.tag == 'OBCD':
@@ -97,15 +100,16 @@ if __name__ == '__main__':
                                             if key in {b'\0', b'\xFF'}:
                                                 break
                                             offset = stream.read(2)
-                                        bytecode = descumm(stream.read(), OPCODES_he80)
+                                        bytecode = descumm(stream.read(), opcodes)
                                         for msg in get_strings(bytecode):
                                             yield msg.msg
                     if elem.tag == 'SCRP':
-                        bytecode = descumm(elem.data, OPCODES_he80)
+                        # print(elem.attribs['path'])
+                        bytecode = descumm(elem.data, opcodes)
                         for msg in get_strings(bytecode):
                             yield msg.msg
 
-    def update_element_strings(root, strings):
+    def update_element_strings(root, strings, opcodes):
         offset = 0
         for elem in root:
             elem.attribs['offset'] = offset
@@ -113,7 +117,7 @@ if __name__ == '__main__':
                 if elem.tag in {'LSCR', 'SCRP', 'VERB'}:
                     if elem.tag in {'LSCR'}:
                         serial = bytes([elem.data[0]])
-                        bc = descumm(elem.data[1:], OPCODES_he80)
+                        bc = descumm(elem.data[1:], opcodes)
                     elif elem.tag in {'VERB'}:
                         serial = b''
                         with io.BytesIO(elem.data) as stream:
@@ -123,16 +127,16 @@ if __name__ == '__main__':
                                 if key in {b'\0', b'\xFF'}:
                                     break
                                 serial += stream.read(2)
-                            bc = descumm(stream.read(), OPCODES_he80)
+                            bc = descumm(stream.read(), opcodes)
                     else:
                         serial = b''
-                        bc = descumm(elem.data, OPCODES_he80)
+                        bc = descumm(elem.data, opcodes)
                     updated = update_strings(bc, strings)
                     attribs = elem.attribs
                     elem.data = serial + to_bytes(updated)
                     elem.attribs = attribs
                 else:
-                    elem.children = list(update_element_strings(elem, strings))
+                    elem.children = list(update_element_strings(elem, strings, opcodes))
                     elem.data = sputm.write_chunks(sputm.mktag(e.tag, e.data) for e in elem.children)
             offset += len(elem.data) + 8
             elem.attribs['size'] = len(elem.data)
@@ -140,7 +144,7 @@ if __name__ == '__main__':
 
     if args.extract:
         with open(args.textfile, 'w') as f:
-            for msg in get_all_scripts(root):
+            for msg in get_all_scripts(root, script_ops):
                 assert b'\n' not in msg
                 assert b'\\x80' not in msg
                 assert b'\\xd9' not in msg
@@ -166,7 +170,7 @@ if __name__ == '__main__':
                     .replace(b'\\x7f', b'\x7f')
                 for line in f
             )
-            updated_resource = list(update_element_strings(root, fixed_lines))
+            updated_resource = list(update_element_strings(root, fixed_lines, script_ops))
 
         basename = os.path.basename(args.filename)
         write_file(
