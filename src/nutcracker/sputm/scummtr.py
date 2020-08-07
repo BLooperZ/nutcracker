@@ -394,35 +394,28 @@ def to_bytes(bytecode):
             stream.write(stat.to_bytes())
         return stream.getvalue()
 
-def parse_script(elem):
-    script = elem.data
-    if elem.tag in {
-        'LSCR',
-        # 'SCRP',
-        # 'ENCD',
-        # 'EXCD'
-    }:
-        # print(filename)
-        if elem.tag in {'LSCR'}:
-            serial = elem.data[0]
-            # print(f'Script #{serial}')
-            script = elem.data[1:]
+def global_script(data):
+    return b'', data
 
-        bytecode = descumm(script, OPCODES_he80)
-        # print_bytecode(bytecode)
+def local_script(data):
+    return bytes([data[0]]), data[1:]
 
-        for msg in get_strings(bytecode):
-            assert b'\n' not in msg.msg
-            assert b'\\x80' not in msg.msg
-            assert b'\\xd9' not in msg.msg
-            print(
-                msg.msg
-                    .replace(b'\r', b'\\r')
-                    .replace(b'\x80', b'\\x80')
-                    .replace(b'\xd9', b'\\xd9')
-                    .replace(b'\x7f', b'\\x7f')
-                    .decode()
-            )
+def verb_script(data):
+    serial = b''
+    with io.BytesIO(data) as stream:
+        while True:
+            key = stream.read(1)
+            serial += key
+            if key in {b'\0', b'\xFF'}:
+                break
+            serial += stream.read(2)
+        return serial, stream.read()
+
+script_map = {
+    'SCRP': global_script,
+    'LSCR': local_script,
+    'VERB': verb_script
+}
 
 if __name__ == '__main__':
     import argparse
@@ -435,7 +428,6 @@ if __name__ == '__main__':
     parser.add_argument('files', nargs='+', help='files to read from')
     args = parser.parse_args()
 
-
     files = set(flatten(glob.iglob(r) for r in args.files))
     for filename in files:
 
@@ -443,4 +435,7 @@ if __name__ == '__main__':
             resource = res.read()
 
         elem = next(sputm.map_chunks(resource))
-        parse_script(elem)
+        _, script_data = script_map[elem.tag](elem.data)
+        bytecode = descumm(script_data, OPCODES_he80)
+        for off, op in bytecode.items():
+            print(f'0x{off:04x}', op)

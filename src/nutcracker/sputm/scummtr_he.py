@@ -9,30 +9,7 @@ from typing import Iterable
 from nutcracker.chiper import xor
 from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file
 from nutcracker.sputm.build import write_file, make_index_from_resource
-from nutcracker.sputm.scummtr import descumm, get_strings, update_strings, OPCODES_he80, OPCODES_v6, to_bytes
-
-def global_script(data):
-    return b'', data
-
-def local_script(data):
-    return bytes([data[0]]), data[1:]
-
-def verb_script(data):
-    serial = b''
-    with io.BytesIO(data) as stream:
-        while True:
-            key = stream.read(1)
-            serial += key
-            if key in {b'\0', b'\xFF'}:
-                break
-            serial += stream.read(2)
-        return serial, stream.read()
-
-script_map = {
-    'SCRP': global_script,
-    'LSCR': local_script,
-    'VERB': verb_script
-}
+from nutcracker.sputm.scummtr import descumm, get_strings, update_strings, script_map, OPCODES_he80, OPCODES_v6, to_bytes
 
 if __name__ == '__main__':
     import argparse
