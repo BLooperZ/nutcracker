@@ -11,6 +11,29 @@ from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file
 from nutcracker.sputm.build import write_file, make_index_from_resource
 from nutcracker.sputm.scummtr import descumm, get_strings, update_strings, OPCODES_he80, OPCODES_v6, to_bytes
 
+def global_script(data):
+    return b'', data
+
+def local_script(data):
+    return bytes([data[0]]), data[1:]
+
+def verb_script(data):
+    serial = b''
+    with io.BytesIO(data) as stream:
+        while True:
+            key = stream.read(1)
+            serial += key
+            if key in {b'\0', b'\xFF'}:
+                break
+            serial += stream.read(2)
+        return serial, stream.read()
+
+script_map = {
+    'SCRP': global_script,
+    'LSCR': local_script,
+    'VERB': verb_script
+}
+
 if __name__ == '__main__':
     import argparse
     import pprint
@@ -87,25 +110,20 @@ if __name__ == '__main__':
                     if elem.tag == 'RMDA':
                         for robj in elem.children:
                             if robj.tag == 'LSCR':
-                                serial = robj.data[0]
-                                script = robj.data[1:]
-                                bytecode = descumm(script, opcodes)
+                                _, script_data = script_map[robj.tag](robj.data)
+                                bytecode = descumm(script_data, opcodes)
                                 for msg in get_strings(bytecode):
                                     yield msg.msg
                             elif robj.tag == 'OBCD':
                                 for verb in sputm.findall('VERB', robj):
-                                    with io.BytesIO(verb.data) as stream:
-                                        while True:
-                                            key = stream.read(1)
-                                            if key in {b'\0', b'\xFF'}:
-                                                break
-                                            offset = stream.read(2)
-                                        bytecode = descumm(stream.read(), opcodes)
-                                        for msg in get_strings(bytecode):
-                                            yield msg.msg
+                                    _, script_data = script_map[verb.tag](verb.data)
+                                    bytecode = descumm(script_data, opcodes)
+                                    for msg in get_strings(bytecode):
+                                        yield msg.msg
                     if elem.tag == 'SCRP':
                         # print(elem.attribs['path'])
-                        bytecode = descumm(elem.data, opcodes)
+                        _, script_data = script_map[elem.tag](elem.data)
+                        bytecode = descumm(script_data, opcodes)
                         for msg in get_strings(bytecode):
                             yield msg.msg
 
@@ -113,24 +131,10 @@ if __name__ == '__main__':
         offset = 0
         for elem in root:
             elem.attribs['offset'] = offset
-            if elem.tag in {'LECF', 'LFLF', 'RMDA', 'SCRP', 'LSCR', 'OBCD', 'VERB'}:
-                if elem.tag in {'LSCR', 'SCRP', 'VERB'}:
-                    if elem.tag in {'LSCR'}:
-                        serial = bytes([elem.data[0]])
-                        bc = descumm(elem.data[1:], opcodes)
-                    elif elem.tag in {'VERB'}:
-                        serial = b''
-                        with io.BytesIO(elem.data) as stream:
-                            while True:
-                                key = stream.read(1)
-                                serial += key
-                                if key in {b'\0', b'\xFF'}:
-                                    break
-                                serial += stream.read(2)
-                            bc = descumm(stream.read(), opcodes)
-                    else:
-                        serial = b''
-                        bc = descumm(elem.data, opcodes)
+            if elem.tag in {'LECF', 'LFLF', 'RMDA', 'OBCD', *script_map}:
+                if elem.tag in script_map:
+                    serial, script_data = script_map[elem.tag](elem.data)
+                    bc = descumm(script_data, opcodes)
                     updated = update_strings(bc, strings)
                     attribs = elem.attribs
                     elem.data = serial + to_bytes(updated)
