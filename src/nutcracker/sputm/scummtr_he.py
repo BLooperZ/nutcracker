@@ -11,6 +11,36 @@ from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file
 from nutcracker.sputm.build import write_file, make_index_from_resource
 from nutcracker.sputm.scummtr import descumm, get_strings, update_strings, script_map, OPCODES_he80, OPCODES_v6, to_bytes
 
+def get_all_scripts(root, opcodes):
+    for elem in root:
+        if elem.tag in {'LECF', 'LFLF', 'RMDA', 'OBCD', *script_map}:
+            if elem.tag in script_map:
+                _, script_data = script_map[elem.tag](elem.data)
+                bytecode = descumm(script_data, opcodes)
+                for msg in get_strings(bytecode):
+                    yield msg.msg
+            else:
+                yield from get_all_scripts(elem.children, opcodes)
+
+def update_element_strings(root, strings, opcodes):
+    offset = 0
+    for elem in root:
+        elem.attribs['offset'] = offset
+        if elem.tag in {'LECF', 'LFLF', 'RMDA', 'OBCD', *script_map}:
+            if elem.tag in script_map:
+                serial, script_data = script_map[elem.tag](elem.data)
+                bc = descumm(script_data, opcodes)
+                updated = update_strings(bc, strings)
+                attribs = elem.attribs
+                elem.data = serial + to_bytes(updated)
+                elem.attribs = attribs
+            else:
+                elem.children = list(update_element_strings(elem, strings, opcodes))
+                elem.data = sputm.write_chunks(sputm.mktag(e.tag, e.data) for e in elem.children)
+        offset += len(elem.data) + 8
+        elem.attribs['size'] = len(elem.data)
+        yield elem
+
 if __name__ == '__main__':
     import argparse
     import pprint
@@ -79,36 +109,6 @@ if __name__ == '__main__':
         return res
 
     root = sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
-
-    def get_all_scripts(root, opcodes):
-        for elem in root:
-            if elem.tag in {'LECF', 'LFLF', 'RMDA', 'OBCD', *script_map}:
-                if elem.tag in script_map:
-                    _, script_data = script_map[elem.tag](elem.data)
-                    bytecode = descumm(script_data, opcodes)
-                    for msg in get_strings(bytecode):
-                        yield msg.msg
-                else:
-                    yield from get_all_scripts(elem.children, opcodes)
-
-    def update_element_strings(root, strings, opcodes):
-        offset = 0
-        for elem in root:
-            elem.attribs['offset'] = offset
-            if elem.tag in {'LECF', 'LFLF', 'RMDA', 'OBCD', *script_map}:
-                if elem.tag in script_map:
-                    serial, script_data = script_map[elem.tag](elem.data)
-                    bc = descumm(script_data, opcodes)
-                    updated = update_strings(bc, strings)
-                    attribs = elem.attribs
-                    elem.data = serial + to_bytes(updated)
-                    elem.attribs = attribs
-                else:
-                    elem.children = list(update_element_strings(elem, strings, opcodes))
-                    elem.data = sputm.write_chunks(sputm.mktag(e.tag, e.data) for e in elem.children)
-            offset += len(elem.data) + 8
-            elem.attribs['size'] = len(elem.data)
-            yield elem
 
     if args.extract:
         with open(args.textfile, 'w') as f:
