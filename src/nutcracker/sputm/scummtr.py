@@ -437,5 +437,4 @@ if __name__ == '__main__':
         elem = next(sputm.map_chunks(resource))
         _, script_data = script_map[elem.tag](elem.data)
         bytecode = descumm(script_data, OPCODES_he80)
-        for off, op in bytecode.items():
-            print(f'0x{off:04x}', op)
+        print_bytecode(bytecode)
