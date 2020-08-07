@@ -104,28 +104,15 @@ if __name__ == '__main__':
     root = sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
 
     def get_all_scripts(root, opcodes):
-        for lecf in root:
-            for lflf in sputm.findall('LFLF', lecf):
-                for elem in lflf.children:
-                    if elem.tag == 'RMDA':
-                        for robj in elem.children:
-                            if robj.tag == 'LSCR':
-                                _, script_data = script_map[robj.tag](robj.data)
-                                bytecode = descumm(script_data, opcodes)
-                                for msg in get_strings(bytecode):
-                                    yield msg.msg
-                            elif robj.tag == 'OBCD':
-                                for verb in sputm.findall('VERB', robj):
-                                    _, script_data = script_map[verb.tag](verb.data)
-                                    bytecode = descumm(script_data, opcodes)
-                                    for msg in get_strings(bytecode):
-                                        yield msg.msg
-                    if elem.tag == 'SCRP':
-                        # print(elem.attribs['path'])
-                        _, script_data = script_map[elem.tag](elem.data)
-                        bytecode = descumm(script_data, opcodes)
-                        for msg in get_strings(bytecode):
-                            yield msg.msg
+        for elem in root:
+            if elem.tag in {'LECF', 'LFLF', 'RMDA', 'OBCD', *script_map}:
+                if elem.tag in script_map:
+                    _, script_data = script_map[elem.tag](elem.data)
+                    bytecode = descumm(script_data, opcodes)
+                    for msg in get_strings(bytecode):
+                        yield msg.msg
+                else:
+                    yield from get_all_scripts(elem.children, opcodes)
 
     def update_element_strings(root, strings, opcodes):
         offset = 0
