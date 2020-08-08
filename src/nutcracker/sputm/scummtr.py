@@ -417,24 +417,34 @@ script_map = {
     'VERB': verb_script
 }
 
+def get_scripts(root):
+    for elem in root:
+        if elem.tag in {'LECF', 'LFLF', 'RMDA', 'OBCD', *script_map}:
+            if elem.tag in script_map:
+                yield elem
+            else:
+                yield from get_scripts(elem.children)
+
+
 if __name__ == '__main__':
     import argparse
     import os
     import glob
 
     from .preset import sputm
+    from .index import read_file
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('files', nargs='+', help='files to read from')
+    parser.add_argument('--chiper-key', default='0x00', type=str, help='xor key')
     args = parser.parse_args()
 
     files = set(flatten(glob.iglob(r) for r in args.files))
     for filename in files:
 
-        with open(filename, 'rb') as res:
-            resource = res.read()
+        resource = read_file(filename, key=int(args.chiper_key, 16))
 
-        elem = next(sputm.map_chunks(resource))
-        _, script_data = script_map[elem.tag](elem.data)
-        bytecode = descumm(script_data, OPCODES_he80)
-        print_bytecode(bytecode)
+        for elem in get_scripts(sputm.map_chunks(resource)):
+            _, script_data = script_map[elem.tag](elem.data)
+            bytecode = descumm(script_data, OPCODES_he80)
+            print_bytecode(bytecode)

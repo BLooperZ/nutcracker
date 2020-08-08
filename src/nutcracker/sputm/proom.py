@@ -6,6 +6,7 @@ import os
 import numpy as np
 
 from nutcracker.codex.codex import decode1
+from .preset import sputm
 from .room import decode_smap, convert_to_pil_image, decode_he, read_uint16le, read_uint32le, read_strip, parse_strip
 
 def read_room_background(image, width, height, zbuffers):
@@ -131,7 +132,7 @@ def read_room(lflf):
             zpxx = list(sputm.findall('ZP{:02x}', imxx))
             assert len(zpxx) == zbuffers - 1
             im.putpalette(palette)
-            yield idx, im
+            yield idx, im, zpxx
     else:
         # TODO: check for multiple IMAG in room bg (different image state)
         for idx, imag in enumerate(sputm.findall('IMAG', room)):
@@ -143,7 +144,7 @@ def read_room(lflf):
                 continue
             im = convert_to_pil_image(bgim)
             im.putpalette(palette)
-            yield idx, im
+            yield idx, im, ()
 
 def read_imhd(data):
     # pylint: disable=unused-variable
@@ -245,8 +246,6 @@ if __name__ == '__main__':
 
     from nutcracker.chiper import xor
 
-    from .preset import sputm
-
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
     parser.add_argument('--chiper-key', default='0x00', type=str, help='xor key')
@@ -258,7 +257,7 @@ if __name__ == '__main__':
     root = sputm.find('LECF', sputm.map_chunks(resource))
     assert root
     for idx, lflf in enumerate(sputm.findall('LFLF', root)):
-        for oidx, (bg_idx, room_bg) in enumerate(read_room(lflf)):
+        for oidx, (bg_idx, room_bg, zpxx) in enumerate(read_room(lflf)):
             room_bg.save(f'LFLF_{1 + idx:04d}_ROOM_RMIM_{bg_idx:04d}_{oidx:04d}.png')
 
         for oidx, (obj_idx, tag, im) in enumerate(read_objects(lflf)):
