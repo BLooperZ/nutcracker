@@ -7,9 +7,22 @@ from itertools import takewhile
 
 from nutcracker.utils.funcutils import grouper, flatten
 
+def read_message(stream, escape=None):
+    while True:
+        c = stream.read(1)
+        if c in {b'', b'\0'}:
+            break
+        assert c is not None
+        if c == escape:
+            t = stream.read(1)
+            c += t
+            if ord(t) not in {1, 2, 3, 8}:
+                c += stream.read(2)
+        yield c
+
 class CString:
     def __init__(self, stream):
-        self.msg = readcstr(stream)
+        self.msg = b''.join(read_message(stream, escape=b'\xff'))
     def __repr__(self):
         return f'MSG {self.msg!r}'
     def to_bytes(self):
@@ -66,28 +79,23 @@ class RefOffset:
     def to_bytes(self):
         return self.rel.to_bytes(2, byteorder='little', signed=True)
 
-def readcstr(stream):
-    bound_read = iter(partial(stream.read, 1), b'')
-    res = b''.join(takewhile(partial(operator.ne, b'\00'), bound_read))
-    return res if res else None
-
 def simple_op(stream):
-	return ()
+    return ()
 
 def extended_b_op(stream):
-	return (ByteValue(stream),)
+    return (ByteValue(stream),)
 
 def extended_w_op(stream):
-	return (WordValue(stream),)
+    return (WordValue(stream),)
 
 def extended_dw_op(stream):
-	return (DWordValue(stream),)
+    return (DWordValue(stream),)
 
 def extended_bw_op(stream):
-	return (ByteValue(stream), WordValue(stream))
+    return (ByteValue(stream), WordValue(stream))
 
 def jump_cmd(stream):
-	return (RefOffset(stream),)
+    return (RefOffset(stream),)
 
 def msg_cmd(stream):
     cmd = SubOp(stream)
@@ -177,37 +185,58 @@ OPCODES_v6 = {
     0x4f: makeop('o6_wordVarInc', extended_w_op),
     0x53: makeop('o6_wordArrayInc', extended_w_op),
     0x57: makeop('o6_wordVarDec', extended_w_op),
+    0x5b: makeop('o6_wordArrayDec', extended_w_op),
     0x5c: makeop('o6_if', jump_cmd),  # jump if
     0x5d: makeop('o6_ifNot', jump_cmd),  # jump if not
     0x5e: makeop('o6_startScript'),
     0x5f: makeop('o6_startScriptQuick'),
+    0x60: makeop('o6_startObject'),
+    0x61: makeop('o6_drawObject'),
+    0x62: makeop('o6_drawObjectAt'),
     0x65: makeop('o6_stopObjectCode'),
     0x66: makeop('o6_stopObjectCode'),
+    0x67: makeop('o6_endCutscene'),
+    0x68: makeop('o6_cutscene'),
+    0x6a: makeop('o6_freezeUnfreeze'),
     0x6b: makeop('o6_cursorCommand', extended_b_op),
     0x6e: makeop('o6_setClass'),
     0x6f: makeop('o6_getState'),
     0x6c: makeop('o6_breakHere'),
     0x6d: makeop('o6_ifClassOfIs'),
+    0x70: makeop('o6_setState'),
+    0x71: makeop('o6_setOwner'),
+    0x72: makeop('o6_getOwner'),
     0x73: makeop('o6_jump', jump_cmd),
+    0x74: makeop('o6_startSound'),
     0x75: makeop('o6_stopSound'),
+    0x78: makeop('o6_panCameraTo'),
+    0x79: makeop('o6_actorFollowCamera'),
     0x7a: makeop('o6_setCameraAt'),
     0x7b: makeop('o6_loadRoom'),
     0x7c: makeop('o6_stopScript'),
+    0x7d: makeop('o6_walkActorToObj'),
     0x7e: makeop('o6_walkActorTo'),
     0x7f: makeop('o6_putActorAtXY'),
     0x80: makeop('o6_putActorAtObject'),
+    0x81: makeop('o6_faceActor'),
     0x82: makeop('o6_animateActor'),
+    0x83: makeop('o6_doSentence'),
     0x84: makeop('o6_pickupObject'),
     0x87: makeop('o6_getRandomNumber'),
     0x88: makeop('o6_getRandomNumberRange'),
+    0x8a: makeop('o6_getActorMoving'),
     0x8b: makeop('o6_isScriptRunning'),
+    0x8c: makeop('o6_getActorRoom'),
     0x8d: makeop('o6_getObjectX'),
     0x8e: makeop('o6_getObjectY'),
     0x8f: makeop('o6_getObjectOldDir'),
     0x91: makeop('o6_getActorCostume'),
+    0x92: makeop('o6_findInventory'),
+    0x93: makeop('o6_getInventoryCount'),
     0x95: makeop('o6_beginOverride'),
     0x96: makeop('o6_endOverride'),
     0x98: makeop('o6_isSoundRunning'),
+    0x99: makeop('o6_setBoxFlags'),
     0x9b: makeop('o6_resourceRoutines', extended_b_op),
     0x9c: makeop('o6_roomOps', extended_b_op),
     0x9d: makeop('o6_actorOps', extended_b_op),
@@ -217,19 +246,28 @@ OPCODES_v6 = {
     0xa4: makeop('o6_arrayOps', array_ops_v6),
     0xa6: makeop('o6_drawBox'),
     0xa7: makeop('o6_pop'),
+    0xa8: makeop('o6_getActorWidth'),
     0xa9: makeop('o6_wait', wait_ops),
+    0xaa: makeop('o6_getActorScaleX'),
+    0xac: makeop('o6_soundKludge'),
     0xad: makeop('o6_isAnyOf'),
     0xb0: makeop('o6_delay'),
     0xb1: makeop('o6_delaySeconds'),
+    0xb2: makeop('o6_delayMinutes'),
+    0xb3: makeop('o6_stopSentence'),
     0xb4: makeop('o6_printLine', msg_cmd),
     0xb5: makeop('o6_printText', msg_cmd),
     0xb6: makeop('o6_printDebug', msg_cmd),
     0xb7: makeop('o6_printSystem', msg_cmd),
     0xb8: makeop('o6_printActor', msg_cmd),
     0xb9: makeop('o6_printEgo', msg_cmd),
+    0xba: makeop('o6_talkActor', msg_op),
+    0xbb: makeop('o6_talkEgo', msg_op),
     0xbc: makeop('o6_dimArray', extended_bw_op),
     0xbf: makeop('o6_startScriptQuick2'),
     0xc4: makeop('o6_abs'),
+    0xc5: makeop('o6_distObjectObject'),
+    0xc8: makeop('o6_kernelGetFunctions'),
     0xc9: makeop('o6_kernelSetFunctions'),
     0xca: makeop('o6_delayFrames'),
     0xcb: makeop('o6_pickOneOf'),
@@ -246,13 +284,21 @@ OPCODES_v6 = {
 
 OPCODES_he60 = {
     **OPCODES_v6,
+    0x63: None,
+    0x64: None,
+    0x70: makeop('o60_setState'),
+    0x9a: None,
     0x9c: makeop('o60_roomOps', room_ops_he60),
     0x9d: makeop('o60_actorOps', extended_b_op),
+    0xac: None,
     0xbd: makeop('o6_stopObjectCode'),
+    0xc8: makeop('o60_kernelGetFunctions'),
     0xc9: makeop('o60_kernelSetFunctions'),
     0xd9: makeop('o60_closeFile'), 
     0xe2: makeop('o60_localizeArrayToScript'),
     0xe9: makeop('o60_seekFilePos'),
+    0xec: None,
+    0xed: None,
 }
 
 OPCODES_he70 = {
@@ -280,7 +326,12 @@ OPCODES_he72 = {
     **OPCODES_he71,
     0x02: makeop('o72_pushDWord', extended_dw_op),
     0x04: makeop('o72_getScriptString', msg_op),
+    0x0a: None,
     0x1b: makeop('o72_isAnyOf'),
+    0x42: None,
+    0x46: None,
+    0x4a: None,
+    0x4e: None,
     0x50: makeop('o72_resetCutscene'),
     0x54: makeop('o72_getObjectImageX'),
     0x55: makeop('o72_getObjectImageY'),
@@ -291,7 +342,9 @@ OPCODES_he72 = {
     0x5e: makeop('o72_startScript', extended_b_op),
     0x60: makeop('o72_startObject', extended_b_op),
     0x61: makeop('o72_drawObject', extended_b_op),
+    0x62: makeop('o72_printWizImage'),
     0x63: makeop('o72_getArrayDimSize', extended_bw_op),
+    0x97: None,
     0x9c: makeop('o72_roomOps', extended_b_op),
     0x9d: makeop('o72_actorOps', extended_b_op),
     0xa4: makeop('o72_arrayOps', array_ops),
@@ -300,6 +353,7 @@ OPCODES_he72 = {
     0xbb: makeop('o72_talkEgo', msg_op),
     0xbc: makeop('o72_dimArray', extended_bw_op),
     0xc0: makeop('o72_dim2dimArray', extended_bw_op),
+    0xc8: makeop('o72_kernelGetFunctions'),
     0xce: makeop('o72_drawWizImage'),
     0xcf: makeop('o72_debugInput'),
     0xd5: makeop('o72_jumpToScript', extended_b_op),
@@ -324,7 +378,13 @@ OPCODES_he80 = {
     0x49: makeop('o80_getSoundVar'),
     0x4a: makeop('o80_localizeArrayToRoom'),
     0x4d: makeop('o80_readConfigFile', extended_b_op),
+    0x69: None,
     0x70: makeop('o80_setState'),
+    0x76: None,
+    0x94: None,
+    0x9e: None,
+    0xa5: None,
+    0xac: makeop('o80_drawWizPolygon'),
     0xe3: makeop('o80_pickVarRandom', extended_w_op),
 }
 
