@@ -17,8 +17,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
     parser.add_argument('output', help='filename to read from')
+    parser.add_argument('-c', '--chiper-key', default='0x69', type=str, help='xor key')
     args = parser.parse_args()
 
     with open(args.filename,'rb') as infile, open(args.output,'wb') as outfile:
-        for buffer in copyio.buffered(partial(read, infile, key=CHIPER_KEY)):
+        for buffer in copyio.buffered(partial(read, infile, key=int(args.chiper_key, 16))):
             outfile.write(buffer)
