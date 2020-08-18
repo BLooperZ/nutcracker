@@ -150,7 +150,7 @@ class Statement:
         self.name = name
         self.opcode = opcode
         self.offset = stream.tell() - 1
-        self.args = op(stream)
+        self.args = tuple(op(stream))
 
     def __repr__(self):
         return ' '.join([f'0x{self.opcode:02x}', self.name, '{', *(str(x) for x in self.args), '}'])
@@ -479,7 +479,7 @@ script_map = {
 
 def get_scripts(root):
     for elem in root:
-        if elem.tag in {'LECF', 'LFLF', 'RMDA', 'OBCD', *script_map}:
+        if elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
             if elem.tag in script_map:
                 yield elem
             else:
