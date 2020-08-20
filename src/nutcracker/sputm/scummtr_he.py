@@ -9,7 +9,8 @@ from typing import Iterable
 from nutcracker.chiper import xor
 from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file
 from nutcracker.sputm.build import write_file, make_index_from_resource
-from nutcracker.sputm.scummtr import descumm, get_strings, update_strings, script_map, OPCODES_he80, OPCODES_v6, to_bytes
+from nutcracker.sputm.script.bytecode import descumm, get_strings, update_strings, script_map, to_bytes
+from nutcracker.sputm.script.opcodes import OPCODES_v6, OPCODES_he80
 
 def get_all_scripts(root, opcodes):
     for elem in root:
