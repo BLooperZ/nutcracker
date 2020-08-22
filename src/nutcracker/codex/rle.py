@@ -1,6 +1,6 @@
 import io
 import itertools
-from typing import Sequence, Mapping
+from typing import Sequence
 
 from nutcracker.utils import funcutils
 
@@ -45,43 +45,29 @@ def encode_lined_rle(bmap: Sequence[Sequence[int]]) -> bytes:
             print('encode', sized)
         return stream.getvalue()
 
-def decode_lined_rle(data, width, height):
-    print('======================')
-    datlen = len(data)
-
-    print('DATA:', data, height)
-
-    output = [[0 for _ in range(width)] for _ in range(height)]
-
-    pos = 0
-    next_pos = pos
-    for curry in range(height):
-    # while pos < datlen and curry < height:
-        currx = 0
-        bytecount = int.from_bytes(data[next_pos:next_pos + 2], byteorder='little', signed=False)
-        print('decode', data[pos:pos+bytecount + 2])
-        pos = next_pos + 2
-        next_pos += bytecount + 2
-        while pos < datlen and pos < next_pos:
-            code = data[pos]
-            pos += 1
-            print(code)
+def decode_rle_group(line, width):
+    out = [0 for _ in range(width)]
+    currx = 0
+    with io.BytesIO(line) as stream:
+        while stream.tell() < len(line) and currx < width:
+            code = ord(stream.read(1))
             if code & 1:  # skip count
-                print('skip', code >> 1)
                 currx += (code >> 1)
             else:
                 count = (code >> 2) + 1
-                if code & 2:  # encoded run
-                    print('encoded', count, [data[pos]] * count)
-                    output[curry][currx:currx+count] = [data[pos]] * count
-                    pos += 1
-                else:  # absolute run
-                    print('absolute', count, data[pos:pos+count])
-                    output[curry][currx:currx+count] = data[pos:pos+count]
-                    pos += count
+                out[currx:currx+count] = stream.read(1) * count if code & 2 else stream.read(count)
                 currx += count
-            assert not currx > width
-    encoded = encode_lined_rle(output)
-    print((data, encoded))
-    assert encoded == data, (encoded, data)
+    return out
+
+def decode_lined_rle(data, width, height, verify=True):
+    with io.BytesIO(data) as stream:
+        lines = [
+            stream.read(
+                int.from_bytes(stream.read(2), signed=False, byteorder='little')
+            ) for _ in range(height)
+        ]
+    output = [decode_rle_group(line, width) for line in lines]
+    if verify:
+        encoded = encode_lined_rle(output)
+        assert encoded == data, (encoded, data)
     return output
