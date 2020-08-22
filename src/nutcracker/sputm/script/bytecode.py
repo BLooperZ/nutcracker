@@ -7,6 +7,11 @@ from .parser import (
     RefOffset
 )
 
+def get_argtype(args, argtype):
+    for arg in args:
+        if isinstance(arg, argtype):
+            yield arg
+
 def descumm(data: bytes, opcodes):
     with io.BytesIO(data) as stream:
         bytecode = {}
@@ -26,9 +31,8 @@ def descumm(data: bytes, opcodes):
                 raise e
 
         for _off, stat in bytecode.items():
-            for arg in stat.args:
-                if isinstance(arg, RefOffset):
-                    assert arg.abs in bytecode, hex(arg.abs)
+            for arg in get_argtype(stat.args, RefOffset):
+                assert arg.abs in bytecode, hex(arg.abs)
 
         assert to_bytes(bytecode) == data
         assert to_bytes(refresh_offsets(bytecode)) == data, (to_bytes(refresh_offsets(bytecode)), data)
@@ -40,10 +44,9 @@ def print_bytecode(bytecode):
 
 def get_strings(bytecode):
     for _off, stat in bytecode.items():
-        for arg in stat.args:
-            if isinstance(arg, CString):
-                if arg.msg:
-                    yield arg
+        for arg in get_argtype(stat.args, CString):
+            if arg.msg:
+                yield arg
 
 def update_strings(bytecode, strings):
     for orig, upd in zip(get_strings(bytecode), strings):
@@ -54,15 +57,13 @@ def refresh_offsets(bytecode):
     updated = {}
     off = 0
     for stat in bytecode.values():
-        for arg in stat.args:
-            if isinstance(arg, RefOffset):
-                arg.endpos += off - stat.offset
+        for arg in get_argtype(stat.args, RefOffset):
+            arg.endpos += off - stat.offset
         stat.offset = off
         off += len(stat.to_bytes())
     for stat in bytecode.values():
-        for arg in stat.args:
-            if isinstance(arg, RefOffset):
-                arg.abs = bytecode[arg.abs].offset
+        for arg in get_argtype(stat.args, RefOffset):
+            arg.abs = bytecode[arg.abs].offset
         updated[stat.offset] = stat
     return updated
 
@@ -77,7 +78,7 @@ def global_script(data):
     return b'', data
 
 def local_script(data):
-    return bytes([data[0]]), data[1:]
+    return data[:1], data[1:]
 
 def verb_script(data):
     serial = b''
