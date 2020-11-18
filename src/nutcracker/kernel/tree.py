@@ -26,7 +26,7 @@ def findpath(path: str, root: Optional[Element]) -> Optional[Element]:
     dirname, basename = os.path.split(path)
     return find(basename, findpath(dirname, root))
 
-def render(element, level=0, stream: IO[str] = sys.stdout):
+def render(element: Optional[Element], level: int = 0, stream: IO[str] = sys.stdout) -> None:
     if not element:
         return
     attribs = ''.join(f' {key}="{value}"' for key, value in element.attribs.items() if value is not None)
@@ -38,7 +38,7 @@ def render(element, level=0, stream: IO[str] = sys.stdout):
             render(c, level=level + 1, stream=stream)
         print(f'{indent}</{element.tag}>', file=stream)
 
-def renders(element) -> str:
+def renders(element: Optional[Element]) -> str:
     with io.StringIO() as stream:
         render(element, stream=stream)
         return stream.getvalue()

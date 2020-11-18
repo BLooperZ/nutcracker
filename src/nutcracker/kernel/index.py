@@ -4,25 +4,25 @@ import io
 import logging
 from contextlib import contextmanager
 from dataclasses import replace
-from typing import Dict, Iterator, FrozenSet, Optional, Set, Callable
+from typing import Any, Dict, Iterator, FrozenSet, Optional, Set, Callable
 
 from .resource import read_chunks
 from .types import Element, Chunk
 from .settings import _IndexSetting
 
 class MissingSchemaKey(Exception):
-    def __init__(self, tag):
+    def __init__(self, tag: str) -> None:
         super().__init__(f'Missing key in schema: {tag}')
         self.tag = tag
 
 class MissingSchemaEntry(Exception):
-    def __init__(self, ptag, tag):
+    def __init__(self, ptag: str, tag: str) -> None:
         super().__init__(f'Missing entry for {tag} in {ptag} schema')
         self.ptag = ptag
         self.tag = tag
 
 @contextmanager
-def exception_ptag_context(ptag: Optional[str]):
+def exception_ptag_context(ptag: Optional[str]) -> Iterator[None]:
     try:
         yield
     except Exception as e:
@@ -30,7 +30,7 @@ def exception_ptag_context(ptag: Optional[str]):
             e.ptag = ptag  # type: ignore
         raise e
 
-def check_schema(cfg: _IndexSetting, ptag: Optional[str], tag: str):
+def check_schema(cfg: _IndexSetting, ptag: Optional[str], tag: str) -> None:
     try:
         if ptag and tag not in cfg.schema[ptag]:
             raise MissingSchemaEntry(ptag, tag)
@@ -42,24 +42,19 @@ def check_schema(cfg: _IndexSetting, ptag: Optional[str], tag: str):
         else:
             cfg.logger.warning(e)
 
-def create_element(offset: int, chunk: Chunk, **attrs) -> Element:
+def create_element(offset: int, chunk: Chunk, **attrs: Any) -> Element:
     return Element(
         *chunk,
         {'offset': offset, 'size': len(chunk.data), **attrs},
         []
     )
 
-def update_element(parent, chunk, offset):
-    gid = idgen.get(chunk.tag)
-    gid = gid and gid(parent and parent.attribs['gid'], chunk.data, offset)
-    gid=gid and f'{gid:04d}'
-
 def map_chunks(
         cfg: _IndexSetting,
         data: bytes,
         parent: Element = None,
         level: int = 0,
-        extra: Optional[Callable] = None
+        extra: Optional[Callable[[Optional[Element], Chunk, int], Dict[str, Any]]] = None
 ) -> Iterator[Element]:
     ptag = parent.tag if parent else None
     if cfg.max_depth and level >= cfg.max_depth:
@@ -79,7 +74,7 @@ def map_chunks(
                 map_chunks(cfg, chunk.data, parent=elem, level=level + 1, extra=extra)
             )
 
-def generate_schema(cfg: _IndexSetting, data) -> Dict[str, Set[str]]:
+def generate_schema(cfg: _IndexSetting, data: bytes) -> Dict[str, Set[str]]:
     EMPTY: FrozenSet[str] = frozenset()
     DUMMY: FrozenSet[str] = frozenset({'__DUMMY__'})
 
@@ -145,7 +140,7 @@ if __name__ == '__main__':
         with open(args.schema_dump, 'w') as fb:
             yaml.dump(schema, f)
 
-    def update_element_path(parent, chunk, offset):
+    def update_element_path(parent: Optional[Element], chunk: Chunk, offset: int) -> Dict[str, str]:
         dirname = parent.attribs['path'] if parent else ''
         res = {'path': os.path.join(dirname, chunk.tag)}
         return res

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field, replace
 
-from typing import NamedTuple, Iterable, Iterator, Sequence
+from typing import Any, Dict, Iterable, Iterator, NamedTuple, Sequence
 
 class Chunk(NamedTuple):
     """Chunk made of 4CC header and data
@@ -26,7 +26,7 @@ class Element:
     """
     tag: str
     data: bytes = field(repr=False)
-    attribs: dict
+    attribs: Dict[str, Any]
     children: Sequence['Element']
 
     def __iter__(self) -> Iterator['Element']:
