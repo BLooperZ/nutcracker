@@ -9,7 +9,7 @@ import numpy as np
 from nutcracker.utils.funcutils import grouper, flatten
 from nutcracker.graphics.image import convert_to_pil_image
 from nutcracker.codex import codex
-from nutcracker.codex import bomb
+from nutcracker.codex import bomb, rle
 from nutcracker.sputm import bpp_codec
 
 from typing import Iterator, NamedTuple, Sequence, Tuple
@@ -103,6 +103,9 @@ def decode5(width, height, pal, data):
 
     return convert_to_pil_image(out, size=(width, height))
 
+def decode32(width, height, pal, data):
+    out = rle.decode_lined_rle(data, width, height, verify=False)
+    return convert_to_pil_image(out, size=(width, height))
 
 def decode_frame(akhd, ci, cd, palette):
 
@@ -117,6 +120,8 @@ def decode_frame(akhd, ci, cd, palette):
             return convert_to_pil_image([[0]])
     elif akhd.codec == 5:
         return decode5(width, height, palette, cd)
+    elif akhd.codec == 32:
+        return decode32(width, height, palette, cd)
     else:
         print(akhd.codec)
         raise NotImplementedError()
@@ -124,6 +129,8 @@ def decode_frame(akhd, ci, cd, palette):
 def read_akos_resource(resource):
     # akos = check_tag('AKOS', next(sputm.map_chunks(resource)))
     akos = sputm.find('AKOS', sputm.map_chunks(resource))
+    if not akos:
+        return
     # akos = iter(akos)
     akhd = akos_header_from_bytes(sputm.find('AKHD', akos).data)
 
@@ -154,6 +161,8 @@ def read_akos_resource(resource):
     for (cd_start, ci_start), (cd_end, ci_end) in zip(akof, ends):
         ci = akci.data[ci_start:ci_start+8]
         # print(len(ci))
+        # if not akhd.codec in {32}:
+        #     continue
         cd = akcd.data[cd_start:cd_end]
         decoded = decode_frame(akhd, ci, cd, akpl)
         decoded.putpalette(rgbs.data)
@@ -168,9 +177,11 @@ if __name__ == '__main__':
     import glob
 
     from .preset import sputm
+    from .index import read_file
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('files', nargs='+', help='files to read from')
+    parser.add_argument('--chiper-key', default='0x00', type=str, help='xor key')
     args = parser.parse_args()
 
 
@@ -180,8 +191,7 @@ if __name__ == '__main__':
 
         print(filename)
 
-        with open(filename, 'rb') as res:
-            resource = res.read()
+        resource = read_file(filename, key=int(args.chiper_key, 16))
 
         os.makedirs('AKOS_out', exist_ok=True)
 
