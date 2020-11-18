@@ -190,7 +190,6 @@ def read_file(path: str, key: int = 0x00) -> bytes:
     with open(path, 'rb') as res:
         return xor.read(res, key=key)
 
-
 def save_tree(cfg, element, basedir='.'):
     if not element:
         return
@@ -222,7 +221,7 @@ if __name__ == '__main__':
     # resource_suffix = '.(a)'
     read_index = read_index_he
     chiper_key = 0x69
-    max_depth = 4
+    max_depth = 3
 
     # # Configuration for SCUMM v5-v6 games
     # index_suffix = '.000'
@@ -271,11 +270,13 @@ if __name__ == '__main__':
 
         dirname = parent.attribs['path'] if parent else ''
         path = os.path.join(dirname, base)
-        res = {'path': path, 'gid': gid}
 
+        if path in paths:
+            path += 'd'
         assert path not in paths, path
         paths[path] = chunk
 
+        res = {'path': path, 'gid': gid}
         return res
 
     root = sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
