@@ -129,7 +129,7 @@ if __name__ == '__main__':
     # resource_suffix = '.001'
     # read_index = read_index_v5tov7
     # chiper_key = 0x69
-    # max_depth = 4
+    # max_depth = None
 
     # # Configuration for SCUMM v7 games
     # index_suffix = '.LA0'
