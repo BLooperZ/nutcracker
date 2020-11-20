@@ -38,8 +38,8 @@ def read_chunks(cfg: _ChunkSetting, data: bytes) -> Iterator[Tuple[int, Chunk]]:
             if not chunk:
                 break
             yield offset, chunk
-            align_read_stream(stream, align=cfg.align)
-            offset = stream.tell()
+            offset = align_read_stream(stream, align=cfg.align)
+            assert offset == stream.tell()
         assert stream.read() == b''
 
 def mktag(cfg: _ChunkSetting, tag: str, data: bytes) -> bytes:
