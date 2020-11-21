@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from nutcracker.utils.funcutils import grouper, flatten
 
-def read_message(stream, escape=None):
+def read_message(stream, escape=None, var_size=2):
     while True:
         c = stream.read(1)
         if c in {b'', b'\0'}:
@@ -11,12 +11,12 @@ def read_message(stream, escape=None):
             t = stream.read(1)
             c += t
             if ord(t) not in {1, 2, 3, 8}:
-                c += stream.read(2)
+                c += stream.read(var_size)
         yield c
 
 class CString:
-    def __init__(self, stream):
-        self.msg = b''.join(read_message(stream, escape=b'\xff'))
+    def __init__(self, stream, var_size=2):
+        self.msg = b''.join(read_message(stream, escape=b'\xff', var_size=var_size))
     def __repr__(self):
         return f'MSG {self.msg!r}'
     def to_bytes(self):
@@ -50,9 +50,10 @@ class DWordValue:
         return self.op
 
 class RefOffset:
-    def __init__(self, stream):
-        rel = int.from_bytes(stream.read(2), byteorder='little', signed=True)
+    def __init__(self, stream, word_size=2):
+        rel = int.from_bytes(stream.read(word_size), byteorder='little', signed=True)
         self.endpos = stream.tell()
+        self.size = word_size
         self.abs = rel + self.endpos
 
     @property
@@ -60,10 +61,12 @@ class RefOffset:
         return self.abs - self.endpos
 
     def __repr__(self):
-        return f'REF rel=0x{self.rel:04x} abs=0x{(self.abs):04x}'
+        if self.size == 2:
+            return f'REF rel=0x{self.rel:04x} abs=0x{(self.abs):04x}'
+        return f'REF rel=0x{self.rel:08x} abs=0x{(self.abs):08x}'
 
     def to_bytes(self):
-        return self.rel.to_bytes(2, byteorder='little', signed=True)
+        return self.rel.to_bytes(self.size, byteorder='little', signed=True)
 
 class Statement:
     def __init__(self, name, op, opcode, stream):
