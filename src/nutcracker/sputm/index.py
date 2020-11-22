@@ -18,6 +18,13 @@ def read_directory_leg(data):
         offs = [int.from_bytes(s.read(4), byteorder='little', signed=False) for i in range(num)]
         return enumerate(zip(rnums, offs))
 
+def read_directory_leg_v8(data):
+    with io.BytesIO(data) as s:
+        num = int.from_bytes(s.read(4), byteorder='little', signed=False)
+        rnums = [int.from_bytes(s.read(1), byteorder='little', signed=False) for i in range(num)]
+        offs = [int.from_bytes(s.read(4), byteorder='little', signed=False) for i in range(num)]
+        return enumerate(zip(rnums, offs))
+
 def read_rnam(data, key=0xFF):
     with io.BytesIO(data) as s:
         while True:
@@ -63,11 +70,6 @@ def read_dlfl(data):
 #         ) for i in range(num)]
 #         print(enumerate(merged))
 
-def counter(it):
-    def inner(pid, data, off):
-        return next(it)
-    return inner
-
 def read_inner_uint16le(pid, data, off):
     res = int.from_bytes(data[8:10], byteorder='little', signed=False)
     # TODO: fix offset for FT + DIG as in the following commented line
@@ -81,6 +83,21 @@ def read_uint8le(pid, data, off):
 def compare_pid_off(directory):
     def inner(pid, data, off):
         return next((k for k, v in directory.items() if v == (pid, off)), None)
+    return inner
+
+def compare_pid_off_v8(directory):
+    def inner(pid, data, off):
+        return next((k for k, v in directory.items() if v == (pid, off + 8)), None)
+    return inner
+
+def compare_pid_off_plus16(directory):
+    def inner(pid, data, off):
+        return next((k for k, v in directory.items() if v == (pid, off + 16)), None)
+    return inner
+
+def compare_off_he(directory):
+    def inner(pid, data, off):
+        return next((k for k, v in directory.items() if v == off + 16), None)
     return inner
 
 def read_index_v5tov7(root):
@@ -115,7 +132,7 @@ def read_index_v5tov7(root):
             anam = dict(read_anam(t.data))
             pprint.pprint(anam)
     return {
-        'LFLF': counter(k for k, v  in droo.items() if v != (0, 0)),
+        'LFLF': droo,
         'OBIM': read_inner_uint16le,  # check gid for DIG and FT
         'OBCD': read_inner_uint16le,
         'LSCR': read_uint8le,
@@ -124,6 +141,49 @@ def read_index_v5tov7(root):
         'SOUN': compare_pid_off(dsou),
         'COST': compare_pid_off(dcos),
         'AKOS': compare_pid_off(dcos),
+    }
+
+def read_index_v8(root):
+    for t in root:
+        sputm.render(t)
+        if t.tag == 'RNAM':
+            rnam = dict(read_rnam(t.data, key=0xFF))
+            pprint.pprint(rnam)
+        elif t.tag == 'MAXS':
+            print('MAXS not yet supported')
+        elif t.tag == 'DROO':
+            droo = dict(read_directory_leg_v8(t.data))
+            pprint.pprint(droo)
+        elif t.tag == 'DRSC':
+            drsc = dict(read_directory_leg_v8(t.data))
+            pprint.pprint(drsc)
+        elif t.tag == 'DSCR':
+            dscr = dict(read_directory_leg_v8(t.data))
+            pprint.pprint(dscr)
+        elif t.tag == 'DSOU':
+            dsou = dict(read_directory_leg_v8(t.data))
+            pprint.pprint(dsou)
+        elif t.tag == 'DCOS':
+            dcos = dict(read_directory_leg_v8(t.data))
+            pprint.pprint(dcos)
+        elif t.tag == 'DCHR':
+            dchr = dict(read_directory_leg_v8(t.data))
+            pprint.pprint(dchr)
+        elif t.tag == 'DOBJ':
+            print('DOBJ not yet supported')
+        elif t.tag == 'ANAM':
+            anam = dict(read_anam(t.data))
+            pprint.pprint(anam)
+    return {
+        'LFLF': droo,
+        'OBIM': read_inner_uint16le,  # check gid for DIG and FT
+        'OBCD': read_inner_uint16le,
+        'LSCR': read_uint8le,
+        'SCRP': compare_pid_off_v8(dscr),
+        'CHAR': compare_pid_off_v8(dchr),
+        'SOUN': compare_pid_off_v8(dsou),
+        'COST': compare_pid_off_v8(dcos),
+        'AKOS': compare_pid_off_v8(dcos),
     }
 
 def read_index_he(root):
@@ -170,7 +230,7 @@ def read_index_he(root):
             # pprint.pprint(dlfl)
             pass
     return {
-        'LFLF': counter(k for k, v  in droo.items() if v != (0, 0)),
+        'LFLF': compare_off_he(dlfl),
         'OBIM': read_inner_uint16le,
         'OBCD': read_inner_uint16le,
         'LSCR': read_uint8le,
@@ -221,7 +281,7 @@ if __name__ == '__main__':
     # resource_suffix = '.(a)'
     read_index = read_index_he
     chiper_key = 0x69
-    max_depth = 3
+    max_depth = 4
 
     # # Configuration for SCUMM v5-v6 games
     # index_suffix = '.000'
