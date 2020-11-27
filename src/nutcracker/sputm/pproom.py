@@ -16,7 +16,9 @@ from nutcracker.sputm.proom import (
     convert_to_pil_image
 )
 
-def read_room(lflf):
+def read_room(lflf, rnam=None):
+    rnam = rnam or {}
+
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
     rwidth, rheight, _ = read_rmhd(sputm.find('RMHD', room).data)
     # trns = sputm.find('TRNS', room).data  # pylint: disable=unused-variable
@@ -50,9 +52,14 @@ def read_room(lflf):
                 continue
             im = convert_to_pil_image(bgim)
             im.putpalette(palette)
-            yield imag.attribs['path'], im, ()
+            room_id = lflf.attribs.get('gid')
+            path = f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else room.attribs['path']
 
-def read_objects(lflf):
+            yield path, im, ()
+
+def read_objects(lflf, rnam=None):
+    rnam = rnam or {}
+
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
     # trns = sputm.find('TRNS', room).data  # pylint: disable=unused-variable
     palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).data
@@ -94,7 +101,9 @@ def read_objects(lflf):
                 bgim = read_room_background_v8(iim.children[1], obj_width, obj_height, 0)
                 im = convert_to_pil_image(bgim)
                 im.putpalette(palette)
-                yield obim.attribs['path'] + f'_{name}', im
+                room_id = lflf.attribs.get('gid')
+                path = f'{room_id:04d}_{name}' if room_id in rnam else f"{obim.attribs['path']}_{name}"
+                yield path, im
 
 
 def get_rooms(root):
@@ -113,14 +122,14 @@ if __name__ == '__main__':
 
     from .types import Chunk
     from .index2 import read_directory
-    from .index import compare_pid_off
+    from .index import compare_pid_off, read_rnam
     from .preset import sputm
     from .resource import detect_resource
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
     args = parser.parse_args()
-    
+
     basedir = os.path.basename(args.filename)
 
     game = detect_resource(args.filename)
@@ -134,14 +143,9 @@ if __name__ == '__main__':
     index_root = sputm(schema=s).map_chunks(index)
     index_root = list(index_root)
 
-    # os.makedirs(basedir, exist_ok=True)
-    # with open(os.path.join(basedir, 'index.xml'), 'w') as f:
-    #     for t in index_root:
-    #         sputm.render(t, stream=f)
-    #         print(t, t.data)
 
     for didx, disk in enumerate(disks):
-        idgens = game.read_index(index_root)
+        rnam, idgens = game.read_index(index_root)
 
         resource = read_file(disk, key=game.chiper_key)
 
@@ -179,23 +183,26 @@ if __name__ == '__main__':
         base = os.path.join(os.path.basename(args.filename), 'IMAGES')
         os.makedirs(base, exist_ok=True)
 
+        os.makedirs(os.path.join(base, 'backgrounds'), exist_ok=True)
+        os.makedirs(os.path.join(base, 'objects'), exist_ok=True)
+
         paths = {}
 
         for lflf in get_rooms(root):
-            for oidx, (path, room_bg, zpxx) in enumerate(read_room(lflf)):
+            for oidx, (path, room_bg, zpxx) in enumerate(read_room(lflf, rnam)):
                 path = path.replace(os.path.sep, '_')
                 # dirname = os.path.dirname(path)
                 # os.makedirs(os.path.join(base, dirname), exist_ok=True)
-                assert path not in paths
+                assert path not in paths, path
                 paths[path] = True
-                room_bg.save(os.path.join(base, f'{path}.png'))
+                room_bg.save(os.path.join(base, 'backgrounds', f'{path}.png'))
 
-            for oidx, (path, im) in enumerate(read_objects(lflf)):
+            for oidx, (path, im) in enumerate(read_objects(lflf, rnam)):
                 path = path.replace(os.path.sep, '_')
                 # dirname = os.path.dirname(path)
                 # os.makedirs(os.path.join(base, dirname), exist_ok=True)
                 # while path in paths:
                 #     path += 'd'
-                assert not path in paths
+                assert not path in paths, path
                 paths[path] = True
-                im.save(os.path.join(base, f'{path}.png'))
+                im.save(os.path.join(base, 'objects', f'{path}.png'))

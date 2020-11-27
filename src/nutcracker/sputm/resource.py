@@ -14,6 +14,7 @@ class GameResourceConfig:
     read_index: Callable
     chiper_key: int
     max_depth: int
+    base_fix: int = 0
 
 
 def detect_resource(path):
@@ -42,10 +43,11 @@ def detect_resource(path):
         # Configuration for SCUMM v7 games
         pattern = '.LA{i:d}'
         resources = [res for res in resources if parse(f'{path}{pattern}', res, evaluate_result=False)]
-        read_index = read_index_v8
+        read_index = read_index_v8 if os.path.basename(path) == 'COMI' else read_index_v5tov7
         chiper_key = 0x00
         max_depth = 3
-        return GameResourceConfig(resources, read_index, chiper_key, max_depth)
+        base_fix = 8 if os.path.basename(path) == 'COMI' else 0
+        return GameResourceConfig(resources, read_index, chiper_key, max_depth, base_fix)
 
 if __name__ == '__main__':
     import argparse

@@ -10,7 +10,7 @@ from itertools import takewhile
 
 from nutcracker.chiper import xor
 from .preset import sputm
-from .index import compare_pid_off_v8, save_tree, read_file, compare_pid_off_plus16
+from .index import save_tree, read_file, compare_pid_off
 
 def read_directory(data):
     with io.BytesIO(data) as s:
@@ -52,7 +52,7 @@ if __name__ == '__main__':
     #         print(t, t.data)
 
     for didx, disk in enumerate(disks):
-        idgens = game.read_index(index_root)
+        _, idgens = game.read_index(index_root)
 
         resource = read_file(disk, key=game.chiper_key)
 
@@ -72,7 +72,7 @@ if __name__ == '__main__':
                 offs = dict(read_directory(chunk.data))
                 droo = {k: (disk, offs[k]) for k, (disk, _)  in droo.items()}
                 print(droo)
-                idgens['LFLF'] = compare_pid_off_plus16(droo)
+                idgens['LFLF'] = compare_pid_off(droo, 16 - game.base_fix)
 
             get_gid = idgens.get(chunk.tag)
             if not parent:

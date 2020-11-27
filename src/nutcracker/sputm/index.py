@@ -80,19 +80,9 @@ def read_uint8le(pid, data, off):
     res = int.from_bytes(data[:1], byteorder='little', signed=False)
     return res
 
-def compare_pid_off(directory):
+def compare_pid_off(directory, base: int = 0):
     def inner(pid, data, off):
-        return next((k for k, v in directory.items() if v == (pid, off)), None)
-    return inner
-
-def compare_pid_off_v8(directory):
-    def inner(pid, data, off):
-        return next((k for k, v in directory.items() if v == (pid, off + 8)), None)
-    return inner
-
-def compare_pid_off_plus16(directory):
-    def inner(pid, data, off):
-        return next((k for k, v in directory.items() if v == (pid, off + 16)), None)
+        return next((k for k, v in directory.items() if v == (pid, off + base)), None)
     return inner
 
 def compare_off_he(directory):
@@ -131,7 +121,7 @@ def read_index_v5tov7(root):
         elif t.tag == 'ANAM':
             anam = dict(read_anam(t.data))
             pprint.pprint(anam)
-    return {
+    return rnam, {
         'LFLF': droo,
         'OBIM': read_inner_uint16le,  # check gid for DIG and FT
         'OBCD': read_inner_uint16le,
@@ -174,16 +164,16 @@ def read_index_v8(root):
         elif t.tag == 'ANAM':
             anam = dict(read_anam(t.data))
             pprint.pprint(anam)
-    return {
+    return rnam, {
         'LFLF': droo,
         'OBIM': read_inner_uint16le,  # check gid for DIG and FT
         'OBCD': read_inner_uint16le,
         'LSCR': read_uint8le,
-        'SCRP': compare_pid_off_v8(dscr),
-        'CHAR': compare_pid_off_v8(dchr),
-        'SOUN': compare_pid_off_v8(dsou),
-        'COST': compare_pid_off_v8(dcos),
-        'AKOS': compare_pid_off_v8(dcos),
+        'SCRP': compare_pid_off(dscr, 8),
+        'CHAR': compare_pid_off(dchr, 8),
+        'SOUN': compare_pid_off(dsou, 8),
+        'COST': compare_pid_off(dcos, 8),
+        'AKOS': compare_pid_off(dcos, 8),
     }
 
 def read_index_he(root):
@@ -229,7 +219,7 @@ def read_index_he(root):
             dlfl = dict(read_dlfl(t.data))
             # pprint.pprint(dlfl)
             pass
-    return {
+    return rnam, {
         'LFLF': compare_off_he(dlfl),
         'OBIM': read_inner_uint16le,
         'OBCD': read_inner_uint16le,
