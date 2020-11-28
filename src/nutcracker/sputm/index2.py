@@ -67,11 +67,15 @@ if __name__ == '__main__':
 
             if chunk.tag == 'LOFF':
                 # should not happen in HE games
-                droo = idgens['LFLF']
-                droo = {k: v for k, v  in droo.items() if v == (didx + 1, 0)}
+
                 offs = dict(read_directory(chunk.data))
-                droo = {k: (disk, offs[k]) for k, (disk, _)  in droo.items()}
-                print(droo)
+
+                # # to ignore cloned rooms
+                # droo = idgens['LFLF']
+                # droo = {k: v for k, v  in droo.items() if v == (didx + 1, 0)}
+                # droo = {k: (disk, offs[k]) for k, (disk, _)  in droo.items()}
+
+                droo = {k: (didx + 1, v) for k, v  in offs.items()}
                 idgens['LFLF'] = compare_pid_off(droo, 16 - game.base_fix)
 
             get_gid = idgens.get(chunk.tag)

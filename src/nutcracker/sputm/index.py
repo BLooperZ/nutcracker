@@ -55,6 +55,41 @@ def read_anam(data):
         names = [s.read(9).split(b'\0')[0].decode() for i in range(num)]
         return enumerate(names)
 
+def read_dobj(data):
+    with io.BytesIO(data) as s:
+        num = int.from_bytes(s.read(2), byteorder='little', signed=False)
+        values = list(s.read(num))
+        # [(state, owner)]
+        return enumerate((val >> 4, val & 0xFF) for val in values)
+
+def read_dobj_v8(data):
+    with io.BytesIO(data) as s:
+        num = int.from_bytes(s.read(4), byteorder='little', signed=False)
+        for i in range(num):
+            name = s.read(40).split(b'\0')[0].decode()
+            obj_id = i
+            state = ord(s.read(1))
+            room = ord(s.read(1))
+            obj_class = int.from_bytes(s.read(4), byteorder='little', signed=False)
+            yield name, (obj_id, state, room, obj_class)
+
+def read_dobj_v7(data):
+    with io.BytesIO(data) as s:
+        num = int.from_bytes(s.read(2), byteorder='little', signed=False)
+        states = list(s.read(num))
+        rooms = list(s.read(num))
+        classes = [int.from_bytes(s.read(4), byteorder='little', signed=False) for _ in range(num)]
+        return enumerate(zip(states, rooms, classes))
+
+def read_dobj_he(data):
+    with io.BytesIO(data) as s:
+        num = int.from_bytes(s.read(2), byteorder='little', signed=False)
+        states = list(s.read(num))
+        owners = list(s.read(num))
+        rooms =  list(s.read(num))
+        classes = [int.from_bytes(s.read(4), byteorder='little', signed=False) for _ in range(num)]
+        return enumerate(zip(states, owners, rooms, classes))
+
 def read_dlfl(data):
     with io.BytesIO(data) as s:
         num = int.from_bytes(s.read(2), byteorder='little', signed=False)
@@ -69,6 +104,10 @@ def read_dlfl(data):
 #             int.from_bytes(s.read(4), byteorder='little', signed=False)
 #         ) for i in range(num)]
 #         print(enumerate(merged))
+
+def read_inner_uint16le_v7(pid, data, off):
+    res = int.from_bytes(data[12:14], byteorder='little', signed=False)
+    return res
 
 def read_inner_uint16le(pid, data, off):
     res = int.from_bytes(data[8:10], byteorder='little', signed=False)
@@ -133,6 +172,49 @@ def read_index_v5tov7(root):
         'AKOS': compare_pid_off(dcos),
     }
 
+def read_index_v7(root):
+    for t in root:
+        sputm.render(t)
+        if t.tag == 'RNAM':
+            rnam = dict(read_rnam(t.data, key=0xFF))
+            pprint.pprint(rnam)
+        elif t.tag == 'MAXS':
+            print('MAXS not yet supported')
+        elif t.tag == 'DROO':
+            droo = dict(read_directory_leg(t.data))
+            pprint.pprint(droo)
+        elif t.tag == 'DRSC':
+            drsc = dict(read_directory_leg(t.data))
+            pprint.pprint(drsc)
+        elif t.tag == 'DSCR':
+            dscr = dict(read_directory_leg(t.data))
+            pprint.pprint(dscr)
+        elif t.tag == 'DSOU':
+            dsou = dict(read_directory_leg(t.data))
+            pprint.pprint(dsou)
+        elif t.tag == 'DCOS':
+            dcos = dict(read_directory_leg(t.data))
+            pprint.pprint(dcos)
+        elif t.tag == 'DCHR':
+            dchr = dict(read_directory_leg(t.data))
+            pprint.pprint(dchr)
+        elif t.tag == 'DOBJ':
+            print('DOBJ not yet supported')
+        elif t.tag == 'ANAM':
+            anam = dict(read_anam(t.data))
+            pprint.pprint(anam)
+    return rnam, {
+        'LFLF': droo,
+        'OBIM': read_inner_uint16le_v7,  # check gid for DIG and FT
+        'OBCD': read_inner_uint16le_v7,
+        'LSCR': read_uint8le,
+        'SCRP': compare_pid_off(dscr),
+        'CHAR': compare_pid_off(dchr),
+        'SOUN': compare_pid_off(dsou),
+        'COST': compare_pid_off(dcos),
+        'AKOS': compare_pid_off(dcos),
+    }
+
 def read_index_v8(root):
     for t in root:
         sputm.render(t)
@@ -160,14 +242,15 @@ def read_index_v8(root):
             dchr = dict(read_directory_leg_v8(t.data))
             pprint.pprint(dchr)
         elif t.tag == 'DOBJ':
-            print('DOBJ not yet supported')
+            dobj = dict(read_dobj_v8(t.data))
+            pprint.pprint(dobj)
         elif t.tag == 'ANAM':
             anam = dict(read_anam(t.data))
             pprint.pprint(anam)
     return rnam, {
         'LFLF': droo,
-        'OBIM': read_inner_uint16le,  # check gid for DIG and FT
-        'OBCD': read_inner_uint16le,
+        'OBIM': get_object_id_from_name_v8(dobj),
+        'OBCD': read_inner_uint16le_v7,
         'LSCR': read_uint8le,
         'SCRP': compare_pid_off(dscr, 8),
         'CHAR': compare_pid_off(dchr, 8),
@@ -175,6 +258,12 @@ def read_index_v8(root):
         'COST': compare_pid_off(dcos, 8),
         'AKOS': compare_pid_off(dcos, 8),
     }
+
+def get_object_id_from_name_v8(dobj):
+    def compare_name(pid, data, off):
+        name = data[8:48].split(b'\0')[0].decode()
+        return dobj[name][0]
+    return compare_name
 
 def read_index_he(root):
     dtlk = None  # prevent `referenced before assignment` error

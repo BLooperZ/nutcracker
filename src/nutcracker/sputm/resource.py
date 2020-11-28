@@ -6,7 +6,15 @@ from typing import Sequence, Callable
 
 from parse import parse
 
-from nutcracker.sputm.index import read_index_v8, read_index_v5tov7, read_index_he, read_file, read_directory_leg as read_dir, read_dlfl
+from nutcracker.sputm.index import (
+    read_index_v8,
+    read_index_v7,
+    read_index_v5tov7,
+    read_index_he,
+    read_file,
+    read_directory_leg as read_dir,
+    read_dlfl
+)
 
 @dataclass(frozen=True)
 class GameResourceConfig:
@@ -43,9 +51,9 @@ def detect_resource(path):
         # Configuration for SCUMM v7 games
         pattern = '.LA{i:d}'
         resources = [res for res in resources if parse(f'{path}{pattern}', res, evaluate_result=False)]
-        read_index = read_index_v8 if os.path.basename(path) == 'COMI' else read_index_v5tov7
+        read_index = read_index_v8 if os.path.basename(path) == 'COMI' else read_index_v7
         chiper_key = 0x00
-        max_depth = 3
+        max_depth = 4
         base_fix = 8 if os.path.basename(path) == 'COMI' else 0
         return GameResourceConfig(resources, read_index, chiper_key, max_depth, base_fix)
 

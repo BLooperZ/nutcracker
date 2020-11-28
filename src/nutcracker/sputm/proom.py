@@ -187,9 +187,7 @@ def read_imhd_v7(data):
 def read_imhd_v8(data):
     # pylint: disable=unused-variable
     with io.BytesIO(data) as stream:
-        name = stream.read(32).split(b'\0')[0].decode()
-        unk_1 = read_uint32le(stream)
-        unk_2 = read_uint32le(stream)
+        name = stream.read(40).split(b'\0')[0].decode()
         version = read_uint32le(stream)
         image_count = read_uint32le(stream)
         obj_x = read_uint32le(stream)

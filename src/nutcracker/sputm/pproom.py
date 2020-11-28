@@ -41,7 +41,11 @@ def read_room(lflf, rnam=None):
             zpxx = list(sputm.findall('ZP{:02x}', imxx))
             assert len(zpxx) == zbuffers - 1
             im.putpalette(palette)
-            yield imxx.attribs['path'], im, zpxx
+
+            room_id = lflf.attribs.get('gid')
+            path = f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else imxx.attribs['path']
+
+            yield path, im, zpxx
     else:
         # TODO: check for multiple IMAG in room bg (different image state)
         for imag in sputm.findall('IMAG', room):
@@ -52,6 +56,7 @@ def read_room(lflf, rnam=None):
                 continue
             im = convert_to_pil_image(bgim)
             im.putpalette(palette)
+
             room_id = lflf.attribs.get('gid')
             path = f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else room.attribs['path']
 
@@ -77,12 +82,16 @@ def read_objects(lflf, rnam=None):
                     continue
                 im = convert_to_pil_image(bgim)
                 im.putpalette(palette)
-                yield imxx.attribs['path'], im
+
+                room_id = lflf.attribs.get('gid')
+                path = f'{room_id:04d}_{rnam[room_id]}_{obj_id:04d}_{imxx.tag}' if room_id in rnam else imxx.attribs['path']
+
+                yield path, im
         elif len(imhd) < 80:
             # Game version == 7
             print(imhd)
             obj_id, obj_height, obj_width = read_imhd_v7(imhd)
-            # assert obj_id == obim.attribs['gid'], (obj_id, obim.attribs['gid'])
+            # assert obj_id == obim.attribs['gid'], (obj_id, obim.attribs['gid'])  # assertion breaks on HE games
 
             for imxx in sputm.findall('IM{:02x}', obim):
                 bgim = read_room_background(imxx.children[0], obj_width, obj_height, 0)
@@ -90,7 +99,12 @@ def read_objects(lflf, rnam=None):
                     continue
                 im = convert_to_pil_image(bgim)
                 im.putpalette(palette)
-                yield imxx.attribs['path'], im
+
+                room_id = lflf.attribs.get('gid')
+                obj_id = obim.attribs['gid']
+                path = f'{room_id:04d}_{rnam[room_id]}_{obj_id:04d}_{imxx.tag}' if room_id in rnam else imxx.attribs['path']
+
+                yield path, im
         else:
             # Game version == 8
             name, obj_height, obj_width = read_imhd_v8(imhd)
@@ -155,14 +169,17 @@ if __name__ == '__main__':
         # root = sputm.map_chunks(resource, idgen=idgens, schema=s)
 
         def update_element_path(parent, chunk, offset):
-
             if chunk.tag == 'LOFF':
                 # should not happen in HE games
-                droo = idgens['LFLF']
-                droo = {k: v for k, v  in droo.items() if v == (didx + 1, 0)}
+
                 offs = dict(read_directory(chunk.data))
-                droo = {k: (disk, offs[k]) for k, (disk, _)  in droo.items()}
-                print(droo)
+
+                # # to ignore cloned rooms
+                # droo = idgens['LFLF']
+                # droo = {k: v for k, v  in droo.items() if v == (didx + 1, 0)}
+                # droo = {k: (disk, offs[k]) for k, (disk, _)  in droo.items()}
+
+                droo = {k: (didx + 1, v) for k, v  in offs.items()}
                 idgens['LFLF'] = compare_pid_off(droo, 16 - game.base_fix)
 
             get_gid = idgens.get(chunk.tag)
@@ -180,7 +197,7 @@ if __name__ == '__main__':
 
 
         root = sputm.map_chunks(resource, extra=update_element_path)
-        base = os.path.join(os.path.basename(args.filename), 'IMAGES')
+        base = os.path.join(os.path.basename(args.filename), 'IMAGES', f'DISK_{1 + didx:04d}')
         os.makedirs(base, exist_ok=True)
 
         os.makedirs(os.path.join(base, 'backgrounds'), exist_ok=True)
