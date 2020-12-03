@@ -72,7 +72,7 @@ def read_objects(lflf, rnam=None):
     for obim in sputm.findall('OBIM', room):
         imhd = sputm.find('IMHD', obim).data
         if len(imhd) == 16:
-            obj_id, obj_height, obj_width = read_imhd(imhd)
+            obj_id, obj_height, obj_width, obj_x, obj_y = read_imhd(imhd)
 
             assert obj_id == obim.attribs['gid']
 
@@ -86,11 +86,11 @@ def read_objects(lflf, rnam=None):
                 room_id = lflf.attribs.get('gid')
                 path = f'{room_id:04d}_{rnam[room_id]}_{obj_id:04d}_{imxx.tag}' if room_id in rnam else imxx.attribs['path']
 
-                yield path, im
+                yield path, im, obj_x, obj_y
         elif len(imhd) < 80:
             # Game version == 7
             print(imhd)
-            obj_id, obj_height, obj_width = read_imhd_v7(imhd)
+            obj_id, obj_height, obj_width, obj_x, obj_y = read_imhd_v7(imhd)
             # assert obj_id == obim.attribs['gid'], (obj_id, obim.attribs['gid'])  # assertion breaks on HE games
 
             for imxx in sputm.findall('IM{:02x}', obim):
@@ -104,10 +104,10 @@ def read_objects(lflf, rnam=None):
                 obj_id = obim.attribs['gid']
                 path = f'{room_id:04d}_{rnam[room_id]}_{obj_id:04d}_{imxx.tag}' if room_id in rnam else imxx.attribs['path']
 
-                yield path, im
+                yield path, im, obj_x, obj_y
         else:
             # Game version == 8
-            name, obj_height, obj_width = read_imhd_v8(imhd)
+            name, obj_height, obj_width, obj_x, obj_y = read_imhd_v8(imhd)
             print(name, obj_height, obj_width)
             for idx, imag in enumerate(sputm.findall('IMAG', obim)):
                 assert idx == 0
@@ -117,7 +117,7 @@ def read_objects(lflf, rnam=None):
                 im.putpalette(palette)
                 room_id = lflf.attribs.get('gid')
                 path = f'{room_id:04d}_{name}' if room_id in rnam else f"{obim.attribs['path']}_{name}"
-                yield path, im
+                yield path, im, obj_x, obj_y
 
 
 def get_rooms(root):
@@ -139,6 +139,7 @@ if __name__ == '__main__':
     from .index import compare_pid_off, read_rnam
     from .preset import sputm
     from .resource import detect_resource
+    from nutcracker.image import resize_pil_image
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
@@ -202,11 +203,14 @@ if __name__ == '__main__':
 
         os.makedirs(os.path.join(base, 'backgrounds'), exist_ok=True)
         os.makedirs(os.path.join(base, 'objects'), exist_ok=True)
+        os.makedirs(os.path.join(base, 'objects_layers'), exist_ok=True)
 
         paths = {}
 
         for lflf in get_rooms(root):
+            room_bg = None
             for oidx, (path, room_bg, zpxx) in enumerate(read_room(lflf, rnam)):
+                assert oidx == 0
                 path = path.replace(os.path.sep, '_')
                 # dirname = os.path.dirname(path)
                 # os.makedirs(os.path.join(base, dirname), exist_ok=True)
@@ -214,7 +218,7 @@ if __name__ == '__main__':
                 paths[path] = True
                 room_bg.save(os.path.join(base, 'backgrounds', f'{path}.png'))
 
-            for oidx, (path, im) in enumerate(read_objects(lflf, rnam)):
+            for oidx, (path, im, obj_x, obj_y) in enumerate(read_objects(lflf, rnam)):
                 path = path.replace(os.path.sep, '_')
                 # dirname = os.path.dirname(path)
                 # os.makedirs(os.path.join(base, dirname), exist_ok=True)
@@ -223,3 +227,9 @@ if __name__ == '__main__':
                 assert not path in paths, path
                 paths[path] = True
                 im.save(os.path.join(base, 'objects', f'{path}.png'))
+
+                if room_bg:
+                    assert im.getpalette() == room_bg.getpalette()
+                    im_layer = resize_pil_image(*room_bg.size, 39, im, {'x1': obj_x, 'y1': obj_y})
+                    im_layer.putpalette(im.getpalette())
+                    im_layer.save(os.path.join(base, 'objects_layers', f'{path}.png'))

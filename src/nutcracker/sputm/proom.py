@@ -163,7 +163,7 @@ def read_imhd(data):
         if obj_hotspots:
             # TODO: read hotspots
             pass
-        return obj_id, obj_height, obj_width
+        return obj_id, obj_height, obj_width, obj_x, obj_y
 
 def read_imhd_v7(data):
     # pylint: disable=unused-variable
@@ -182,7 +182,7 @@ def read_imhd_v7(data):
         if obj_hotspots:
             # TODO: read hotspots
             pass
-        return obj_id, obj_height, obj_width
+        return obj_id, obj_height, obj_width, obj_x, obj_y
 
 def read_imhd_v8(data):
     # pylint: disable=unused-variable
@@ -200,7 +200,7 @@ def read_imhd_v8(data):
         if obj_hotspots:
             # TODO: read hotspots
             pass
-        return name, obj_height, obj_width
+        return name, obj_height, obj_width, obj_x, obj_y
 
 def read_objects(lflf):
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
