@@ -11,7 +11,6 @@ from nutcracker.sputm.index import (
     read_index_v7,
     read_index_v5tov7,
     read_index_he,
-    read_file,
     read_directory_leg as read_dir,
     read_dlfl
 )

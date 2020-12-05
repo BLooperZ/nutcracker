@@ -5,8 +5,8 @@ import os
 
 import numpy as np
 
-from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file
-from nutcracker.sputm.build import write_file
+from nutcracker.sputm.index import read_index_v5tov7, read_index_he
+from nutcracker.utils.fileio import write_file
 from nutcracker.sputm.room import fake_encode_strip, decode_smap
 
 # def decode_smap(height, width, data):

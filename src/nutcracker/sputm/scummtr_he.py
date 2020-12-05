@@ -6,9 +6,9 @@ import itertools
 import os
 from typing import Iterable
 
-from nutcracker.chiper import xor
+from nutcracker.utils.fileio import write_file
 from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file
-from nutcracker.sputm.build import write_file, make_index_from_resource
+from nutcracker.sputm.build import make_index_from_resource
 from nutcracker.sputm.script.bytecode import descumm, get_strings, update_strings, script_map, to_bytes
 from nutcracker.sputm.script.opcodes import OPCODES_v6, OPCODES_he80
 

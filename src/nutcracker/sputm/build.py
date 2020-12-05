@@ -7,8 +7,8 @@ import os
 from typing import Iterable
 
 from nutcracker.chiper import xor
+from nutcracker.utils.fileio import read_file, write_file
 from nutcracker.sputm.index import (
-    read_file,
     read_directory_leg as read_dir,
     read_directory_leg_v8 as read_dir_v8,
     read_dlfl,
@@ -17,9 +17,6 @@ from nutcracker.sputm.index import (
 from .preset import sputm
 from .types import Chunk, Element
 
-def write_file(path: str, data: bytes, key: int = 0x00) -> bytes:
-    with open(path, 'wb') as res:
-        return xor.write(res, data, key=key)
 
 def write_dlfl(index):
     yield len(index).to_bytes(2, byteorder='little', signed=False)

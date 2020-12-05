@@ -112,7 +112,7 @@ if __name__ == '__main__':
     import glob
 
     from ..preset import sputm
-    from ..index import read_file
+    from nutcracker.utils.fileio import read_file
 
     from .opcodes import OPCODES_he80
 

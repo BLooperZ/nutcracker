@@ -9,6 +9,7 @@ from functools import partial
 from itertools import takewhile
 
 from nutcracker.chiper import xor
+from nutcracker.utils.fileio import read_file
 from .preset import sputm
 
 def read_directory_leg(data):
@@ -324,10 +325,6 @@ def read_index_he(root):
         'RMDA': compare_pid_off(drmd),
         'TALK': compare_pid_off(dtlk),
     }
-
-def read_file(path: str, key: int = 0x00) -> bytes:
-    with open(path, 'rb') as res:
-        return xor.read(res, key=key)
 
 def save_tree(cfg, element, basedir='.'):
     if not element:
