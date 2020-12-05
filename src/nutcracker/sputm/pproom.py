@@ -16,9 +16,7 @@ from nutcracker.sputm.proom import (
     convert_to_pil_image
 )
 
-def read_room(lflf, rnam=None):
-    rnam = rnam or {}
-
+def read_room(lflf):
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
     rwidth, rheight, _ = read_rmhd(sputm.find('RMHD', room).data)
     # trns = sputm.find('TRNS', room).data  # pylint: disable=unused-variable
@@ -42,29 +40,28 @@ def read_room(lflf, rnam=None):
             assert len(zpxx) == zbuffers - 1
             im.putpalette(palette)
 
-            room_id = lflf.attribs.get('gid')
-            path = f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else imxx.attribs['path']
-
+            path = imxx.attribs['path']
             yield path, im, zpxx
     else:
         # TODO: check for multiple IMAG in room bg (different image state)
         for imag in sputm.findall('IMAG', room):
             wrap = sputm.find('WRAP', imag)
             print(rwidth, rheight)
-            bgim = read_room_background_v8(wrap.children[1], rwidth, rheight, 0)
-            if bgim is None:
-                continue
-            im = convert_to_pil_image(bgim)
-            im.putpalette(palette)
+            assert len(wrap.children) == 2, len(wrap.children)
 
-            room_id = lflf.attribs.get('gid')
-            path = f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else room.attribs['path']
+            for iidx, bomp in enumerate(wrap.children[1:]):
+                assert iidx == 0
+                bgim = read_room_background_v8(bomp, rwidth, rheight, 0)
+                if bgim is None:
+                    continue
+                im = convert_to_pil_image(bgim)
+                im.putpalette(palette)
 
-            yield path, im, ()
+                path = bomp.attribs['path']
 
-def read_objects(lflf, rnam=None):
-    rnam = rnam or {}
+                yield path, im, ()
 
+def read_objects(lflf):
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
     # trns = sputm.find('TRNS', room).data  # pylint: disable=unused-variable
     palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).data
@@ -83,10 +80,10 @@ def read_objects(lflf, rnam=None):
                 im = convert_to_pil_image(bgim)
                 im.putpalette(palette)
 
-                room_id = lflf.attribs.get('gid')
-                path = f'{room_id:04d}_{rnam[room_id]}_{obj_id:04d}_{imxx.tag}' if room_id in rnam else imxx.attribs['path']
+                path = imxx.attribs['path']
+                name = f'{obj_id:04d}_{imxx.tag}'
 
-                yield path, im, obj_x, obj_y
+                yield path, name, im, obj_x, obj_y
         elif len(imhd) < 80:
             # Game version == 7
             print(imhd)
@@ -100,24 +97,26 @@ def read_objects(lflf, rnam=None):
                 im = convert_to_pil_image(bgim)
                 im.putpalette(palette)
 
-                room_id = lflf.attribs.get('gid')
-                obj_id = obim.attribs['gid']
-                path = f'{room_id:04d}_{rnam[room_id]}_{obj_id:04d}_{imxx.tag}' if room_id in rnam else imxx.attribs['path']
+                path = imxx.attribs['path']
+                name = f'{obj_id:04d}_{imxx.tag}'
 
-                yield path, im, obj_x, obj_y
+                yield path, name, im, obj_x, obj_y
         else:
             # Game version == 8
-            name, obj_height, obj_width, obj_x, obj_y = read_imhd_v8(imhd)
-            print(name, obj_height, obj_width)
+            obj_name, obj_height, obj_width, obj_x, obj_y = read_imhd_v8(imhd)
+            print(obj_name, obj_height, obj_width)
             for idx, imag in enumerate(sputm.findall('IMAG', obim)):
                 assert idx == 0
                 iim = sputm.find('WRAP', imag)
-                bgim = read_room_background_v8(iim.children[1], obj_width, obj_height, 0)
-                im = convert_to_pil_image(bgim)
-                im.putpalette(palette)
-                room_id = lflf.attribs.get('gid')
-                path = f'{room_id:04d}_{name}' if room_id in rnam else f"{obim.attribs['path']}_{name}"
-                yield path, im, obj_x, obj_y
+                for iidx, bomp in enumerate(iim.children[1:]):
+                    bgim = read_room_background_v8(bomp, obj_width, obj_height, 0)
+                    im = convert_to_pil_image(bgim)
+                    im.putpalette(palette)
+
+                    path = bomp.attribs['path']
+                    name = f'{obj_name}_{iidx:04d}'
+
+                    yield path, name, im, obj_x, obj_y
 
 
 def get_rooms(root):
@@ -135,7 +134,7 @@ if __name__ == '__main__':
     from typing import Dict
 
     from .types import Chunk
-    from .index2 import read_directory
+    from .index2 import read_directory, read_game_resources
     from .index import compare_pid_off, read_rnam
     from .preset import sputm
     from .resource import detect_resource
@@ -158,59 +157,29 @@ if __name__ == '__main__':
     index_root = sputm(schema=s).map_chunks(index)
     index_root = list(index_root)
 
+    rnam, idgens = game.read_index(index_root)
 
-    for didx, disk in enumerate(disks):
-        rnam, idgens = game.read_index(index_root)
+    root = read_game_resources(game, idgens, disks, max_depth=None)
 
-        resource = read_file(disk, key=game.chiper_key)
+    base = os.path.join(os.path.basename(args.filename), 'IMAGES')
+    os.makedirs(base, exist_ok=True)
 
-        # # commented out, use pre-calculated index instead, as calculating is time-consuming
-        # s = sputm.generate_schema(resource)
-        # pprint.pprint(s)
-        # root = sputm.map_chunks(resource, idgen=idgens, schema=s)
+    os.makedirs(os.path.join(base, 'backgrounds'), exist_ok=True)
+    os.makedirs(os.path.join(base, 'objects'), exist_ok=True)
+    os.makedirs(os.path.join(base, 'objects_layers'), exist_ok=True)
 
-        def update_element_path(parent, chunk, offset):
-            if chunk.tag == 'LOFF':
-                # should not happen in HE games
-
-                offs = dict(read_directory(chunk.data))
-
-                # # to ignore cloned rooms
-                # droo = idgens['LFLF']
-                # droo = {k: v for k, v  in droo.items() if v == (didx + 1, 0)}
-                # droo = {k: (disk, offs[k]) for k, (disk, _)  in droo.items()}
-
-                droo = {k: (didx + 1, v) for k, v  in offs.items()}
-                idgens['LFLF'] = compare_pid_off(droo, 16 - game.base_fix)
-
-            get_gid = idgens.get(chunk.tag)
-            if not parent:
-                gid = didx + 1
-            else:
-                gid = get_gid and get_gid(parent and parent.attribs['gid'], chunk.data, offset)
-
-            base = chunk.tag + (f'_{gid:04d}' if gid is not None else '' if not get_gid else f'_o_{offset:04X}')
-
-            dirname = parent.attribs['path'] if parent else ''
-            path = os.path.join(dirname, base)
-            res = {'path': path, 'gid': gid}
-            return res
-
-
-        root = sputm.map_chunks(resource, extra=update_element_path)
-        base = os.path.join(os.path.basename(args.filename), 'IMAGES', f'DISK_{1 + didx:04d}')
-        os.makedirs(base, exist_ok=True)
-
-        os.makedirs(os.path.join(base, 'backgrounds'), exist_ok=True)
-        os.makedirs(os.path.join(base, 'objects'), exist_ok=True)
-        os.makedirs(os.path.join(base, 'objects_layers'), exist_ok=True)
-
+    for t in root:
         paths = {}
 
-        for lflf in get_rooms(root):
+        for lflf in get_rooms(t):
             room_bg = None
-            for oidx, (path, room_bg, zpxx) in enumerate(read_room(lflf, rnam)):
+            room_id = lflf.attribs.get('gid')
+
+            for oidx, (path, room_bg, zpxx) in enumerate(read_room(lflf)):
                 assert oidx == 0
+
+                path = f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else path
+
                 path = path.replace(os.path.sep, '_')
                 # dirname = os.path.dirname(path)
                 # os.makedirs(os.path.join(base, dirname), exist_ok=True)
@@ -218,7 +187,10 @@ if __name__ == '__main__':
                 paths[path] = True
                 room_bg.save(os.path.join(base, 'backgrounds', f'{path}.png'))
 
-            for oidx, (path, im, obj_x, obj_y) in enumerate(read_objects(lflf, rnam)):
+            for oidx, (path, name, im, obj_x, obj_y) in enumerate(read_objects(lflf)):
+
+                path = f'{room_id:04d}_{name}' if room_id in rnam else path
+
                 path = path.replace(os.path.sep, '_')
                 # dirname = os.path.dirname(path)
                 # os.makedirs(os.path.join(base, dirname), exist_ok=True)

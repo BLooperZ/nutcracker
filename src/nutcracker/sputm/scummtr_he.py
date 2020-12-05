@@ -49,6 +49,9 @@ if __name__ == '__main__':
 
     from .preset import sputm
     from .types import Chunk, Element
+    from .resource import detect_resource
+    from .index2 import  read_game_resources
+    from .build import update_loff
 
     parser = argparse.ArgumentParser(description='read smush file')
     group = parser.add_mutually_exclusive_group()
@@ -58,58 +61,22 @@ if __name__ == '__main__':
     parser.add_argument('--textfile', '-t', help='save strings to file', default='strings.txt')
     args = parser.parse_args()
 
-    # Configuration for HE games
-    index_suffix = '.HE0'
-    resource_suffix = '.HE1'
-    # resource_suffix = '.(a)'
-    read_index = read_index_he
-    chiper_key = 0x69
-    max_depth = 5
-    script_ops = OPCODES_he80
+    game = detect_resource(args.filename)
+    index_file, *disks = game.resources
 
-    # # Configuration for SCUMM v5-v6 games
-    # index_suffix = '.000'
-    # resource_suffix = '.001'
-    # read_index = read_index_v5tov7
-    # chiper_key = 0x69
-    # max_depth = 4
-    # script_ops = OPCODES_v6
-
-    # # Configuration for SCUMM v7 games
-    # index_suffix = '.LA0'
-    # resource_suffix = '.LA1'
-    # read_index = read_index_v5tov7
-    # chiper_key = 0x00
-    # max_depth = 3
-
-    index = read_file(args.filename + index_suffix, key=chiper_key)
+    index = read_file(index_file, key=game.chiper_key)
 
     s = sputm.generate_schema(index)
+    pprint.pprint(s)
 
-    index_root = list(sputm(schema=s).map_chunks(index))
+    index_root = sputm(schema=s).map_chunks(index)
+    index_root = list(index_root)
 
-    idgens = read_index(index_root)
+    _, idgens = game.read_index(index_root)
 
-    resource = read_file(args.filename + resource_suffix, key=chiper_key)
+    root = read_game_resources(game, idgens, disks, max_depth=5)
 
-    # # commented out, use pre-calculated index instead, as calculating is time-consuming
-    # s = sputm.generate_schema(resource)
-    # pprint.pprint(s)
-    # root = sputm.map_chunks(resource, idgen=idgens, schema=s)
-
-    def update_element_path(parent, chunk, offset):
-        get_gid = idgens.get(chunk.tag)
-        gid = get_gid and get_gid(parent and parent.attribs['gid'], chunk.data, offset)
-
-        base = chunk.tag + (f'_{gid:04d}' if gid is not None else '' if not get_gid else f'_o_{offset:04X}')
-
-        dirname = parent.attribs['path'] if parent else ''
-        path = os.path.join(dirname, base)
-        res = {'path': path, 'gid': gid}
-
-        return res
-
-    root = sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
+    script_ops = OPCODES_he80
 
     if args.extract:
         with open(args.textfile, 'w') as f:
@@ -142,13 +109,22 @@ if __name__ == '__main__':
             updated_resource = list(update_element_strings(root, fixed_lines, script_ops))
 
         basename = os.path.basename(args.filename)
+        for t, disk in zip(updated_resource, disks):
+            update_loff(t)
+
+            _, ext = os.path.splitext(disk)
+            write_file(
+                f'{basename}{ext}',
+                sputm.mktag(
+                    t.tag,
+                    sputm.write_chunks(sputm.mktag(e.tag, e.data) for e in t)
+                ),
+                key=game.chiper_key
+            )
+
+        _, ext = os.path.splitext(index_file)
         write_file(
-            f'{basename}{resource_suffix}',
-            sputm.write_chunks(sputm.mktag(e.tag, e.data) for e in updated_resource),
-            key=chiper_key
-        )
-        write_file(
-            f'{basename}{index_suffix}',
-            sputm.write_chunks(make_index_from_resource(updated_resource, index_root)),
-            key=chiper_key
+            f'{basename}{ext}',
+            sputm.write_chunks(make_index_from_resource(updated_resource, index_root, game.base_fix)),
+            key=game.chiper_key
         )

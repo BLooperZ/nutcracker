@@ -21,38 +21,8 @@ def read_directory(data):
         ) for i in range(num)]
         return merged
 
-if __name__ == '__main__':
-    import argparse
-    from typing import Dict
-
-    from .types import Chunk
-    from .resource import detect_resource
-
-    parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('filename', help='filename to read from')
-    args = parser.parse_args()
-    
-    basedir = os.path.basename(args.filename)
-
-    game = detect_resource(args.filename)
-    index_file, *disks = game.resources
-
-    index = read_file(index_file, key=game.chiper_key)
-
-    s = sputm.generate_schema(index)
-    pprint.pprint(s)
-
-    index_root = sputm(schema=s).map_chunks(index)
-    index_root = list(index_root)
-
-    # os.makedirs(basedir, exist_ok=True)
-    # with open(os.path.join(basedir, 'index.xml'), 'w') as f:
-    #     for t in index_root:
-    #         sputm.render(t, stream=f)
-    #         print(t, t.data)
-
+def read_game_resources(game, idgens, disks, max_depth=None):
     for didx, disk in enumerate(disks):
-        _, idgens = game.read_index(index_root)
 
         resource = read_file(disk, key=game.chiper_key)
 
@@ -91,18 +61,49 @@ if __name__ == '__main__':
 
             if path in paths:
                 path += 'd'
-            assert path not in paths, path
+            # assert path not in paths, path
             paths[path] = chunk
 
             res = {'path': path, 'gid': gid}
             return res
 
+        yield from sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
 
-        disk_dir = os.path.join(basedir, f'DISK_{1+didx:04d}')
+if __name__ == '__main__':
+    import argparse
+    from typing import Dict
 
-        root = sputm(max_depth=game.max_depth).map_chunks(resource, extra=update_element_path)
-        os.makedirs(disk_dir, exist_ok=True)
-        with open(os.path.join(disk_dir, 'rpdump.xml'), 'w') as f:
-            for t in root:
-                sputm.render(t, stream=f)
-                save_tree(sputm, t, basedir=disk_dir)
+    from .types import Chunk
+    from .resource import detect_resource
+
+    parser = argparse.ArgumentParser(description='read smush file')
+    parser.add_argument('filename', help='filename to read from')
+    args = parser.parse_args()
+    
+    basedir = os.path.basename(args.filename)
+
+    game = detect_resource(args.filename)
+    index_file, *disks = game.resources
+
+    index = read_file(index_file, key=game.chiper_key)
+
+    s = sputm.generate_schema(index)
+    pprint.pprint(s)
+
+    index_root = sputm(schema=s).map_chunks(index)
+    index_root = list(index_root)
+
+    os.makedirs(basedir, exist_ok=True)
+    # with open(os.path.join(basedir, 'index.xml'), 'w') as f:
+    #     for t in index_root:
+    #         sputm.render(t, stream=f)
+    #         print(t, t.data)
+
+    _, idgens = game.read_index(index_root)
+
+    root = read_game_resources(game, idgens, disks, max_depth=game.max_depth)
+
+    with open(os.path.join(basedir, 'rpdump.xml'), 'w') as f:
+        for disk in root:
+            sputm.render(disk, stream=f)
+            save_tree(sputm, disk, basedir=basedir)

@@ -129,6 +129,23 @@ def update_element(basedir, elements, files):
         yield elem
 
 
+def update_loff(disk):
+    """Update LOFF chunk if exists"""
+    loff = sputm.find('LOFF', disk)
+    if loff:
+        rooms = list(sputm.findall('LFLF', disk))
+        with io.BytesIO() as stream:
+            stream.write(bytes([len(rooms)]))
+            for room in rooms:
+                room_id = room.attribs['gid']
+                room_off = room.attribs['offset'] + 16 - game.base_fix
+                stream.write(room_id.to_bytes(1, byteorder='little', signed=False))
+                stream.write(room_off.to_bytes(4, byteorder='little', signed=False))
+            loff_data = stream.getvalue()
+        assert len(loff.data) == len(loff_data)
+        loff.data = loff_data
+
+
 if __name__ == '__main__':
     import argparse
     from typing import Dict
@@ -136,7 +153,7 @@ if __name__ == '__main__':
     from .types import Chunk
     from .resource import detect_resource
     from .index import compare_pid_off
-    from .index2 import read_directory
+    from .index2 import read_directory, read_game_resources
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('dirname', help='directory to read from')
@@ -153,93 +170,34 @@ if __name__ == '__main__':
     index_root = sputm(schema=s).map_chunks(index)
     index_root = list(index_root)
 
-    reses = []
-
     basename = os.path.basename(os.path.normpath(args.dirname))
 
-    for didx, disk in enumerate(disks):
-        _, idgens = game.read_index(index_root)
+    _, idgens = game.read_index(index_root)
 
-        resource = read_file(disk, key=game.chiper_key)
+    root = read_game_resources(game, idgens, disks, max_depth=None)
 
-        # # commented out, use pre-calculated index instead, as calculating is time-consuming
-        # s = sputm.generate_schema(resource)
-        # pprint.pprint(s)
-        # root = sputm.map_chunks(resource, idgen=idgens, schema=s)
+    files = set(glob.iglob(f'{args.dirname}/**/*', recursive=True))
+    assert None not in files
 
-        paths: Dict[str, Chunk] = {}
+    updated_resource = list(update_element(args.dirname, root, files))
 
-        def update_element_path(parent, chunk, offset):
-
-            if chunk.tag == 'LOFF':
-                # should not happen in HE games
-
-                offs = dict(read_directory(chunk.data))
-
-                # # to ignore cloned rooms
-                # droo = idgens['LFLF']
-                # droo = {k: v for k, v  in droo.items() if v == (didx + 1, 0)}
-                # droo = {k: (disk, offs[k]) for k, (disk, _)  in droo.items()}
-
-                droo = {k: (didx + 1, v) for k, v  in offs.items()}
-                idgens['LFLF'] = compare_pid_off(droo, 16 - game.base_fix)
-
-            get_gid = idgens.get(chunk.tag)
-            if not parent:
-                gid = didx + 1
-            else:
-                gid = get_gid and get_gid(parent and parent.attribs['gid'], chunk.data, offset)
-
-            base = chunk.tag + (f'_{gid:04d}' if gid is not None else '' if not get_gid else f'_o_{offset:04X}')
-
-            dirname = parent.attribs['path'] if parent else ''
-            path = os.path.join(dirname, base)
-
-            if path in paths:
-                path += 'd'
-            assert path not in paths, path
-            paths[path] = chunk
-
-            res = {'path': path, 'gid': gid}
-            return res
-
-        root = sputm(max_depth=game.max_depth).map_chunks(resource, extra=update_element_path)
-
-        basedir = os.path.join(f'{args.dirname}', f'DISK_{1+didx:04d}')
-
-        files = set(glob.iglob(f'{basedir}/**/*', recursive=True))
-        assert None not in files
-
-        updated_resource = list(update_element(basedir, root, files))
-
-        # Update LOFF chunk if exists
-        for t in updated_resource:
-            loff = sputm.find('LOFF', t)
-            if loff:
-                rooms = list(sputm.findall('LFLF', t))
-                with io.BytesIO() as stream:
-                    stream.write(bytes([len(rooms)]))
-                    for room in rooms:
-                        room_id = room.attribs['gid']
-                        room_off = room.attribs['offset'] + 16 - game.base_fix
-                        stream.write(room_id.to_bytes(1, byteorder='little', signed=False))
-                        stream.write(room_off.to_bytes(4, byteorder='little', signed=False))
-                    loff_data = stream.getvalue()
-                assert len(loff.data) == len(loff_data)
-                loff.data = loff_data
+    for t, disk in zip(updated_resource, disks):
+        update_loff(t)
 
         _, ext = os.path.splitext(disk)
         write_file(
             f'{basename}{ext}',
-            sputm.write_chunks(sputm.mktag(e.tag, e.data) for e in updated_resource),
+            sputm.mktag(
+                t.tag,
+                sputm.write_chunks(sputm.mktag(e.tag, e.data) for e in t)
+            ),
             key=game.chiper_key
         )
-        reses += updated_resource
 
     _, ext = os.path.splitext(index_file)
     write_file(
         f'{basename}{ext}',
-        sputm.write_chunks(make_index_from_resource(reses, index_root, game.base_fix)),
+        sputm.write_chunks(make_index_from_resource(updated_resource, index_root, game.base_fix)),
         key=game.chiper_key
     )
 
