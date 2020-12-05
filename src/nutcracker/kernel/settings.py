@@ -18,14 +18,17 @@ IFF_CHUNK = structured_tuple(('tag', 'size'), struct.Struct('>4sI'), ChunkHeader
 class _ChunkSetting:
     """Setting for resource chunks
 
-    size_fix: int - can be used to determine whether size from chunk header
-    is INCLUSIVE* (8) or EXCLUSIVE (0).
+    size_fix: int -
+        can be used to determine whether size from chunk header
+        is INCLUSIVE* (8) or EXCLUSIVE (0).
 
     * size of chunk header = 4CC tag (4) + word size (default 4) = 8 bytes
 
-    align: int (default 2) - data alignment for chunk start offsets.
+    align: int (default 2) -
+        data alignment for chunk start offsets.
 
-    header: stream <-> ChunkHeader (default IFF_CHUNK) - structure to read/write chunk header
+    header: stream <-> ChunkHeader (default IFF_CHUNK) -
+        structure to read/write chunk header
     """
 
     size_fix: int = EXCLUSIVE
