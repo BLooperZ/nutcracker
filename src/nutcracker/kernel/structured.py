@@ -6,6 +6,8 @@ T = TypeVar('T')
 
 
 class Structured(Protocol, Generic[T]):
+    size: int
+
     def unpack(self, stream: IO[bytes]) -> T:
         pass
 
@@ -23,5 +25,11 @@ def structured_tuple(
         return structure.pack(*[getattr(data, field) for field in fields])
 
     return type(
-        base.__name__, (), {'unpack': staticmethod(unpack), 'pack': staticmethod(pack)}
+        base.__name__,
+        (),
+        {
+            'size': structure.size,
+            'unpack': staticmethod(unpack),
+            'pack': staticmethod(pack),
+        },
     )()

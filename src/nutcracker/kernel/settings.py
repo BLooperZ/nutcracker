@@ -7,11 +7,11 @@ from .types import ChunkHeader
 from .structured import Structured, structured_tuple
 
 
-INCLUSIVE = 8
-EXCLUSIVE = 0
-
 SCUMM_CHUNK = structured_tuple(('size', 'tag'), struct.Struct('<I2s'), ChunkHeader)
 IFF_CHUNK = structured_tuple(('tag', 'size'), struct.Struct('>4sI'), ChunkHeader)
+
+INCLUSIVE = IFF_CHUNK.size
+EXCLUSIVE = 0
 
 
 @dataclass(frozen=True)
