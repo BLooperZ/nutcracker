@@ -1,13 +1,18 @@
 import logging
 import struct
 from dataclasses import dataclass, field
-
 from typing import Mapping, Optional, Set
+
+from .types import ChunkHeader
+from .structured import Structured, structured_tuple
+
 
 INCLUSIVE = 8
 EXCLUSIVE = 0
 
-UINT32BE = struct.Struct('>I')
+SCUMM_CHUNK = structured_tuple(('size', 'tag'), struct.Struct('<I2s'), ChunkHeader)
+IFF_CHUNK = structured_tuple(('tag', 'size'), struct.Struct('>4sI'), ChunkHeader)
+
 
 @dataclass(frozen=True)
 class _ChunkSetting:
@@ -20,11 +25,12 @@ class _ChunkSetting:
 
     align: int (default 2) - data alignment for chunk start offsets.
 
-    word: struct.Struct (default UINT32BE) - Struct used to read chunk header size
+    header: stream <-> ChunkHeader (default IFF_CHUNK) - structure to read/write chunk header
     """
+
     size_fix: int = EXCLUSIVE
     align: int = 2
-    word: struct.Struct = UINT32BE
+    header: Structured[ChunkHeader] = IFF_CHUNK
 
 
 @dataclass(frozen=True)
@@ -39,6 +45,7 @@ class _IndexSetting(_ChunkSetting):
 
     max_depth: limit levels of container chunks to index, None for unlimited
     """
+
     schema: Mapping[str, Set[str]] = field(default_factory=dict)
     strict: bool = False
     max_depth: Optional[int] = None

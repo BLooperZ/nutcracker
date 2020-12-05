@@ -5,10 +5,12 @@ from . import chunk, settings, tree
 
 _SettingT = TypeVar('_SettingT', bound='_DefaultOverride')
 
+
 @dataclass(frozen=True)
 class _DefaultOverride:
     def __call__(self: _SettingT, **kwargs: Any) -> _SettingT:
         return replace(self, **kwargs)
+
 
 @dataclass(frozen=True)
 class _ChunkPreset(settings._ChunkSetting, _DefaultOverride):
@@ -22,7 +24,7 @@ class _ChunkPreset(settings._ChunkSetting, _DefaultOverride):
         untag,
         read_chunks,
         mktag,
-        write_chunks
+        write_chunks,
     )
 
 
@@ -37,7 +39,7 @@ class _ShellPreset(settings._IndexSetting, _ChunkPreset):
 
     from .index import (
         map_chunks,
-        generate_schema
+        generate_schema,
     )
 
 

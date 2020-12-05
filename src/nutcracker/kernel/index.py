@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-import io
-import logging
 from contextlib import contextmanager
 from dataclasses import replace
 from typing import Any, Dict, Iterator, FrozenSet, Optional, Set, Callable
@@ -10,16 +8,19 @@ from .resource import read_chunks
 from .types import Element, Chunk
 from .settings import _IndexSetting
 
+
 class MissingSchemaKey(Exception):
     def __init__(self, tag: str) -> None:
         super().__init__(f'Missing key in schema: {tag}')
         self.tag = tag
+
 
 class MissingSchemaEntry(Exception):
     def __init__(self, ptag: str, tag: str) -> None:
         super().__init__(f'Missing entry for {tag} in {ptag} schema')
         self.ptag = ptag
         self.tag = tag
+
 
 @contextmanager
 def exception_ptag_context(ptag: Optional[str]) -> Iterator[None]:
@@ -29,6 +30,7 @@ def exception_ptag_context(ptag: Optional[str]) -> Iterator[None]:
         if not hasattr(e, 'ptag'):
             e.ptag = ptag  # type: ignore
         raise e
+
 
 def check_schema(cfg: _IndexSetting, ptag: Optional[str], tag: str) -> None:
     try:
@@ -42,19 +44,17 @@ def check_schema(cfg: _IndexSetting, ptag: Optional[str], tag: str) -> None:
         else:
             cfg.logger.warning(e)
 
+
 def create_element(offset: int, chunk: Chunk, **attrs: Any) -> Element:
-    return Element(
-        *chunk,
-        {'offset': offset, 'size': len(chunk.data), **attrs},
-        []
-    )
+    return Element(*chunk, {'offset': offset, 'size': len(chunk.data), **attrs}, [])
+
 
 def map_chunks(
-        cfg: _IndexSetting,
-        data: bytes,
-        parent: Element = None,
-        level: int = 0,
-        extra: Optional[Callable[[Optional[Element], Chunk, int], Dict[str, Any]]] = None
+    cfg: _IndexSetting,
+    data: bytes,
+    parent: Element = None,
+    level: int = 0,
+    extra: Optional[Callable[[Optional[Element], Chunk, int], Dict[str, Any]]] = None,
 ) -> Iterator[Element]:
     ptag = parent.tag if parent else None
     if cfg.max_depth and level >= cfg.max_depth:
@@ -66,13 +66,12 @@ def map_chunks(
             check_schema(cfg, ptag, chunk.tag)
 
             elem = create_element(
-                offset,
-                chunk,
-                **(extra(parent, chunk, offset) if extra else {})
+                offset, chunk, **(extra(parent, chunk, offset) if extra else {})
             )
             yield elem.content(
                 map_chunks(cfg, chunk.data, parent=elem, level=level + 1, extra=extra)
             )
+
 
 def generate_schema(cfg: _IndexSetting, data: bytes) -> Dict[str, Set[str]]:
     EMPTY: FrozenSet[str] = frozenset()
@@ -97,7 +96,9 @@ def generate_schema(cfg: _IndexSetting, data: bytes) -> Dict[str, Set[str]]:
             # pylint: disable=no-member
             assert hasattr(e, 'ptag')
             if schema.get(e.ptag) == EMPTY:  # type: ignore
-                raise ValueError('Cannot create schema for given file with given configuration')
+                raise ValueError(
+                    'Cannot create schema for given file with given configuration'
+                )
             schema[e.ptag] = EMPTY  # type: ignore
 
 
@@ -108,7 +109,7 @@ if __name__ == '__main__':
 
     import yaml
 
-    from nutcracker.chiper import xor
+    from nutcracker.utils.fileio import read_file
 
     from . import tree
 
@@ -122,25 +123,28 @@ if __name__ == '__main__':
     parser.add_argument('--schema-dump', type=str, help='save schema to file')
     args = parser.parse_args()
 
-    cfg = _IndexSetting(size_fix=args.size_fix, align=args.align, max_depth=args.max_depth)
+    cfg = _IndexSetting(
+        size_fix=args.size_fix, align=args.align, max_depth=args.max_depth
+    )
 
     schema = None
     if args.schema:
         with open(args.schema, 'r') as f:
             schema = yaml.safe_load(f)
 
-    with open(args.filename, 'rb') as res:
-        data = xor.read(res, key=int(args.chiper_key, 16))
+    data = read_file(args.filename, key=int(args.chiper_key, 16))
 
     schema = schema or generate_schema(cfg, data)
 
     pprint(schema)
 
     if args.schema_dump:
-        with open(args.schema_dump, 'w') as fb:
+        with open(args.schema_dump, 'w') as f:
             yaml.dump(schema, f)
 
-    def update_element_path(parent: Optional[Element], chunk: Chunk, offset: int) -> Dict[str, str]:
+    def update_element_path(
+        parent: Optional[Element], chunk: Chunk, offset: int
+    ) -> Dict[str, str]:
         dirname = parent.attribs['path'] if parent else ''
         res = {'path': os.path.join(dirname, chunk.tag)}
         return res

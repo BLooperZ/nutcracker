@@ -1,21 +1,29 @@
 from dataclasses import dataclass, field, replace
-
 from typing import Any, Dict, Iterable, Iterator, NamedTuple, Sequence
+
+
+@dataclass(frozen=True, order=True)
+class ChunkHeader:
+    tag: bytes
+    size: int
+
 
 class Chunk(NamedTuple):
     """Chunk made of 4CC header and data
-    
+
     tag: 4CC header
 
     data: chunk data
     """
+
     tag: str
     data: bytes
+
 
 @dataclass
 class Element:
     """Indexing metadata for chunk containers
-    
+
     tag: 4CC header
 
     data: chunk data
@@ -24,6 +32,7 @@ class Element:
 
     children: Contained elements
     """
+
     tag: str
     data: bytes = field(repr=False)
     attribs: Dict[str, Any]
