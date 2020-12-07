@@ -4,10 +4,14 @@ import io
 import os
 
 import numpy as np
+from PIL import Image
 
 from nutcracker.sputm.index import read_index_v5tov7, read_index_he
 from nutcracker.utils.fileio import write_file
 from nutcracker.sputm.room import fake_encode_strip, decode_smap
+
+
+from .preset import sputm
 
 # def decode_smap(height, width, data):
 #     strip_width = 8
@@ -70,14 +74,23 @@ def read_room_background(image, format):
         print(image.tag, image.data)
         # raise ValueError(f'Unknown image codec: {tag}')
 
+def encode_block(filename, blocktype):
+    im = Image.open(filename)
+    npim = np.asarray(im, dtype=np.uint8)
+    
+    if blocktype == 'SMAP':
+        smap = encode_smap(npim)
+        assert np.array_equal(npim, decode_smap(*npim.shape, smap))
+        return sputm.mktag(blocktype, smap)
+    
+    if blocktype == 'BOMP':
+        return None
+
 if __name__ == '__main__':
     import argparse
     import pprint
     from typing import Dict
 
-    from PIL import Image
-
-    from .preset import sputm
     from .types import Chunk, Element
 
     parser = argparse.ArgumentParser(description='read smush file')

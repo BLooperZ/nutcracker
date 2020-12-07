@@ -5,16 +5,17 @@ import os
 
 import numpy as np
 
-from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file
+from nutcracker.utils.fileio import read_file, write_file
 from .proom import (
     read_imhd,
     read_imhd_v7,
     read_imhd_v8,
 )
-from nutcracker.sputm.pproom import (
+from .pproom import (
     read_room_settings,
     get_rooms,
 )
+from .encode_image import encode_block
 
 def read_room(header, rmim):
     if rmim.tag == 'RMIM':
@@ -113,7 +114,15 @@ if __name__ == '__main__':
                 im_path = im_path.replace(os.path.sep, '_')
                 im_path = os.path.join(base, 'backgrounds', f'{im_path}.png')
                 if os.path.exists(im_path):
-                    print((im_path, imxx.attribs['path'], imxx.tag))
+                    res_path = os.path.join(args.dirname, imxx.attribs['path'])
+                    encoded = encode_block(im_path, imxx.tag)
+                    if encoded:
+                        os.makedirs(os.path.dirname(res_path), exist_ok=True)
+                        write_file(
+                            res_path,
+                            encoded
+                        )
+                    print((im_path, res_path, imxx.tag))
 
             for path, name, imxx, obj_x, obj_y in read_objects(room):
 
@@ -122,4 +131,14 @@ if __name__ == '__main__':
                 im_path = os.path.join(base, 'objects', f'{im_path}.png')
 
                 if os.path.exists(im_path):
-                    print((im_path, imxx.attribs['path'], imxx.tag))
+                    res_path = os.path.join(args.dirname, imxx.attribs['path'])
+                    encoded = encode_block(im_path, imxx.tag)
+                    if encoded:
+                        # TODO: fix OFFS when inside WRAP
+                        # maybe should avoid flattening the generator
+                        os.makedirs(os.path.dirname(res_path), exist_ok=True)
+                        write_file(
+                            res_path,
+                            encoded
+                        )
+                    print((im_path, res_path, imxx.tag))
