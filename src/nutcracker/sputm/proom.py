@@ -2,6 +2,8 @@
 
 import io
 import os
+from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 
@@ -83,6 +85,47 @@ def read_room_background_v8(image, width, height, zbuffers):
     else:
         raise ValueError(f'Unknown image codec: {tag}')
 
+@dataclass
+class RoomHeader:
+    width: int
+    height: int
+    robjs: int
+    version: Optional[int] = None
+    zbuffers: Optional[int] = None
+    transparency: Optional[int] = None
+
+def read_rmhd_structured(data):
+    version = None
+    zbuffers = None
+    transparency = None
+    if len(data) == 6:
+        # 'Game Version < 7'
+        rwidth = int.from_bytes(data[:2], signed=False, byteorder='little')
+        rheight = int.from_bytes(data[2:4], signed=False, byteorder='little')
+        robjs = int.from_bytes(data[4:], signed=False, byteorder='little')
+    elif len(data) == 10:
+        # 'Game Version == 7'
+        version = int.from_bytes(data[:4], signed=False, byteorder='little')
+        rwidth = int.from_bytes(data[4:6], signed=False, byteorder='little')
+        rheight = int.from_bytes(data[6:8], signed=False, byteorder='little')
+        robjs = int.from_bytes(data[8:], signed=False, byteorder='little')
+    else:
+        # 'Game Version == 8'
+        assert len(data) == 24
+        version = int.from_bytes(data[:4], signed=False, byteorder='little')
+        rwidth = int.from_bytes(data[4:8], signed=False, byteorder='little')
+        rheight = int.from_bytes(data[8:12], signed=False, byteorder='little')
+        robjs = int.from_bytes(data[12:16], signed=False, byteorder='little')
+        zbuffers = int.from_bytes(data[16:20], signed=False, byteorder='little')
+        transparency = int.from_bytes(data[20:24], signed=False, byteorder='little')
+    return RoomHeader(
+        width=rwidth,
+        height=rheight,
+        robjs=robjs,
+        version=version,
+        zbuffers=zbuffers,
+        transparency=transparency
+    )
 
 def read_rmhd(data):
     print(data)

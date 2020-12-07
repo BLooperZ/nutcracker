@@ -5,9 +5,10 @@ import os
 
 import numpy as np
 
-from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file
-from nutcracker.sputm.proom import (
+from .index import read_index_v5tov7, read_index_he, read_file
+from .proom import (
     read_rmhd,
+    read_rmhd_structured,
     read_imhd,
     read_imhd_v7,
     read_imhd_v8,
@@ -16,56 +17,61 @@ from nutcracker.sputm.proom import (
     convert_to_pil_image
 )
 
-def read_room(lflf):
+from .preset import sputm
+
+
+def read_room_settings(lflf):
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
-    rwidth, rheight, _ = read_rmhd(sputm.find('RMHD', room).data)
-    # trns = sputm.find('TRNS', room).data  # pylint: disable=unused-variable
+    header = read_rmhd_structured(sputm.find('RMHD', room).data)
+    trns = sputm.find('TRNS', room)
+    if trns:
+        assert header.transparency is None
+        header.transparency = sputm.find('TRNS', room).data  # pylint: disable=unused-variable
     palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).data
 
     rmim = sputm.find('RMIM', room) or sputm.find('RMIM', lflf)
     rmih = sputm.find('RMIH', rmim)
     if rmih:
         # 'Game Version < 7'
+        assert header.zbuffers is None
         assert len(rmih.data) == 2
-        zbuffers = 1 + int.from_bytes(rmih.data, signed=False, byteorder='little')
-        assert 1 <= zbuffers <= 8
+        header.zbuffers = 1 + int.from_bytes(rmih.data, signed=False, byteorder='little')
+        assert 1 <= header.zbuffers <= 8
 
+    return header, palette, room, rmim or sputm.find('IMAG', room)
+
+def read_room(header, rmim):
+    if rmim.tag == 'RMIM':
+        # 'Game Version < 7'
         for imxx in sputm.findall('IM{:02x}', rmim):
             assert imxx.tag == 'IM00', imxx.tag
-            bgim = read_room_background(imxx.children[0], rwidth, rheight, zbuffers)
+            bgim = read_room_background(imxx.children[0], header.width, header.height, header.zbuffers)
             if bgim is None:
                 continue
             im = convert_to_pil_image(bgim)
             zpxx = list(sputm.findall('ZP{:02x}', imxx))
             assert len(zpxx) == zbuffers - 1
-            im.putpalette(palette)
 
             path = imxx.attribs['path']
             yield path, im, zpxx
     else:
         # TODO: check for multiple IMAG in room bg (different image state)
-        for imag in sputm.findall('IMAG', room):
-            wrap = sputm.find('WRAP', imag)
-            print(rwidth, rheight)
-            assert len(wrap.children) == 2, len(wrap.children)
+        assert rmim.tag == 'IMAG'
+        wrap = sputm.find('WRAP', rmim)
+        assert len(wrap.children) == 2, len(wrap.children)
 
-            for iidx, bomp in enumerate(wrap.children[1:]):
-                assert iidx == 0
-                bgim = read_room_background_v8(bomp, rwidth, rheight, 0)
-                if bgim is None:
-                    continue
-                im = convert_to_pil_image(bgim)
-                im.putpalette(palette)
+        for imxx in wrap.children[1:]:
+            assert imxx.attribs['gid'] == 1, imxx.attribs['gid']
+            bgim = read_room_background_v8(imxx, header.width, header.height, header.zbuffers)
+            if bgim is None:
+                continue
+            im = convert_to_pil_image(bgim)
 
-                path = bomp.attribs['path']
+            path = imxx.attribs['path']
 
-                yield path, im, ()
+            yield path, im, ()
 
-def read_objects(lflf):
-    room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
-    # trns = sputm.find('TRNS', room).data  # pylint: disable=unused-variable
-    palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).data
-
+def read_objects(room):
     for obim in sputm.findall('OBIM', room):
         imhd = sputm.find('IMHD', obim).data
         if len(imhd) == 16:
@@ -78,7 +84,6 @@ def read_objects(lflf):
                 if bgim is None:
                     continue
                 im = convert_to_pil_image(bgim)
-                im.putpalette(palette)
 
                 path = imxx.attribs['path']
                 name = f'{obj_id:04d}_{imxx.tag}'
@@ -95,7 +100,6 @@ def read_objects(lflf):
                 if bgim is None:
                     continue
                 im = convert_to_pil_image(bgim)
-                im.putpalette(palette)
 
                 path = imxx.attribs['path']
                 name = f'{obj_id:04d}_{imxx.tag}'
@@ -107,11 +111,10 @@ def read_objects(lflf):
             print(obj_name, obj_height, obj_width)
             for idx, imag in enumerate(sputm.findall('IMAG', obim)):
                 assert idx == 0
-                iim = sputm.find('WRAP', imag)
-                for iidx, bomp in enumerate(iim.children[1:]):
+                wrap = sputm.find('WRAP', imag)
+                for iidx, bomp in enumerate(wrap.children[1:]):
                     bgim = read_room_background_v8(bomp, obj_width, obj_height, 0)
                     im = convert_to_pil_image(bgim)
-                    im.putpalette(palette)
 
                     path = bomp.attribs['path']
                     name = f'{obj_name}_{iidx:04d}'
@@ -136,7 +139,6 @@ if __name__ == '__main__':
     from .types import Chunk
     from .index2 import read_directory, read_game_resources
     from .index import compare_pid_off, read_rnam
-    from .preset import sputm
     from .resource import detect_resource
     from nutcracker.image import resize_pil_image
 
@@ -172,11 +174,12 @@ if __name__ == '__main__':
         paths = {}
 
         for lflf in get_rooms(t):
+            header, palette, room, rmim = read_room_settings(lflf)
             room_bg = None
             room_id = lflf.attribs.get('gid')
 
-            for oidx, (path, room_bg, zpxx) in enumerate(read_room(lflf)):
-                assert oidx == 0
+            for path, room_bg, zpxx in read_room(header, rmim):
+                room_bg.putpalette(palette)
 
                 path = f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else path
 
@@ -187,7 +190,8 @@ if __name__ == '__main__':
                 paths[path] = True
                 room_bg.save(os.path.join(base, 'backgrounds', f'{path}.png'))
 
-            for oidx, (path, name, im, obj_x, obj_y) in enumerate(read_objects(lflf)):
+            for path, name, im, obj_x, obj_y in read_objects(room):
+                im.putpalette(palette)
 
                 path = f'{room_id:04d}_{name}' if room_id in rnam else path
 
@@ -201,7 +205,6 @@ if __name__ == '__main__':
                 im.save(os.path.join(base, 'objects', f'{path}.png'))
 
                 if room_bg:
-                    assert im.getpalette() == room_bg.getpalette()
                     im_layer = resize_pil_image(*room_bg.size, 39, im, {'x1': obj_x, 'y1': obj_y})
-                    im_layer.putpalette(im.getpalette())
+                    im_layer.putpalette(palette)
                     im_layer.save(os.path.join(base, 'objects_layers', f'{path}.png'))
