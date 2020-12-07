@@ -32,6 +32,7 @@ def read_game_resources(game, idgens, disks, max_depth=None):
         # root = sputm.map_chunks(resource, idgen=idgens, schema=s)
 
         paths: Dict[str, Chunk] = {}
+        wraps: Dict[str, Dict[int, int]] = {}
 
         def update_element_path(parent, chunk, offset):
 
@@ -51,6 +52,8 @@ def read_game_resources(game, idgens, disks, max_depth=None):
             get_gid = idgens.get(chunk.tag)
             if not parent:
                 gid = didx + 1
+            elif parent.attribs['path'] in wraps:
+                gid = wraps[parent.attribs['path']].get(offset)
             else:
                 gid = get_gid and get_gid(parent and parent.attribs['gid'], chunk.data, offset)
 
@@ -63,6 +66,19 @@ def read_game_resources(game, idgens, disks, max_depth=None):
                 path += 'd'
             # assert path not in paths, path
             paths[path] = chunk
+
+            if chunk.tag == 'WRAP':
+                with io.BytesIO(chunk.data) as stream:
+                    offs = sputm.untag(stream)
+                    offs = {
+                        int.from_bytes(
+                            offs.data[4*i:4*i+4],
+                            byteorder='little',
+                            signed=False
+                        ): i + 1
+                        for i in range(len(offs.data) // 4)
+                    }
+                wraps[path] = offs
 
             res = {'path': path, 'gid': gid}
             return res
