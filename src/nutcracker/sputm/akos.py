@@ -185,7 +185,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
 
-    files = set(flatten(glob.iglob(r) for r in args.files))
+    files = sorted(set(flatten(glob.iglob(r) for r in args.files)))
     print(files)
     for filename in files:
 
