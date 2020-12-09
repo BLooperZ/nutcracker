@@ -9,7 +9,9 @@ from PIL import Image
 from nutcracker.sputm.index import read_index_v5tov7, read_index_he
 from nutcracker.utils.fileio import write_file
 from nutcracker.sputm.room import fake_encode_strip, decode_smap
+from nutcracker.codex.codex import encode1, decode1
 
+from .room import decode_smap_v8
 
 from .preset import sputm
 
@@ -81,9 +83,26 @@ def encode_block(filename, blocktype):
     if blocktype == 'SMAP':
         smap = encode_smap(npim)
         assert np.array_equal(npim, decode_smap(*npim.shape, smap))
-        return sputm.mktag(blocktype, smap)
-    
+        # TODO: detect version, older games should return here
+        # return sputm.mktag(blocktype, smap)
+
+        num_strips = im.width // 8
+        offs = smap[:num_strips * 4]
+        data = smap[4 * num_strips:]
+        smap_v8 = sputm.mktag(
+            'BSTR',
+            sputm.mktag(
+                'WRAP',
+                sputm.mktag('OFFS', offs) + data
+            )
+        )
+        assert np.array_equal(npim, decode_smap_v8(*npim.shape, smap_v8))
+        return smap_v8
+
     if blocktype == 'BOMP':
+        bomp = encode1(npim)
+        assert np.array_equal(npim, decode1(*npim.shape[::-1], bomp))
+        return sputm.mktag(blocktype, bomp)
         return None
 
 if __name__ == '__main__':

@@ -9,7 +9,7 @@ import numpy as np
 
 from nutcracker.codex.codex import decode1
 from .preset import sputm
-from .room import decode_smap, convert_to_pil_image, decode_he, read_uint16le, read_uint32le, read_strip, parse_strip
+from .room import decode_smap, convert_to_pil_image, decode_he, read_uint16le, read_uint32le, read_strip, parse_strip, read_room_background_v8
 
 def read_room_background(image, width, height, zbuffers):
     if image.tag == 'SMAP':
@@ -41,49 +41,6 @@ def read_room_background(image, width, height, zbuffers):
     else:
         print(image.tag, image.data)
         # raise ValueError(f'Unknown image codec: {tag}')
-
-def decode_smap_v8(height, width, data):
-    _, bstr = next(sputm.read_chunks(data))
-    _, wrap = next(sputm.read_chunks(bstr.data))
-    with io.BytesIO(wrap.data) as s:
-        offs = sputm.untag(s)
-        img_off, image = s.tell(), s.read()
-
-    # num_strips = len(offs.data) // 4
-    # print(width, height, num_strips)
-    if len(offs.data) == 0:
-        assert height == 0 or width == 0
-        return None
-
-    # strip_width = width // num_strips
- 
-    strip_width = 8
-    num_strips = width // strip_width
-
-    with io.BytesIO(offs.data) as s:
-        offs = [read_uint32le(s) for _ in range(num_strips)]
-        index = list(zip(offs, offs[1:] + [len(data)]))
-
-    assert img_off == index[0][0], (img_off, index[0][0])
-    assert data[16:32] == wrap.data[:16], (data[16:32], wrap.data[:16])
-
-    strips = (wrap.data[offset:end] for offset, end in index)
-    return np.hstack([parse_strip(height, strip_width, data) for data in strips])
-
-def read_room_background_v8(image, width, height, zbuffers):
-    if image.tag == 'SMAP':
-        # s = sputm.generate_schema(image.data)
-        # data = sputm.findpath('BSTR/WRAP', sputm(schema=s).map_chunks(image.data)).data
-        # off = int.from_bytes(data[4:8], signed=False, byteorder='little')
-        return decode_smap_v8(height, width, image.data)
-    elif image.tag == 'BOMP':
-        with io.BytesIO(image.data) as s:
-            width = read_uint32le(s)
-            height = read_uint32le(s)
-            im = decode1(width, height, s.read())
-        return np.asarray(im, dtype=np.uint8)
-    else:
-        raise ValueError(f'Unknown image codec: {tag}')
 
 @dataclass
 class RoomHeader:
