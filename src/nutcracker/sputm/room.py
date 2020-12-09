@@ -231,7 +231,7 @@ def read_room_background_v8(image, width, height, zbuffers):
             im = decode1(width, height, s.read())
         return np.asarray(im, dtype=np.uint8)
     else:
-        raise ValueError(f'Unknown image codec: {tag}')
+        raise ValueError(f'Unknown image codec: {image.tag}')
 
 
 def read_room_background(rdata, width, height, zbuffers):

@@ -2,6 +2,7 @@
 
 import io
 import os
+import struct
 
 import numpy as np
 from PIL import Image
@@ -76,7 +77,7 @@ def read_room_background(image, format):
         print(image.tag, image.data)
         # raise ValueError(f'Unknown image codec: {tag}')
 
-def encode_block(filename, blocktype):
+def encode_block_v8(filename, blocktype):
     im = Image.open(filename)
     npim = np.asarray(im, dtype=np.uint8)
     
@@ -102,7 +103,8 @@ def encode_block(filename, blocktype):
     if blocktype == 'BOMP':
         bomp = encode1(npim)
         assert np.array_equal(npim, decode1(*npim.shape[::-1], bomp))
-        return sputm.mktag(blocktype, bomp)
+        # v8
+        return struct.pack('<2I', *npim.shape[::-1]) + bomp
         return None
 
 if __name__ == '__main__':

@@ -15,7 +15,7 @@ from .pproom import (
     read_room_settings,
     get_rooms,
 )
-from .encode_image import encode_block
+from .encode_image import encode_block_v8
 
 def read_room(header, rmim):
     if rmim.tag == 'RMIM':
@@ -60,13 +60,44 @@ def read_objects(room):
             for idx, imag in enumerate(sputm.findall('IMAG', obim)):
                 assert idx == 0
                 wrap = sputm.find('WRAP', imag)
-                for iidx, bomp in enumerate(wrap.children[1:]):
+                yield wrap.attribs['path'], obj_name, wrap, obj_x, obj_y
+                # for iidx, bomp in enumerate(wrap.children[1:]):
 
-                    path = bomp.attribs['path']
-                    name = f'{obj_name}_{iidx:04d}'
+                #     path = bomp.attribs['path']
+                #     name = f'{obj_name}_{iidx:04d}'
 
-                    yield path, name, bomp, obj_x, obj_y
+                #     yield path, name, bomp, obj_x, obj_y
 
+def encode_images_v8(basedir, imag, obj_name, room_id, rnam):
+    for iidx, imxx in enumerate(imag.children[1:]):
+        path = imxx.attribs['path']
+        name = f'{obj_name}_{iidx:04d}'
+
+        im_path = f'{room_id:04d}_{name}' if room_id in rnam else path
+        im_path = im_path.replace(os.path.sep, '_')
+        im_path = os.path.join(basedir, f'{im_path}.png')
+
+        if os.path.exists(im_path):
+            encoded = encode_block_v8(im_path, imxx.tag)
+            yield imxx, encoded
+            print((im_path, imxx))
+            if imxx.tag == 'BOMP':
+                assert encoded == imxx.data, (encoded, imxx.data)
+        else:
+            yield imxx, None
+
+def make_wrap(images):
+    off = 8 + 4 * len(images)
+    with io.BytesIO() as offstream, io.BytesIO() as datastream:
+        for imxx, custome in images:
+            elim = sputm.mktag(imxx.tag, custome if custome else imxx.data)
+            offstream.write(off.to_bytes(4, byteorder='little', signed=False))
+            datastream.write(elim)
+            off += len(elim)
+        return sputm.mktag(
+            'WRAP',
+            sputm.mktag('OFFS', offstream.getvalue()) + datastream.getvalue()
+        )
 
 if __name__ == '__main__':
     import argparse
@@ -115,30 +146,49 @@ if __name__ == '__main__':
                 im_path = os.path.join(base, 'backgrounds', f'{im_path}.png')
                 if os.path.exists(im_path):
                     res_path = os.path.join(args.dirname, imxx.attribs['path'])
-                    encoded = encode_block(im_path, imxx.tag)
+                    encoded = encode_block_v8(im_path, imxx.tag)
                     if encoded:
                         os.makedirs(os.path.dirname(res_path), exist_ok=True)
                         write_file(
                             res_path,
-                            encoded
+                            sputm.mktag(imxx.tag, encoded)
                         )
                     print((im_path, res_path, imxx.tag))
 
-            for path, name, imxx, obj_x, obj_y in read_objects(room):
 
-                im_path = f'{room_id:04d}_{name}' if room_id in rnam else path
-                im_path = im_path.replace(os.path.sep, '_')
-                im_path = os.path.join(base, 'objects', f'{im_path}.png')
-
-                if os.path.exists(im_path):
-                    res_path = os.path.join(args.dirname, imxx.attribs['path'])
-                    encoded = encode_block(im_path, imxx.tag)
-                    if encoded:
-                        # TODO: fix OFFS when inside WRAP
-                        # maybe should avoid flattening the generator
+            for path, obj_name, imag, _, _ in read_objects(room):
+                if imag.tag == 'WRAP':
+                    images = list(encode_images_v8(
+                        os.path.join(base, 'objects'),
+                        imag,
+                        obj_name,
+                        room_id,
+                        rnam
+                    ))
+                    if any(custome is not None for imxx, custome in images):
+                        res_path = os.path.join(args.dirname, imag.attribs['path'])
                         os.makedirs(os.path.dirname(res_path), exist_ok=True)
                         write_file(
                             res_path,
-                            encoded
+                            make_wrap(images)
                         )
-                    print((im_path, res_path, imxx.tag))
+
+                        # path = bomp.attribs['path']
+                        # name = f'{obj_name}_{iidx:04d}'
+
+                        # im_path = f'{room_id:04d}_{name}' if room_id in rnam else path
+                        # im_path = im_path.replace(os.path.sep, '_')
+                        # im_path = os.path.join(base, 'objects', f'{im_path}.png')
+
+                        # if os.path.exists(im_path):
+                        #     res_path = os.path.join(args.dirname, imxx.attribs['path'])
+                        #     encoded = encode_block(im_path, imxx.tag)
+                        #     if encoded:
+                        #         # TODO: fix OFFS when inside WRAP
+                        #         # maybe should avoid flattening the generator
+                        #         os.makedirs(os.path.dirname(res_path), exist_ok=True)
+                        #         write_file(
+                        #             res_path,
+                        #             encoded
+                        #         )
+                        #     print((im_path, res_path, imxx.tag))

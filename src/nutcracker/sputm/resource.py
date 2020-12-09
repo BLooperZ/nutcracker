@@ -38,7 +38,7 @@ def detect_resource(path):
     if os.path.exists(f'{path}.HE0'):
         # Configuration for HE games
         pattern = '.HE{i:d}'
-        resources = [res for res in resources if parse(f'{path}{pattern}', res, evaluate_result=False)][:2]
+        resources = sorted([res for res in resources if parse(f'{path}{pattern}', res, evaluate_result=False)])[:2]
         if os.path.exists(f'{path}.(a)'):
             resources = [resources[0], f'{path}.(a)']
         read_index = read_index_he
@@ -49,7 +49,7 @@ def detect_resource(path):
     if os.path.exists(f'{path}.LA0'):
         # Configuration for SCUMM v7 games
         pattern = '.LA{i:d}'
-        resources = [res for res in resources if parse(f'{path}{pattern}', res, evaluate_result=False)]
+        resources = sorted([res for res in resources if parse(f'{path}{pattern}', res, evaluate_result=False)])
         read_index = read_index_v8 if os.path.basename(path) == 'COMI' else read_index_v7
         chiper_key = 0x00
         max_depth = 4
