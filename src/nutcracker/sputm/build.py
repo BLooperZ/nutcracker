@@ -57,6 +57,7 @@ def make_index_from_resource(resource, ref, base_fix: int = 0):
 
     resmap = {
         'RMDA': dirr,
+        'RMSC': dirr,
         'SCRP': dirs,
         'DIGI': dirn,
         'SOUN': dirn,
@@ -78,6 +79,7 @@ def make_index_from_resource(resource, ref, base_fix: int = 0):
         'DIRM': dirm,
         # LucasArts SCUMM games
         'DSCR': dirs,
+        'DRSC': dirr,
         'DSOU': dirn,
         'DCOS': dirc,
         'DCHR': dirf,

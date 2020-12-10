@@ -253,6 +253,7 @@ def read_index_v8(root):
         'OBIM': get_object_id_from_name_v8(dobj),
         'OBCD': read_inner_uint16le_v7,
         'LSCR': read_uint8le,
+        'RMSC': compare_pid_off(drsc, 8),
         'SCRP': compare_pid_off(dscr, 8),
         'CHAR': compare_pid_off(dchr, 8),
         'SOUN': compare_pid_off(dsou, 8),
