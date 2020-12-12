@@ -8,8 +8,9 @@ from typing import Optional
 import numpy as np
 
 from nutcracker.codex.codex import decode1
+from nutcracker.codex.smap import decode_smap, decode_he, read_uint16le, read_uint32le, parse_strip
 from .preset import sputm
-from .room import decode_smap, convert_to_pil_image, decode_he, read_uint16le, read_uint32le, read_strip, parse_strip, read_room_background_v8
+from .room import convert_to_pil_image, read_room_background_v8
 
 def read_room_background(image, width, height, zbuffers):
     if image.tag == 'SMAP':

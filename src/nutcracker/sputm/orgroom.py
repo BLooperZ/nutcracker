@@ -77,8 +77,23 @@ def encode_images_v8(basedir, imag, obj_name, room_id, rnam):
         im_path = im_path.replace(os.path.sep, '_')
         im_path = os.path.join(basedir, f'{im_path}.png')
 
+        chunk = sputm.mktag(imxx.tag, imxx.data)
+        s = sputm.generate_schema(chunk)
+        image = next(sputm(schema=s).map_chunks(chunk))
+        print(image)
+
         if os.path.exists(im_path):
             encoded = encode_block_v8(im_path, imxx.tag)
+            if image.tag == 'SMAP':
+                zpln = sputm.find('ZPLN', image)
+                assert sputm.mktag('BSTR', sputm.find('BSTR', image).data) + sputm.mktag('ZPLN', zpln.data) == imxx.data
+                assert zpln
+                encoded += sputm.mktag('ZPLN', zpln.data)
+                print(zpln.data)
+                print('ORIG')
+                sputm.render(image)
+                print('ENCODED')
+                sputm.render(next(sputm(schema=s).map_chunks(sputm.mktag('SMAP', encoded))))
             yield imxx, encoded
             print((im_path, imxx))
             if imxx.tag == 'BOMP':
@@ -144,10 +159,21 @@ if __name__ == '__main__':
                 im_path = f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else path
                 im_path = im_path.replace(os.path.sep, '_')
                 im_path = os.path.join(base, 'backgrounds', f'{im_path}.png')
+
+                chunk = sputm.mktag(imxx.tag, imxx.data)
+                s = sputm.generate_schema(chunk)
+                image = next(sputm(schema=s).map_chunks(chunk))
+
                 if os.path.exists(im_path):
                     res_path = os.path.join(args.dirname, imxx.attribs['path'])
                     encoded = encode_block_v8(im_path, imxx.tag)
                     if encoded:
+                        if image.tag == 'SMAP':
+                            zpln = sputm.find('ZPLN', image)
+                            assert sputm.mktag('BSTR', sputm.find('BSTR', image).data) + sputm.mktag('ZPLN', zpln.data) == imxx.data
+                            assert zpln
+                            encoded += sputm.mktag('ZPLN', zpln.data)
+
                         os.makedirs(os.path.dirname(res_path), exist_ok=True)
                         write_file(
                             res_path,

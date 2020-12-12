@@ -50,7 +50,7 @@ def read_room(header, rmim):
                 continue
             im = convert_to_pil_image(bgim)
             zpxx = list(sputm.findall('ZP{:02x}', imxx))
-            assert len(zpxx) == zbuffers - 1
+            assert len(zpxx) == header.zbuffers - 1
 
             path = imxx.attribs['path']
             yield path, im, zpxx
@@ -62,14 +62,23 @@ def read_room(header, rmim):
 
         for imxx in wrap.children[1:]:
             assert imxx.attribs['gid'] == 1, imxx.attribs['gid']
-            bgim = read_room_background_v8(imxx, header.width, header.height, header.zbuffers)
+
+            chunk = sputm.mktag(imxx.tag, imxx.data)
+            s = sputm.generate_schema(chunk)
+            image = next(sputm(schema=s).map_chunks(chunk))
+
+            bgim = read_room_background_v8(image, header.width, header.height, header.zbuffers)
             if bgim is None:
                 continue
             im = convert_to_pil_image(bgim)
+            zpxx = ()
+            zpln = sputm.findpath('ZPLN/WRAP', image)
+            if zpln:
+                zpxx = [zpln]
 
             path = imxx.attribs['path']
 
-            yield path, im, ()
+            yield path, im, zpxx
 
 def read_objects(room):
     for obim in sputm.findall('OBIM', room):
@@ -102,6 +111,7 @@ def read_objects(room):
                 im = convert_to_pil_image(bgim)
 
                 path = imxx.attribs['path']
+                obj_id = obim.attribs['gid']
                 name = f'{obj_id:04d}_{imxx.tag}'
 
                 yield path, name, im, obj_x, obj_y
@@ -113,7 +123,12 @@ def read_objects(room):
                 assert idx == 0
                 wrap = sputm.find('WRAP', imag)
                 for iidx, bomp in enumerate(wrap.children[1:]):
-                    bgim = read_room_background_v8(bomp, obj_width, obj_height, 0)
+
+                    chunk = sputm.mktag(bomp.tag, bomp.data)
+                    s = sputm.generate_schema(chunk)
+                    image = next(sputm(schema=s).map_chunks(chunk))
+
+                    bgim = read_room_background_v8(image, obj_width, obj_height, 0)
                     im = convert_to_pil_image(bgim)
 
                     path = bomp.attribs['path']
@@ -200,7 +215,7 @@ if __name__ == '__main__':
                 # os.makedirs(os.path.join(base, dirname), exist_ok=True)
                 # while path in paths:
                 #     path += 'd'
-                assert not path in paths, path
+                assert not path in paths, (path, paths)
                 paths[path] = True
                 im.save(os.path.join(base, 'objects', f'{path}.png'))
 

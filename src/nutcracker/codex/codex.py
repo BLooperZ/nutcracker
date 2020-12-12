@@ -103,6 +103,8 @@ def decode1(width, height, f):
 
     with io.BytesIO(f) as stream:
         lines = [stream.read(read_le_uint16(stream.read(2))) for _ in range(height)]
+        tail = stream.read()
+        assert not tail, tail
 
     with io.BytesIO() as outstream:
         for line in lines:

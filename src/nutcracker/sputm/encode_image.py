@@ -9,42 +9,10 @@ from PIL import Image
 
 from nutcracker.sputm.index import read_index_v5tov7, read_index_he
 from nutcracker.utils.fileio import write_file
-from nutcracker.sputm.room import fake_encode_strip, decode_smap
 from nutcracker.codex.codex import encode1, decode1
-
-from .room import decode_smap_v8
+from nutcracker.codex.smap import encode_smap, fake_encode_strip, decode_smap
 
 from .preset import sputm
-
-# def decode_smap(height, width, data):
-#     strip_width = 8
-
-#     if width == 0 or height == 0:
-#         return None
-
-#     num_strips = width // strip_width
-#     with io.BytesIO(data) as s:
-#         offs = [(read_uint32le(s) - 8)  for _ in range(num_strips)]
-#         index = list(zip(offs, offs[1:] + [len(data)]))
-#         print(s.tell(), index[0])
-
-#     strips = (data[offset:end] for offset, end in index)
-#     return np.hstack([parse_strip(height, strip_width, data) for data in strips])
-
-def encode_smap(image):
-    strip_width = 8
-
-    height, width = image.shape
-    print(height, width)
-    num_strips = width // strip_width
-    strips = [fake_encode_strip(s, *s.shape) for s in np.hsplit(image, num_strips)]
-    with io.BytesIO() as stream:
-        offset = 8 + 4 * len(strips)
-        for strip in strips:
-            stream.write(offset.to_bytes(4, byteorder='little', signed=False))
-            offset += len(strip)
-        stream.write(b''.join(strips))
-        return stream.getvalue()
 
 def read_room_background(image, format):
     if image.tag == 'SMAP':
@@ -97,7 +65,15 @@ def encode_block_v8(filename, blocktype):
                 sputm.mktag('OFFS', offs) + data
             )
         )
-        assert np.array_equal(npim, decode_smap_v8(*npim.shape, smap_v8))
+
+        # verify
+        chunk = sputm.mktag(blocktype, smap_v8)
+        s = sputm.generate_schema(chunk)
+        image = next(sputm(schema=s).map_chunks(chunk))
+
+        bstr = sputm.findpath('BSTR/WRAP', image)
+        assert np.array_equal(npim, decode_smap(*npim.shape, bstr.data[8:]))
+
         return smap_v8
 
     if blocktype == 'BOMP':
