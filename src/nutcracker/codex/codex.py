@@ -104,7 +104,7 @@ def decode1(width, height, f):
     with io.BytesIO(f) as stream:
         lines = [stream.read(read_le_uint16(stream.read(2))) for _ in range(height)]
         tail = stream.read()
-        assert not tail, tail
+        assert tail in {b'', b'\00'}, tail
 
     with io.BytesIO() as outstream:
         for line in lines:
@@ -121,7 +121,7 @@ def decode1(width, height, f):
 
     out = [x if x else bg for bg, x in zip(out, buffer)]
     mat = to_matrix(width, height, out)
-    assert encode1(mat) == f
+    # assert encode1(mat) == f or encode1(mat) + b'\00' == f, (encode1(mat), f)
     return mat
 
 def decode47(width, height, f):
@@ -156,26 +156,26 @@ def codec44(width, height, out):
 
     f = b''
     for line in out:
-        l = b''
+        le = b''
         done = 0
         while done < width:
             i = 0
-            while done + i < width and line[done+i] == BG:
+            while done + i < width and line[done + i] == BG:
                 i += 1
             off = i
-            while done + i < width and line[done+i] != BG:
+            while done + i < width and line[done + i] != BG:
                 i += 1
-            lst = line[done+off:done+i]
-            l += struct.pack('<H', off)
+            lst = line[done + off : done + i]
+            le += struct.pack('<H', off)
             r = 1 if (done + i < width) else 0
             if len(lst) > 0:
-                l += struct.pack('<H', len(lst) - r)
+                le += struct.pack('<H', len(lst) - r)
                 for it in lst:
-                    l += struct.pack('<B', it)
+                    le += struct.pack('<B', it)
             else:
-                l += struct.pack('<H', 0)
+                le += struct.pack('<H', 0)
             done += i
-        f += struct.pack('<H', len(l) + 1) + l + struct.pack('<B', 0)
+        f += struct.pack('<H', len(le) + 1) + le + struct.pack('<B', 0)
     f += struct.pack('<H', width + 5) + b'\x00\x00' + struct.pack('<H', width)
     f += b'\x00' * (width + 1)
     if len(f) % 2 != 0:
@@ -186,28 +186,28 @@ def codec21(width, height, out):
     BG = 39
 
     f = b''
-    for line in (out + [[BG for _ in range(width)]]):
-        l = b''
+    for line in out + [[BG for _ in range(width)]]:
+        le = b''
         done = 0
         while done <= width:
             i = 0
-            while done + i < width and line[done+i] == BG:
+            while done + i < width and line[done + i] == BG:
                 i += 1
             off = i
             r = i + 1
             if done + r > width:
-                l += (struct.pack('<H', r))
+                le += struct.pack('<H', r)
                 break
-            while done + i < width and line[done+i] != BG:
+            while done + i < width and line[done + i] != BG:
                 i += 1
-            lst = line[done+off:done+i]
-            l += struct.pack('<H', off)
+            lst = line[done + off : done + i]
+            le += struct.pack('<H', off)
             if len(lst) > 0:
-                l += struct.pack('<H', len(lst) - 1)
+                le += struct.pack('<H', len(lst) - 1)
                 for it in lst:
-                    l += struct.pack('<B', it)
+                    le += struct.pack('<B', it)
             done += i
-        f += struct.pack('<H', len(l)) + l
+        f += struct.pack('<H', len(le)) + le
     if len(f) % 2 != 0:
         f += b'\x00'
     return f
