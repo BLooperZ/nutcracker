@@ -155,7 +155,7 @@ if __name__ == '__main__':
     from .index2 import read_directory, read_game_resources
     from .index import compare_pid_off, read_rnam
     from .resource import detect_resource
-    from nutcracker.image import resize_pil_image
+    from nutcracker.graphics.frame import resize_pil_image
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')

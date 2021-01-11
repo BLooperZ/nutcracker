@@ -3,14 +3,12 @@ import os
 import struct
 import zlib
 
-from functools import partial
 from itertools import chain
 
 from PIL import Image
 import numpy as np
 
-from nutcracker.codex.codex import get_decoder, get_encoder
-from nutcracker.image import save_single_frame_image
+from nutcracker.codex.codex import get_encoder
 from nutcracker.smush import anim, ahdr, fobj
 from nutcracker.smush.preset import smush
 
@@ -61,7 +59,11 @@ if __name__ == '__main__':
                     assert len(chunk) == decompressed_size
                     encoded = encode_fake(image, chunk)
                     decompressed_size = struct.pack('>I', len(encoded))
-                    fdata += [smush.mktag('ZFOB', decompressed_size + zlib.compress(encoded, 9))]
+                    fdata += [
+                        smush.mktag(
+                            'ZFOB', decompressed_size + zlib.compress(encoded, 9)
+                        )
+                    ]
                     continue
                 if tag == 'FOBJ':
                     image = get_frame_image(idx)

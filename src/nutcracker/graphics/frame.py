@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from operator import attrgetter
-from typing import Callable, Iterator, Optional, Sequence, Tuple, Union
+from typing import Iterator, Optional, Sequence, Tuple, Union
 
 from nutcracker.graphics.image import (
     convert_to_pil_image,
@@ -8,17 +8,9 @@ from nutcracker.graphics.image import (
     TImage,
     Matrix,
 )
+from nutcracker.graphics.grid import get_bg_color
 
 BGS = [b'\05', b'\04']
-
-
-def get_bg_color(
-    row_size: int, f: Callable[[int], int], bgs: Sequence[bytes] = BGS
-) -> Callable[[int], int]:
-    def get_bg(idx: int) -> int:
-        return ord(bgs[f(idx) % len(bgs)])
-
-    return get_bg
 
 
 def resize_pil_image(
@@ -41,7 +33,7 @@ def save_frame_image(
     rlocs, frames = zip(*frames)
     im_frames = (convert_to_pil_image(frame) for frame in frames)
 
-    get_bg = get_bg_color(1, lambda idx: idx + int(idx))
+    get_bg = get_bg_color(1, lambda idx: idx + int(idx), bgs=BGS)
 
     locs = list(rlocs)
     for idx, loc in enumerate(locs):
@@ -73,7 +65,7 @@ def save_single_frame_image(
         return convert_to_pil_image(frame_data)
 
     idx = 0
-    get_bg = get_bg_color(1, lambda idx: idx + int(idx))
+    get_bg = get_bg_color(1, lambda idx: idx + int(idx), bgs=BGS)
 
     w, h = resize
 

@@ -16,7 +16,7 @@ from nutcracker.smush.ahdr import AnimationHeader
 from nutcracker.smush.fobj import unobj
 from nutcracker.smush.preset import smush
 from nutcracker.codex.codex import get_decoder
-from nutcracker.image import save_single_frame_image
+from nutcracker.graphics.frame import save_single_frame_image
 
 
 def open_anim_file(path: str) -> Element:
