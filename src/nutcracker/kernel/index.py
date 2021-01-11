@@ -52,7 +52,7 @@ def create_element(offset: int, chunk: Chunk, **attrs: Any) -> Element:
 def map_chunks(
     cfg: _IndexSetting,
     data: bytes,
-    parent: Element = None,
+    parent: Optional[Element] = None,
     level: int = 0,
     extra: Optional[Callable[[Optional[Element], Chunk, int], Dict[str, Any]]] = None,
 ) -> Iterator[Element]:

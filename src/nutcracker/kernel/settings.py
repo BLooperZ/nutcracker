@@ -4,11 +4,11 @@ from dataclasses import dataclass, field
 from typing import Mapping, Optional, Set
 
 from .types import ChunkHeader
-from .structured import Structured, structured_tuple
+from .structured import StructuredTuple
 
 
-SCUMM_CHUNK = structured_tuple(('size', 'tag'), struct.Struct('<I2s'), ChunkHeader)
-IFF_CHUNK = structured_tuple(('tag', 'size'), struct.Struct('>4sI'), ChunkHeader)
+SCUMM_CHUNK = StructuredTuple(('size', 'tag'), struct.Struct('<I2s'), ChunkHeader)
+IFF_CHUNK = StructuredTuple(('tag', 'size'), struct.Struct('>4sI'), ChunkHeader)
 
 INCLUSIVE = IFF_CHUNK.size
 EXCLUSIVE = 0
@@ -33,7 +33,7 @@ class _ChunkSetting:
 
     size_fix: int = EXCLUSIVE
     align: int = 2
-    header: Structured[ChunkHeader] = IFF_CHUNK
+    header: StructuredTuple[ChunkHeader] = IFF_CHUNK
 
 
 @dataclass(frozen=True)

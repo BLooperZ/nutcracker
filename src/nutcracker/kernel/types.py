@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field, replace
-from typing import Any, Dict, Iterable, Iterator, NamedTuple, Sequence
+from typing import Any, Dict, Iterable, Iterator, NamedTuple, Sequence, Union
 
 
 @dataclass(frozen=True, order=True)
@@ -47,3 +47,6 @@ class Element:
     def chunk(self) -> Chunk:
         """Convert element to chunk"""
         return Chunk(self.tag, self.data)
+
+
+ElementTree = Union[Iterator[Element], Element, None]

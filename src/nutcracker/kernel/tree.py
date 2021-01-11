@@ -1,13 +1,11 @@
 import io
 import os
 import sys
-from typing import IO, Iterator, Optional, Union
+from typing import IO, Iterator, Optional
 
 from parse import parse
 
-from .types import Element
-
-ElementTree = Union[Iterator[Element], Element, None]
+from .types import Element, ElementTree
 
 
 def findall(tag: str, root: ElementTree) -> Iterator[Element]:
