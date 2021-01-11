@@ -1,26 +1,41 @@
 #!/usr/bin/env python3
 
 import io
+import struct
+from dataclasses import dataclass
 
-from functools import partial
-from struct import Struct
-from typing import Mapping, Tuple
+from nutcracker.kernel.structured import StructuredTuple
 
-from . import structure
 
-meta_fields = ('codec', 'x1', 'y1', 'x2', 'y2', 'unk1', 'unk2')
-meta_struct = Struct(f'<{len(meta_fields)}H')
+@dataclass(frozen=True, order=True)
+class FrameObjectHeader:
+    codec: int
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+    unk1: int
+    unk2: int
 
-read_meta = partial(structure.read, meta_fields, meta_struct)
 
-def unobj(data: bytes) -> Tuple[Mapping[str, int], bytes]:
-    meta = dict(zip(
-        meta_fields,
-        meta_struct.unpack(data[:meta_struct.size])
-    ))
-    data = data[meta_struct.size:]
-    return meta, data
+FOBJ_META = StructuredTuple(
+    ('codec', 'x1', 'y1', 'x2', 'y2', 'unk1', 'unk2'),
+    struct.Struct('<7H'),
+    FrameObjectHeader,
+)
 
-def mkobj(meta, data):
-    metas = meta.values()
-    return meta_struct.pack(*metas) + data
+
+@dataclass(frozen=True, order=True)
+class FrameObject:
+    header: FrameObjectHeader
+    data: bytes
+
+
+def unobj(data: bytes) -> FrameObject:
+    with io.BytesIO(data) as stream:
+        header = FOBJ_META.unpack(stream)
+        return FrameObject(header, stream.read())
+
+
+def mkobj(meta: FrameObjectHeader, data: bytes) -> bytes:
+    return FOBJ_META.pack(meta) + data

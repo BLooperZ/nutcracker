@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 import glob
-import io
 import os
 import struct
 import wave
-from functools import partial
-from typing import Iterable, Iterator
 
 from . import smush
 
 from nutcracker.utils import funcutils
 
+
 def read_le_uint16(f):
     return struct.unpack('<H', f[:2])[0]
+
 
 if __name__ == '__main__':
     import argparse
@@ -36,7 +35,12 @@ if __name__ == '__main__':
             print([tag for _, (tag, _) in smush.read_chunks(saud, align=1)])
             for _, (tag, data) in smush.read_chunks(saud, align=1):
                 if tag == 'STRK':
-                    print([read_le_uint16(bytes(word)) for word in funcutils.grouper(data, 2)]) 
+                    print(
+                        [
+                            read_le_uint16(bytes(word))
+                            for word in funcutils.grouper(data, 2)
+                        ]
+                    )
                     continue
                 if tag == 'SDAT':
                     sound = data
@@ -47,11 +51,16 @@ if __name__ == '__main__':
                         print(data)
                     continue
                 if tag == 'SHDR':
-                    print([read_le_uint16(bytes(word)) for word in funcutils.grouper(data, 2)]) 
+                    print(
+                        [
+                            read_le_uint16(bytes(word))
+                            for word in funcutils.grouper(data, 2)
+                        ]
+                    )
                     continue
             with wave.open(f'sound/SDAT_{basename}.WAV', 'w') as wav:
                 # aud.write(b'\x80' * frame_audio_size[12] * frame_no)
                 wav.setnchannels(1)
-                wav.setsampwidth(1) 
+                wav.setsampwidth(1)
                 wav.setframerate(sample_rate)
                 wav.writeframesraw(sound)

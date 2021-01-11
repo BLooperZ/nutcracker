@@ -1,27 +1,30 @@
 import io
 import logging
-import sys
 import struct
 from enum import Enum
 from datetime import datetime
 
 import numpy as np
 
-from nutcracker.utils import funcutils
 from . import bomb
 
 # logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
-glyph4_xy = tuple(zip(
-    (0, 1, 2, 3, 3, 3, 3, 2, 1, 0, 0, 0, 1, 2, 2, 1),
-    (0, 0, 0, 0, 1, 2, 3, 3, 3, 3, 2, 1, 1, 1, 2, 2),
-))
+glyph4_xy = tuple(
+    zip(
+        (0, 1, 2, 3, 3, 3, 3, 2, 1, 0, 0, 0, 1, 2, 2, 1),
+        (0, 0, 0, 0, 1, 2, 3, 3, 3, 3, 2, 1, 1, 1, 2, 2),
+    )
+)
 
-glyph8_xy = tuple(zip(
-    (0, 2, 5, 7, 7, 7, 7, 7, 7, 5, 2, 0, 0, 0, 0, 0),
-    (0, 0, 0, 0, 1, 3, 4, 6, 7, 7, 7, 7, 6, 4, 3, 1),
-))
+glyph8_xy = tuple(
+    zip(
+        (0, 2, 5, 7, 7, 7, 7, 7, 7, 5, 2, 0, 0, 0, 0, 0),
+        (0, 0, 0, 0, 1, 3, 4, 6, 7, 7, 7, 7, 6, 4, 3, 1),
+    )
+)
 
+# fmt: off
 motion_vectors = (
     (  0,   0), ( -1, -43), (  6, -43), ( -9, -42), ( 13, -41),
     (-16, -40), ( 19, -39), (-23, -36), ( 26, -34), ( -2, -33),
@@ -75,19 +78,24 @@ motion_vectors = (
     ( 23,  36), (-19,  39), ( 16,  40), (-13,  41), (  9,  42),
     ( -6,  43), (  1,  43), (  0,   0), (  0,   0), (  0,   0),
 )
+# fmt: on
+
 
 def read_le_uint16(f):
     bts = bytes(x % 256 for x in f[:2])
     return struct.unpack('<H', bts)[0]
 
+
 def read_le_uint32(f):
     bts = bytes(x % 256 for x in f[:4])
     return struct.unpack('<I', bts)[0]
+
 
 def npoff(x):
     # This function returns the memory
     # block address of an array.
     return x.__array_interface__['data'][0]
+
 
 _width = None
 _height = None
@@ -102,6 +110,7 @@ _prev_seq = None
 _p4x4glyphs = None
 _p8x8glyphs = None
 
+
 class GlyphEdge(Enum):
     LEFT_EDGE = 0
     TOP_EDGE = 1
@@ -109,12 +118,14 @@ class GlyphEdge(Enum):
     BOTTOM_EDGE = 3
     NO_EDGE = 4
 
+
 class GlyphDir(Enum):
     DIR_LEFT = 0
     DIR_UP = 1
     DIR_RIGHT = 2
     DIR_DOWN = 3
     NO_DIR = 4
+
 
 def which_edge(x, y, edge_size):
     edge_max = edge_size - 1
@@ -129,45 +140,54 @@ def which_edge(x, y, edge_size):
     else:
         return GlyphEdge.NO_EDGE
 
+
 def which_direction(edge0, edge1):
-    if any((
-        (edge0 == GlyphEdge.LEFT_EDGE and edge1 == GlyphEdge.RIGHT_EDGE),
-        (edge1 == GlyphEdge.LEFT_EDGE and edge0 == GlyphEdge.RIGHT_EDGE),
-        (edge0 == GlyphEdge.BOTTOM_EDGE and edge1 != GlyphEdge.TOP_EDGE),
-        (edge1 == GlyphEdge.BOTTOM_EDGE and edge0 != GlyphEdge.TOP_EDGE)
-    )):
+    if any(
+        (
+            (edge0 == GlyphEdge.LEFT_EDGE and edge1 == GlyphEdge.RIGHT_EDGE),
+            (edge1 == GlyphEdge.LEFT_EDGE and edge0 == GlyphEdge.RIGHT_EDGE),
+            (edge0 == GlyphEdge.BOTTOM_EDGE and edge1 != GlyphEdge.TOP_EDGE),
+            (edge1 == GlyphEdge.BOTTOM_EDGE and edge0 != GlyphEdge.TOP_EDGE),
+        )
+    ):
         return GlyphDir.DIR_UP
-    elif any((
-        (edge0 == GlyphEdge.TOP_EDGE and edge1 != GlyphEdge.BOTTOM_EDGE),
-        (edge1 == GlyphEdge.TOP_EDGE and edge0 != GlyphEdge.BOTTOM_EDGE)
-    )):
+    elif any(
+        (
+            (edge0 == GlyphEdge.TOP_EDGE and edge1 != GlyphEdge.BOTTOM_EDGE),
+            (edge1 == GlyphEdge.TOP_EDGE and edge0 != GlyphEdge.BOTTOM_EDGE),
+        )
+    ):
         return GlyphDir.DIR_DOWN
-    elif any((
-        (edge0 == GlyphEdge.LEFT_EDGE and edge1 != GlyphEdge.RIGHT_EDGE),
-        (edge1 == GlyphEdge.LEFT_EDGE and edge0 != GlyphEdge.RIGHT_EDGE)
-    )):
+    elif any(
+        (
+            (edge0 == GlyphEdge.LEFT_EDGE and edge1 != GlyphEdge.RIGHT_EDGE),
+            (edge1 == GlyphEdge.LEFT_EDGE and edge0 != GlyphEdge.RIGHT_EDGE),
+        )
+    ):
         return GlyphDir.DIR_LEFT
-    elif any((
-        (edge0 == GlyphEdge.TOP_EDGE and edge1 == GlyphEdge.BOTTOM_EDGE),
-        (edge1 == GlyphEdge.TOP_EDGE and edge0 == GlyphEdge.BOTTOM_EDGE),
-        (edge0 == GlyphEdge.RIGHT_EDGE and edge1 != GlyphEdge.LEFT_EDGE),
-        (edge1 == GlyphEdge.RIGHT_EDGE and edge0 != GlyphEdge.LEFT_EDGE)
-    )):
+    elif any(
+        (
+            (edge0 == GlyphEdge.TOP_EDGE and edge1 == GlyphEdge.BOTTOM_EDGE),
+            (edge1 == GlyphEdge.TOP_EDGE and edge0 == GlyphEdge.BOTTOM_EDGE),
+            (edge0 == GlyphEdge.RIGHT_EDGE and edge1 != GlyphEdge.LEFT_EDGE),
+            (edge1 == GlyphEdge.RIGHT_EDGE and edge0 != GlyphEdge.LEFT_EDGE),
+        )
+    ):
         return GlyphDir.DIR_RIGHT
 
     return GlyphDir.NO_DIR
+
 
 def interp_point(x0, y0, x1, y1, pos, npoints):
     if not npoints:
         return x0, y0
     return (
         (x0 * pos + x1 * (npoints - pos) + (npoints >> 1)) // npoints,
-        (y0 * pos + y1 * (npoints - pos) + (npoints >> 1)) // npoints
+        (y0 * pos + y1 * (npoints - pos) + (npoints >> 1)) // npoints,
     )
 
-def make_glyphs(vecs, side_length):
-    glyph_size = side_length * side_length
 
+def make_glyphs(vecs, side_length):
     for x0, y0 in vecs:
         edge0 = which_edge(x0, y0, side_length)
 
@@ -181,14 +201,15 @@ def make_glyphs(vecs, side_length):
             for ipoint in range(npoints + 1):
                 p0, p1 = interp_point(x0, y0, x1, y1, ipoint, npoints)
                 if dirr == GlyphDir.DIR_UP:
-                    npglyph[:p1 + 1, p0] = 1
+                    npglyph[: p1 + 1, p0] = 1
                 elif dirr == GlyphDir.DIR_DOWN:
                     npglyph[p1:, p0] = 1
                 elif dirr == GlyphDir.DIR_LEFT:
-                    npglyph[p1, :p0 + 1] = 1
+                    npglyph[p1, : p0 + 1] = 1
                 elif dirr == GlyphDir.DIR_RIGHT:
                     npglyph[p1, p0:] = 1
             yield npglyph
+
 
 def init_codec47(width, height):
     global _width
@@ -215,14 +236,16 @@ def init_codec47(width, height):
     # initialize views of buffer
     _bprev1, _bprev2, _bcurr = (
         _buffer[:_height, :],
-        _buffer[_height:2 * _height, :],
-        _buffer[2 * _height:, :]
+        _buffer[_height : 2 * _height, :],
+        _buffer[2 * _height :, :],
     )
+
 
 def get_locs(width, height, step):
     for yloc in range(0, height, step):
         for xloc in range(0, width, step):
             yield yloc, xloc
+
 
 def decode47(src, width, height):
     global _prev_seq
@@ -260,7 +283,7 @@ def decode47(src, width, height):
 
     out = _bcurr
 
-    assert(npoff(out) == npoff(_bcurr))
+    assert npoff(out) == npoff(_bcurr)
 
     print(f'COMPRESSION: {compression}')
     if compression == 0:
@@ -293,11 +316,13 @@ def decode47(src, width, height):
     elif compression == 4:
         out[:, :] = _bprev1
     elif compression == 5:
-        out[:, :] = np.asarray(bomb.decode_line(gfx_data, decoded_size), dtype=np.uint8).reshape(_height, _width)
+        out[:, :] = np.asarray(
+            bomb.decode_line(gfx_data, decoded_size), dtype=np.uint8
+        ).reshape(_height, _width)
     else:
         raise ValueError(f'Unknow compression: {compression}')
 
-    assert(npoff(out) == npoff(_bcurr))
+    assert npoff(out) == npoff(_bcurr)
 
     if seq_nb == _prev_seq + 1 and rotation != 0:
         if rotation == 2:
@@ -311,18 +336,18 @@ def decode47(src, width, height):
 
     return out.tolist()
 
+
 _params = None
 _strided = None
+
 
 def rollable_view(ndarr, max_overflow=None):
     rows, cols = ndarr.shape
     ncols = cols + max_overflow if max_overflow else rows * cols
     return np.lib.stride_tricks.as_strided(
-        ndarr,
-        (rows, ncols),
-        ndarr.strides,
-        writeable=False
+        ndarr, (rows, ncols), ndarr.strides, writeable=False
     )
+
 
 def decode2(out, src, width, height, params):
     global _params
@@ -336,12 +361,9 @@ def decode2(out, src, width, height, params):
     start = datetime.now()
     with io.BytesIO(src) as stream:
         for (yloc, xloc) in get_locs(width, height, 8):
-            process_block(
-                out[yloc:yloc + 8, xloc:xloc + 8],
-                stream,
-                yloc, xloc, 8
-            )
+            process_block(out[yloc : yloc + 8, xloc : xloc + 8], stream, yloc, xloc, 8)
     print('processing time', str(datetime.now() - start))
+
 
 def process_block(out, stream, yloc, xloc, size):
     pos = stream.tell()
@@ -351,7 +373,7 @@ def process_block(out, stream, yloc, xloc, size):
     if size == 1:
         out[:, :] = code
 
-    if code < 0xf8:
+    if code < 0xF8:
         mx, my = motion_vectors[code]
         by, bx = my + yloc, mx + xloc
 
@@ -362,11 +384,11 @@ def process_block(out, stream, yloc, xloc, size):
         if (by + size - 1) * _width + bx + size - 1 >= _width * _height:
             raise IndexError(f'out of bounds: {by}, {bx}, {size}')
 
-        out[:, :] = _strided[by:by + size, bx:bx + size]
+        out[:, :] = _strided[by : by + size, bx : bx + size]
         logging.debug(out[:, :])
         logging.debug((size, bytes([code])))
 
-    elif code == 0xff:
+    elif code == 0xFF:
         logging.debug((size, bytes([code])))
         if size == 2:
             buf = stream.read(4)
@@ -377,12 +399,12 @@ def process_block(out, stream, yloc, xloc, size):
             process_block(out[:size, size:], stream, yloc, xloc + size, size)
             process_block(out[size:, :size], stream, yloc + size, xloc, size)
             process_block(out[size:, size:], stream, yloc + size, xloc + size, size)
-    elif code == 0xfe:
+    elif code == 0xFE:
         val = ord(stream.read(1))
         out[:, :] = val
         logging.debug(out[:, :])
         logging.debug((size, bytes([code, val])))
-    elif code == 0xfd:
+    elif code == 0xFD:
         assert size > 2, stream.tell()
         glyphs = _p8x8glyphs if size == 8 else _p4x4glyphs
         gcode = ord(stream.read(1))
@@ -391,8 +413,8 @@ def process_block(out, stream, yloc, xloc, size):
         out[:, :] = colors[1 - pglyph]
         logging.debug(out[:, :])
         logging.debug((size, bytes([code, gcode, *colors])))
-    elif code == 0xfc:
-        out[:, :] = _bprev1[yloc:yloc + size, xloc:xloc + size]
+    elif code == 0xFC:
+        out[:, :] = _bprev1[yloc : yloc + size, xloc : xloc + size]
         logging.debug(out[:, :])
         logging.debug((size, bytes([code])))
     else:
@@ -414,48 +436,45 @@ def encode2(frame, width, height, params):
     start = datetime.now()
     with io.BytesIO() as stream:
         for (yloc, xloc) in get_locs(width, height, 8):
-            encode_block(
-                frame[yloc:yloc + 8, xloc:xloc + 8],
-                stream,
-                yloc, xloc, 8
-            )
+            encode_block(frame[yloc : yloc + 8, xloc : xloc + 8], stream, yloc, xloc, 8)
         print('processing time', str(datetime.now() - start))
         return stream.getvalue()
+
 
 def encode_block(frame, stream, yloc, xloc, size):
     logging.debug((stream.tell(), yloc, xloc, size))
 
-    for idx, (mx, my) in enumerate(motion_vectors[:0xf8]):
+    for idx, (mx, my) in enumerate(motion_vectors[:0xF8]):
         by, bx = my + yloc, mx + xloc
         by, bx = by + bx // _width, bx % _width
         if (0 <= by < _height) and (0 <= bx < _width):
             if (by + size - 1) * _width + bx + size - 1 >= _width * _height:
                 logging.debug(f'out of bounds: {by}, {bx}, {size}')
                 continue
-            if np.array_equal(frame, _strided[by:by + size, bx:bx + size]):
+            if np.array_equal(frame, _strided[by : by + size, bx : bx + size]):
                 stream.write(bytes([idx]))
                 logging.debug(frame)
                 logging.debug((size, bytes([idx])))
                 return
 
-    if np.array_equal(frame, _bprev1[yloc:yloc + size, xloc:xloc + size]):
-        stream.write(bytes([0xfc]))
+    if np.array_equal(frame, _bprev1[yloc : yloc + size, xloc : xloc + size]):
+        stream.write(bytes([0xFC]))
         logging.debug(frame)
-        logging.debug((size, bytes([0xfc])))
+        logging.debug((size, bytes([0xFC])))
         return
 
     for idx, color in enumerate(_params[:4]):
         assert 0 <= idx < 4
         if np.all(frame == color):
-            stream.write(bytes([idx + 0xf8]))
+            stream.write(bytes([idx + 0xF8]))
             logging.debug(frame)
-            logging.debug((size, bytes([idx + 0xf8])))
+            logging.debug((size, bytes([idx + 0xF8])))
             return
 
     if (frame == frame[0, 0]).sum() == len(frame.ravel()):
-        stream.write(bytes([0xfe, frame[0, 0]]))
+        stream.write(bytes([0xFE, frame[0, 0]]))
         logging.debug(frame)
-        logging.debug((size, bytes([0xfe, frame[0, 0]])))
+        logging.debug((size, bytes([0xFE, frame[0, 0]])))
         return
 
     if size > 2:
@@ -465,19 +484,19 @@ def encode_block(frame, stream, yloc, xloc, size):
             for idx, glyph in enumerate(glyphs):
                 cglyph = colors[1 - glyph]
                 if np.array_equal(cglyph, frame):
-                    stream.write(bytes([0xfd, idx, *colors]))
+                    stream.write(bytes([0xFD, idx, *colors]))
                     logging.debug(frame)
-                    logging.debug((size, bytes([0xfd, idx, *colors])))
+                    logging.debug((size, bytes([0xFD, idx, *colors])))
                     return
                 rglyph = colors[glyph]
                 if np.array_equal(rglyph, frame):
-                    stream.write(bytes([0xfd, idx, *colors[::-1]]))
+                    stream.write(bytes([0xFD, idx, *colors[::-1]]))
                     logging.debug(frame)
-                    logging.debug((size, bytes([0xfd, idx, *colors[::-1]])))
+                    logging.debug((size, bytes([0xFD, idx, *colors[::-1]])))
                     return
 
-    stream.write(bytes([0xff]))
-    logging.debug((size, bytes([0xff])))
+    stream.write(bytes([0xFF]))
+    logging.debug((size, bytes([0xFF])))
     if size == 2:
         stream.write(frame.tobytes())
         logging.debug(frame)
@@ -489,3 +508,38 @@ def encode_block(frame, stream, yloc, xloc, size):
     encode_block(frame[size:, :size], stream, yloc + size, xloc, size)
     encode_block(frame[size:, size:], stream, yloc + size, xloc + size, size)
     return
+
+
+def fake_encode47(out, bg1=b'\0', bg2=b'\0'):
+    # from . import codex47_np as cdx
+
+    width = len(out[0])
+    height = len(out)
+    print(width, height)
+
+    seq_nb = b'\0\0'
+    compression = b'\0'
+    rotation = b'\0'
+    skip = b'\0'
+    _dummy = b'\0\0\0'
+    params = b'\0\0\0\0'
+    bg1 = bg1
+    bg2 = bg2
+
+    decoded_size = struct.pack('<I', width * height)
+
+    _dummy2 = b'\0' * 8
+
+    return (
+        seq_nb
+        + compression
+        + rotation
+        + skip
+        + _dummy
+        + params
+        + bg1
+        + bg2
+        + decoded_size
+        + _dummy2
+        + b''.join(out)
+    )

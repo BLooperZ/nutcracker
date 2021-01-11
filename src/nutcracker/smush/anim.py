@@ -1,57 +1,39 @@
 import itertools
-from typing import cast, IO, Iterable, Iterator, Mapping, Tuple, TypeVar
+from typing import Iterator, Optional, Tuple
 
-from . import ahdr
-from .preset import smush
-from .types import Chunk, AnimationHeader
+from nutcracker.smush import ahdr
+from nutcracker.smush.preset import smush
+from nutcracker.smush.types import Element
+from nutcracker.smush.element import read_elements, read_data
 
-T = TypeVar('T')
 
-def verify_nframes(frames: Iterator[T], nframes: int) -> Iterator[T]:
+def verify_nframes(frames: Iterator[Element], nframes: int) -> Iterator[Element]:
     for idx, frame in enumerate(frames):
-        if nframes and idx > nframes:
+        if nframes and idx > nframes - 1:
             raise ValueError('too many frames')
         yield frame
 
-def print_maxframe(frames: Iterator[Tuple[int, Chunk]]) -> Iterator[Tuple[int, Chunk]]:
+
+def verify_maxframe(
+    frames: Iterator[Element], limit: Optional[int]
+) -> Iterator[Element]:
     maxframe = 0
-    last_chunk = None
-    for offset, chunk in frames:
-        if last_chunk:
-            maxframe = max(maxframe, offset - last_offset)
-            assert offset - last_offset == 8 + len(last_chunk.data), \
-                (offset - last_offset, 8 + len(last_chunk.data))
-        last_offset = offset
-        last_chunk = chunk
-        yield offset, chunk
-    print(f'maxframe: {maxframe + 1}')
+    for elem in frames:
+        maxframe = max(elem.attribs['size'], maxframe)
+        yield elem
+    if limit and maxframe > limit:
+        raise ValueError(f'expected maxframe of {limit} but got {maxframe}')
 
-def parse(stream: IO[bytes]) -> Tuple[AnimationHeader, Iterator[Iterator[Tuple[int, Chunk]]]]:
-    anim = smush.assert_tag('ANIM', smush.untag(stream))
-    assert stream.read() == b''
 
-    anim_chunks = smush.print_chunks(smush.read_chunks(anim))
-    header = ahdr.from_bytes(smush.assert_tag('AHDR', next(chunk for _, chunk in anim_chunks)))
-    assert not (header.dummy2 or header.dummy3)
+def parse(root: Element) -> Tuple[ahdr.AnimationHeader, Iterator[Element]]:
+    anim = read_elements('ANIM', root)
+    header = ahdr.from_bytes(read_data('AHDR', next(anim)))
 
-    print(header)
+    frames = verify_nframes(verify_maxframe(anim, header.v2.maxframe), header.nframes)
 
-    anim_chunks = print_maxframe(anim_chunks)
+    return header, frames
 
-    frames = verify_nframes(
-        (smush.assert_tag('FRME', frame) for _, frame in anim_chunks),
-        header.nframes
-    )
 
-    chunked_frames = (smush.read_chunks(frame) for frame in frames)
-
-    return header, chunked_frames
-
-def compose(header: AnimationHeader, frames: Iterator[bytes]):
+def compose(header: ahdr.AnimationHeader, frames: Iterator[bytes]) -> bytes:
     bheader = smush.mktag('AHDR', ahdr.to_bytes(header))
-    return smush.mktag(
-        'ANIM',
-        smush.write_chunks(
-            itertools.chain([bheader], frames)
-        )
-    )
+    return smush.mktag('ANIM', smush.write_chunks(itertools.chain([bheader], frames)))

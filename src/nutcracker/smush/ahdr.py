@@ -1,47 +1,59 @@
 #!/usr/bin/env python3
 
 import io
-from functools import partial
-from struct import Struct
-from typing import Mapping, Sequence, Union
+import struct
+from dataclasses import dataclass, replace
+from typing import Optional
 
-from . import structure
-from .types import AnimationHeader
+from nutcracker.kernel.structured import StructuredTuple
 
-PALETTE_SIZE = 3 * 256
+PALETTE_SIZE = 0x300
 
-primary_fields = ('version', 'nframes', 'dummy')
-secondary_fields = ('framerate', 'maxframe', 'samplerate', 'dummy2', 'dummy3')
-primary_struct = Struct(f'<{len(primary_fields)}H')
-secondary_struct = Struct(f'<{len(secondary_fields)}I')
 
-read_primary = partial(structure.read, primary_fields, primary_struct)
-read_secondary = partial(structure.read, secondary_fields, secondary_struct)
+@dataclass(frozen=True)
+class AnimationHeaderV2:
+    framerate: Optional[int] = None
+    maxframe: Optional[int] = None
+    samplerate: Optional[int] = None
+    dummy2: Optional[int] = None
+    dummy3: Optional[int] = None
 
-def from_bytes(header: bytes) -> AnimationHeader:
-    with io.BytesIO(header) as stream:
-        primary = read_primary(stream)
-        palette = tuple(stream.read(PALETTE_SIZE))
-        secondary = read_secondary(stream) if primary['version'] == 2 else {}
+
+@dataclass(frozen=True)
+class AnimationHeader:
+    version: int
+    nframes: int
+    dummy: int
+    palette: bytes
+    v2: AnimationHeaderV2 = AnimationHeaderV2()
+
+
+AHDR_V1 = StructuredTuple(
+    ('version', 'nframes', 'dummy', 'palette'),
+    struct.Struct(f'<3H{PALETTE_SIZE}s'),
+    AnimationHeader,
+)
+
+AHDR_V2 = StructuredTuple(
+    ('framerate', 'maxframe', 'samplerate', 'dummy2', 'dummy3'),
+    struct.Struct('<5I'),
+    AnimationHeaderV2,
+)
+
+
+def from_bytes(data: bytes) -> AnimationHeader:
+    with io.BytesIO(data) as stream:
+        header = AHDR_V1.unpack(stream)
+        if header.version == 2:
+            header = replace(header, v2=AHDR_V2.unpack(stream))
         if stream.read():
             raise ValueError('got extra trailing data')
-    return AnimationHeader(
-        version=primary['version'],
-        nframes=primary['nframes'],
-        dummy=primary['dummy'],
-        palette=palette,
-        framerate=secondary.get('framerate', None),
-        maxframe=secondary.get('maxframe', None),
-        samplerate=secondary.get('samplerate', None),
-        dummy2=secondary.get('dummy2', None),
-        dummy3=secondary.get('dummy3', None)
-    )
+        if header.v2.dummy2 or header.v2.dummy3:
+            raise ValueError('non-zero value in header dummies')
+        return header
+
 
 def to_bytes(header: AnimationHeader) -> bytes:
-    base = primary_struct.pack(*header[:3]) + bytes(header.palette)
-    if header.version == 2:
-        return base + secondary_struct.pack(*header[4:])
-    return base
-
-def create(base: AnimationHeader, **kwargs):
-    return base._replace(**kwargs)
+    return AHDR_V1.pack(header) + (
+        AHDR_V2.pack(header.v2) if header.version == 2 else b''
+    )

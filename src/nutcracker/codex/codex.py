@@ -3,16 +3,17 @@ import io
 import struct
 import itertools
 
-from .codex37 import fake_encode37  #, decode37
-from .codex47 import fake_encode47  #, decode37
-from .codex37_np import decode37 as e_decode37
-from .codex47_np import decode47 as e_decode47
+from .codex37_np import decode37 as e_decode37, fake_encode37
+from .codex47_np import decode47 as e_decode47, fake_encode47
+
 # from codex37_old import decode37
 
 # DECODE
 
+
 def read_le_uint16(f):
     return struct.unpack('<H', f[:2])[0]
+
 
 def unidecoder(width, height, f):
     BG = 39
@@ -35,7 +36,7 @@ def unidecoder(width, height, f):
             lens -= w
             if lens < 0:
                 w += lens
-            out[dst:dst + w] = f[src:src + w]
+            out[dst : dst + w] = f[src : src + w]
             dst += w
             src += w
         assert dst == dstPtrNext
@@ -47,7 +48,6 @@ def unidecoder(width, height, f):
 
 
 def encode1(bmap):
-
     def encode_groups(groups, buf=()):
         BG = 39
 
@@ -70,12 +70,10 @@ def encode1(bmap):
                     else:
                         yield from encode_groups(groups, buf=buf)
 
-
             else:
                 if buf:
                     yield (2 * (len(buf) - 1), list(buf))
                     buf = []
-
 
                 if len(group) > 128:
                     yield (2 * (128 - 1) + 1, group[:1])
@@ -93,9 +91,12 @@ def encode1(bmap):
             eg = list(encode_groups(grouped))
             # print('ENCODED', eg)
             linedata = b''.join(bytes([l, *g]) for l, g in eg)
-            sized = len(linedata).to_bytes(2, byteorder='little', signed=False) + linedata
+            sized = (
+                len(linedata).to_bytes(2, byteorder='little', signed=False) + linedata
+            )
             stream.write(sized)
         return stream.getvalue()
+
 
 def decode1(width, height, f):
     BG = 39
@@ -113,7 +114,9 @@ def decode1(width, height, f):
                 while stream.tell() < len(line):
                     code = ord(stream.read(1))
                     run_len = (code // 2) + 1
-                    run_line = stream.read(1) * run_len if code & 1 else stream.read(run_len)
+                    run_line = (
+                        stream.read(1) * run_len if code & 1 else stream.read(run_len)
+                    )
                     outstream.write(run_line)
                 #     log.append((code, run_line[:1] if code & 1 else run_line))
                 # print('I', [(code, list(run_line)) for code, run_line in log])
@@ -124,32 +127,40 @@ def decode1(width, height, f):
     # assert encode1(mat) == f or encode1(mat) + b'\00' == f, (encode1(mat), f)
     return mat
 
+
 def decode47(width, height, f):
     return e_decode47(f, width, height)
+
 
 def decode37(width, height, f):
     return e_decode37(f, width, height)
 
+
 def unidecoder_factory(width, height):
     return unidecoder
+
 
 decoders = {
     1: decode1,
     21: unidecoder,
     44: unidecoder,
     47: decode47,
-    37: decode37
+    37: decode37,
 }
+
 
 def get_decoder(codec):
     if codec in decoders:
         return decoders[codec]
     return NotImplemented
 
+
 def to_matrix(w, h, data):
-    return [data[i*w:(i+1)*w] for i in range(h)]
+    return [data[i * w : (i + 1) * w] for i in range(h)]
+
 
 # ENCODE
+
 
 def codec44(width, height, out):
     BG = 39
@@ -182,6 +193,7 @@ def codec44(width, height, out):
         f += b'\x00'
     return f
 
+
 def codec21(width, height, out):
     BG = 39
 
@@ -212,12 +224,14 @@ def codec21(width, height, out):
         f += b'\x00'
     return f
 
+
 encoders = {
     21: codec21,
     44: codec44,
     37: fake_encode37,
     47: fake_encode47,
 }
+
 
 def get_encoder(codec):
     if codec in encoders:

@@ -1,8 +1,10 @@
 import io
 
+
 def decode_line(src, decoded_size):
     with io.BytesIO(src) as stream:
         return decode_line_stream(stream, decoded_size)
+
 
 def decode_line_stream(stream, decoded_size):
     assert decoded_size > 0

@@ -1,52 +1,49 @@
 #!/usr/bin/env python3
+from operator import attrgetter
+from typing import Callable, Iterator, Optional, Sequence, Tuple, Union
 
-from PIL import Image
-import numpy as np
-from operator import itemgetter
+from nutcracker.graphics.image import (
+    convert_to_pil_image,
+    ImagePosition,
+    TImage,
+    Matrix,
+)
 
-from nutcracker.graphics.image import convert_to_pil_image
+BGS = [b'\05', b'\04']
 
-def get_bg_color(row_size, f):
-    BGS = [5, 4]
 
-    def get_bg(idx):
-        return BGS[f(idx) % len(BGS)]
+def get_bg_color(
+    row_size: int, f: Callable[[int], int], bgs: Sequence[bytes] = BGS
+) -> Callable[[int], int]:
+    def get_bg(idx: int) -> int:
+        return ord(bgs[f(idx) % len(bgs)])
+
     return get_bg
 
-def resize_pil_image(w, h, bg, im, loc):
+
+def resize_pil_image(
+    w: int,
+    h: int,
+    bg: int,
+    im: Union[TImage, Matrix],
+    loc: ImagePosition,
+) -> TImage:
     nbase = convert_to_pil_image([[bg] * w] * h)
     # nbase.paste(im, box=itemgetter('x1', 'y1', 'x2', 'y2')(loc))
-    nbase.paste(im, box=itemgetter('x1', 'y1')(loc))
+    nbase.paste(im, box=attrgetter('x1', 'y1')(loc))
     return nbase
 
-def save_image(filename, frames, palette, h, w, transparency=None):
-    palette = [x for l in palette for x in l]
 
-    locs, frames = zip(*frames)
-    im_frames = (convert_to_pil_image(frame) for frame in frames)
+def save_frame_image(
+    frames: Sequence[Tuple[ImagePosition, TImage]]
+) -> Iterator[TImage]:
 
-    get_bg = get_bg_color(1, lambda idx: idx)
-
-    stack = (resize_pil_image(w, h, get_bg(idx), frame, loc) for idx, (frame, loc) in enumerate(zip(im_frames, locs)))
-
-    num_frames = len(frames)
-    enpp = np.array([[transparency] * w] * h * num_frames, dtype=np.uint8)
-    bim = Image.fromarray(enpp, mode='P')
-
-    for idx, frame in enumerate(stack):
-        bim.paste(frame, box=(0, idx*h))
-
-    bim.putpalette(palette)
-    bim.save(filename, transparency=transparency)
-
-def save_frame_image(frames):
-
-    locs, frames = zip(*frames)
+    rlocs, frames = zip(*frames)
     im_frames = (convert_to_pil_image(frame) for frame in frames)
 
     get_bg = get_bg_color(1, lambda idx: idx + int(idx))
 
-    locs = list(locs)
+    locs = list(rlocs)
     for idx, loc in enumerate(locs):
         print(f"FRAME {idx} - x1: {loc['x1']}, x2: {loc['x2']}")
 
@@ -57,16 +54,23 @@ def save_frame_image(frames):
     h = next(loc['y1'] + loc['y2'] for loc in locs)
     print((w, h))
 
-    stack = (resize_pil_image(w, h, get_bg(idx), frame, loc) for idx, (frame, loc) in enumerate(zip(im_frames, locs)))
+    stack = (
+        resize_pil_image(w, h, get_bg(idx), frame, loc)
+        for idx, (frame, loc) in enumerate(zip(im_frames, locs))
+    )
 
     for frame in stack:
         yield frame
 
-def save_single_frame_image(frame, resize=None):
 
-    loc, frame = frame
+def save_single_frame_image(
+    frame: Tuple[ImagePosition, Matrix],
+    resize: Optional[Tuple[int, int]] = None,
+) -> TImage:
+
+    loc, frame_data = frame
     if not resize:
-        return convert_to_pil_image(frame)
+        return convert_to_pil_image(frame_data)
 
     idx = 0
     get_bg = get_bg_color(1, lambda idx: idx + int(idx))
@@ -79,4 +83,4 @@ def save_single_frame_image(frame, resize=None):
     # w = 320
     # h = 200
 
-    return resize_pil_image(w, h, get_bg(idx), frame, loc)
+    return resize_pil_image(w, h, get_bg(idx), frame_data, loc)
