@@ -5,6 +5,8 @@ import os
 
 import numpy as np
 
+from nutcracker.graphics import image
+
 from .index import read_index_v5tov7, read_index_he, read_file
 from .proom import (
     read_rmhd,
@@ -220,6 +222,6 @@ if __name__ == '__main__':
                 im.save(os.path.join(base, 'objects', f'{path}.png'))
 
                 if room_bg:
-                    im_layer = resize_pil_image(*room_bg.size, 39, im, {'x1': obj_x, 'y1': obj_y})
+                    im_layer = resize_pil_image(*room_bg.size, 39, im, image.ImagePosition(x1=obj_x, y1=obj_y))
                     im_layer.putpalette(palette)
                     im_layer.save(os.path.join(base, 'objects_layers', f'{path}.png'))
