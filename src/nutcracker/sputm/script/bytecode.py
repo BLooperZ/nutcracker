@@ -1,18 +1,24 @@
 import io
+from typing import Iterable, Iterator, Mapping, Tuple, Type, TypeVar
+from nutcracker.kernel.types import Element
 
 from nutcracker.utils.funcutils import flatten
+from nutcracker.sputm.script.opcodes import OpTable
 
-from .parser import (
-    CString,
-    RefOffset
-)
+from .parser import CString, RefOffset, ScriptArg, Statement
 
-def get_argtype(args, argtype):
+
+S_Arg = TypeVar('S_Arg', bound=ScriptArg)
+ByteCode = Mapping[int, Statement]
+
+
+def get_argtype(args: Iterable[ScriptArg], argtype: Type[S_Arg]) -> Iterable[S_Arg]:
     for arg in args:
         if isinstance(arg, argtype):
             yield arg
 
-def descumm(data: bytes, opcodes):
+
+def descumm(data: bytes, opcodes: OpTable) -> ByteCode:
     with io.BytesIO(data) as stream:
         bytecode = {}
         while True:
@@ -21,7 +27,7 @@ def descumm(data: bytes, opcodes):
                 break
             opcode = ord(next_byte)
             try:
-                op = opcodes[opcode](opcode, stream)
+                op = opcodes[opcode](opcode, stream)  # type: ignore
                 bytecode[op.offset] = op
                 # print(f'0x{op.offset:04x}', op)
 
@@ -35,25 +41,32 @@ def descumm(data: bytes, opcodes):
                 assert arg.abs in bytecode, hex(arg.abs)
 
         assert to_bytes(bytecode) == data
-        assert to_bytes(refresh_offsets(bytecode)) == data, (to_bytes(refresh_offsets(bytecode)), data)
+        assert to_bytes(refresh_offsets(bytecode)) == data, (
+            to_bytes(refresh_offsets(bytecode)),
+            data,
+        )
         return bytecode
 
-def print_bytecode(bytecode):
+
+def print_bytecode(bytecode: ByteCode) -> None:
     for off, stat in bytecode.items():
         print(f'0x{off:04x}', stat)
 
-def get_strings(bytecode):
+
+def get_strings(bytecode: ByteCode) -> Iterable[CString]:
     for _off, stat in bytecode.items():
         for arg in get_argtype(stat.args, CString):
             if arg.msg:
                 yield arg
 
-def update_strings(bytecode, strings):
+
+def update_strings(bytecode: ByteCode, strings: Iterable[bytes]) -> ByteCode:
     for orig, upd in zip(get_strings(bytecode), strings):
         orig.msg = upd
     return refresh_offsets(bytecode)
 
-def refresh_offsets(bytecode):
+
+def refresh_offsets(bytecode: ByteCode) -> ByteCode:
     updated = {}
     off = 0
     for stat in bytecode.values():
@@ -67,20 +80,24 @@ def refresh_offsets(bytecode):
         updated[stat.offset] = stat
     return updated
 
-def to_bytes(bytecode):
+
+def to_bytes(bytecode: ByteCode) -> bytes:
     with io.BytesIO() as stream:
         for off, stat in bytecode.items():
             assert off == stream.tell()
             stream.write(stat.to_bytes())
         return stream.getvalue()
 
-def global_script(data):
+
+def global_script(data: bytes) -> Tuple[bytes, bytes]:
     return b'', data
 
-def local_script(data):
+
+def local_script(data: bytes) -> Tuple[bytes, bytes]:
     return data[:1], data[1:]
 
-def verb_script(data):
+
+def verb_script(data: bytes) -> Tuple[bytes, bytes]:
     serial = b''
     with io.BytesIO(data) as stream:
         while True:
@@ -91,13 +108,11 @@ def verb_script(data):
             serial += stream.read(2)
         return serial, stream.read()
 
-script_map = {
-    'SCRP': global_script,
-    'LSCR': local_script,
-    'VERB': verb_script
-}
 
-def get_scripts(root):
+script_map = {'SCRP': global_script, 'LSCR': local_script, 'VERB': verb_script}
+
+
+def get_scripts(root: Iterable[Element]) -> Iterator[Element]:
     for elem in root:
         if elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
             if elem.tag in script_map:
@@ -108,7 +123,6 @@ def get_scripts(root):
 
 if __name__ == '__main__':
     import argparse
-    import os
     import glob
 
     from ..preset import sputm
