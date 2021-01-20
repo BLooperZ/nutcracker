@@ -10,13 +10,15 @@ from nutcracker.smush.types import Element
 from nutcracker.smush.preset import smush
 from nutcracker.smush.decode import open_anim_file
 
+UINT32BE = struct.Struct('>I')
+
 
 def compress_frame_data(frame: Element) -> Iterator[bytes]:
     first_fobj = True
     for comp in frame.children:
         if comp.tag == 'FOBJ' and first_fobj:
             first_fobj = False
-            decompressed_size = struct.pack('>I', len(comp.data))
+            decompressed_size = UINT32BE.pack(len(comp.data))
             compressed = zlib.compress(comp.data, 9)
             yield smush.mktag('ZFOB', decompressed_size + compressed)
             continue
