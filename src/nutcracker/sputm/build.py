@@ -128,7 +128,7 @@ def update_element(basedir, elements, files):
         yield elem
 
 
-def update_loff(disk):
+def update_loff(game, disk):
     """Update LOFF chunk if exists"""
     loff = sputm.find('LOFF', disk)
     if loff:
@@ -181,7 +181,7 @@ if __name__ == '__main__':
     updated_resource = list(update_element(args.dirname, root, files))
 
     for t, disk in zip(updated_resource, disks):
-        update_loff(t)
+        update_loff(game, t)
 
         _, ext = os.path.splitext(disk)
         write_file(
