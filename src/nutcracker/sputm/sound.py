@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
-import itertools
+import binascii
 import os
+from typing import Iterable
 
 from nutcracker.utils.fileio import write_file, read_file
 from nutcracker.sputm.build import make_index_from_resource
@@ -37,10 +38,18 @@ def inject_sound_chunks(root, sounds):
         yield elem
 
 
+def read_hex(hexstr: str) -> bytes:
+    return binascii.unhexlify(hexstr.encode())
+
+
+def read_streams(src_dir: str, ext: str, files: Iterable[str]) -> Iterable[bytes]:
+    for file in files:
+        yield read_file(os.path.join(src_dir, f'{file}.{ext}'))
+
+
 if __name__ == '__main__':
     import argparse
     import pprint
-    from typing import Dict
 
     from .preset import sputm
     from .resource import detect_resource
@@ -53,7 +62,7 @@ if __name__ == '__main__':
     group.add_argument('--inject', '-i', action='store_true')
     parser.add_argument('filename', help='filename to read from')
     parser.add_argument(
-        '--textfile', '-t', help='save strings to file', default='embedded.tbl'
+        '--textfile', '-t', help='save strings to file', default='embedded.txt'
     )
     args = parser.parse_args()
 
@@ -74,9 +83,7 @@ if __name__ == '__main__':
 
     if args.extract:
         os.makedirs('sfx_ext', exist_ok=True)
-        with open(
-            args.textfile, 'r'
-        ) as voctable:
+        with open(args.textfile, 'r') as voctable:
             coff = next(voctable)
             for off, stream in get_all_sounds(root):
                 vname = f'{off:08x}'
@@ -91,9 +98,12 @@ if __name__ == '__main__':
 
     elif args.inject:
         # TODO: use actual streams
-        stream = read_file('sfx_ext/sfx.mp3')
-        stream = sputm.mktag('MPEG', stream)
-        updated_resource = list(inject_sound_chunks(root, itertools.repeat(stream)))
+        with open(args.textfile, 'r') as voctable:
+            streams = [line[8:-1] for line in voctable]
+        cstreams = (
+            sputm.mktag('MPEG', cont) for cont in read_streams('sfx_hq', 'mp3', streams)
+        )
+        updated_resource = list(inject_sound_chunks(root, cstreams))
 
         basename = os.path.basename(args.filename)
         for t, disk in zip(updated_resource, disks):
