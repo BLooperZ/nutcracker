@@ -1,5 +1,9 @@
-def main(x: str) -> None:
-    print('sadsad')
+import typer
 
+from nutcracker.smush import runner as smush
 
-main('1')
+app = typer.Typer()
+app.add_typer(smush.app, name='smush')
+
+if __name__ == "__main__":
+    app()

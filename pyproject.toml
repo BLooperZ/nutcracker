@@ -37,7 +37,7 @@ nitpick = "^0.23.1"
 repository = "https://github.com/blooperz/nutcracker"
 
 [tool.poetry.scripts]
-nutcracker = "nutcracker.runner:main"
+nutcracker = "nutcracker.runner:app"
 smush = "nutcracker.smush.runner:app"
 
 [tool.black]
