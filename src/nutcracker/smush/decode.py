@@ -57,7 +57,9 @@ def xpal(ctx: FrameGenCtx, data: bytes) -> FrameGenCtx:
 
     if sub_size == 6:
         # print('SMALL XPAL', data)
-        assert data == b'\00\00\00\01\00\00', (ctx.frame, data)
+        assert data[:4] == b'\00\00\00\01', (ctx.frame, data[:4])
+        # what about data[4:]? (two last bytes)
+        # seems like UINT16LE, value is usually 0, FT have counter examples
         assert len(ctx.delta_pal) == 0x300
         assert len(ctx.palette) == 0x300
         palette = bytes(
