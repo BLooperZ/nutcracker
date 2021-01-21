@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import itertools
 import struct
 import zlib
@@ -174,34 +175,3 @@ def convert_fobj(datam: bytes) -> Optional[Tuple[image.ImagePosition, bytes]]:
 
     locs = image.ImagePosition(x1=meta.x1, y1=meta.y1, x2=meta.x2, y2=meta.y2)
     return locs, decode(width, height, data)
-
-
-if __name__ == '__main__':
-    import argparse
-    import glob
-    import os
-
-    from nutcracker.utils.funcutils import flatten
-
-    parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('files', nargs='+', help='files to read from')
-    parser.add_argument('--map', '-m', action='store_true')
-    parser.add_argument('--nut', '-n', action='store_true')
-    parser.add_argument('--target', '-t', help='target directory', default='out')
-    args = parser.parse_args()
-
-    files = set(flatten(glob.iglob(r) for r in args.files))
-
-    for filename in files:
-        basename = os.path.basename(filename)
-        print(f'Decoding file: {basename}')
-        root = open_anim_file(filename)
-        if args.map:
-            smush.render(root)
-            continue
-
-        output_dir = os.path.join(args.target, basename)
-        if not args.nut:
-            decode_san(root, output_dir)
-        else:
-            decode_nut(root, output_dir)

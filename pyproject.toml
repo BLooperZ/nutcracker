@@ -23,6 +23,7 @@ python = "^3.9"
 numpy = "^1.19.1"
 parse = "^1.18.0"
 Pillow = "^8.0.1"
+typer = "^0.3.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
@@ -37,6 +38,7 @@ repository = "https://github.com/blooperz/nutcracker"
 
 [tool.poetry.scripts]
 nutcracker = "nutcracker.runner:main"
+smush = "nutcracker.smush.runner:app"
 
 [tool.black]
 skip-string-normalization = true
