@@ -2,9 +2,13 @@
 
 import io
 import struct
+import zlib
 from dataclasses import dataclass
 
 from nutcracker.kernel.structured import StructuredTuple
+
+
+UINT32BE = struct.Struct('>I')
 
 
 @dataclass(frozen=True, order=True)
@@ -39,3 +43,16 @@ def unobj(data: bytes) -> FrameObject:
 
 def mkobj(meta: FrameObjectHeader, data: bytes) -> bytes:
     return FOBJ_META.pack(meta) + data
+
+
+def decompress(data: bytes) -> bytes:
+    decompressed_size = UINT32BE.unpack(data[:4])[0]
+    data = zlib.decompress(data[4:])
+    assert len(data) == decompressed_size
+    return data
+
+
+def compress(data: bytes) -> bytes:
+    decompressed_size = UINT32BE.pack(len(data))
+    compressed = zlib.compress(data, 9)
+    return decompressed_size + compressed

@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 
-import struct
-import zlib
 from typing import Iterable, Iterator
 
 from nutcracker.smush import anim
 from nutcracker.smush.types import Element
 from nutcracker.smush.preset import smush
-
-UINT32BE = struct.Struct('>I')
+from nutcracker.smush.fobj import compress
 
 
 def compress_frame_data(frame: Element) -> Iterator[bytes]:
@@ -16,9 +13,7 @@ def compress_frame_data(frame: Element) -> Iterator[bytes]:
     for comp in frame.children:
         if comp.tag == 'FOBJ' and first_fobj:
             first_fobj = False
-            decompressed_size = UINT32BE.pack(len(comp.data))
-            compressed = zlib.compress(comp.data, 9)
-            yield smush.mktag('ZFOB', decompressed_size + compressed)
+            yield smush.mktag('ZFOB', compress(comp.data))
             continue
         if comp.tag == 'PSAD':
             # print('skipping sound stream')

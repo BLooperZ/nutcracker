@@ -2,19 +2,16 @@
 
 import os
 import struct
-import zlib
 from dataclasses import dataclass, replace
 from functools import partial
 from operator import attrgetter
-from typing import Any, Callable, Dict, Iterator, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Iterator, Mapping, Optional, Sequence, Tuple
 
-from nutcracker.utils.fileio import read_file
 from nutcracker.graphics import image, grid
 from nutcracker.smush import anim
-from nutcracker.smush.types import Chunk, Element
+from nutcracker.smush.types import Element
 from nutcracker.smush.ahdr import AnimationHeader
-from nutcracker.smush.fobj import unobj
-from nutcracker.smush.preset import smush
+from nutcracker.smush.fobj import unobj, decompress
 from nutcracker.codex.codex import get_decoder
 from nutcracker.graphics.frame import save_single_frame_image
 
@@ -79,10 +76,7 @@ def decode_frame_object(ctx: FrameGenCtx, data: bytes) -> FrameGenCtx:
 
 
 def decode_compressed_frame_object(ctx: FrameGenCtx, data: bytes) -> FrameGenCtx:
-    decompressed_size = struct.unpack('>I', data[:4])[0]
-    data = zlib.decompress(data[4:])
-    assert len(data) == decompressed_size
-    return decode_frame_object(ctx, data)
+    return decode_frame_object(ctx, decompress(data))
 
 
 def unsupported_frame_comp(ctx: FrameGenCtx, data: bytes) -> FrameGenCtx:
