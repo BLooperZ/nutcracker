@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import io
-from typing import IO, Iterator, Tuple, Optional
+from typing import IO, Iterable, Iterator, Tuple, Optional
 
 from .align import align_read_stream, align_write_stream
 from .types import Chunk, ChunkHeader
@@ -59,7 +59,7 @@ def mktag(cfg: _ChunkSetting, tag: str, data: bytes) -> bytes:
 
 
 def write_chunks_into(
-    cfg: _ChunkSetting, stream: IO[bytes], chunks: Iterator[bytes]
+    cfg: _ChunkSetting, stream: IO[bytes], chunks: Iterable[bytes]
 ) -> None:
     """Write chunks sequence with given data alignment into given stream."""
     for chunk in chunks:
@@ -68,7 +68,7 @@ def write_chunks_into(
         align_write_stream(stream, align=cfg.align)
 
 
-def write_chunks(cfg: _ChunkSetting, chunks: Iterator[bytes]) -> bytes:
+def write_chunks(cfg: _ChunkSetting, chunks: Iterable[bytes]) -> bytes:
     """Write chunks sequence to bytes with given data alignment."""
     with io.BytesIO() as stream:
         write_chunks_into(cfg, stream, chunks)

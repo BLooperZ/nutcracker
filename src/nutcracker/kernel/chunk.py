@@ -1,4 +1,4 @@
-from typing import Iterator, Tuple
+from typing import Iterable, Iterator, Tuple
 
 from .types import Chunk
 
@@ -11,7 +11,7 @@ def assert_tag(target: str, chunk: Chunk) -> bytes:
 
 
 def print_chunks(
-    chunks: Iterator[Tuple[int, Chunk]], level: int = 0, base: int = 0
+    chunks: Iterable[Tuple[int, Chunk]], level: int = 0, base: int = 0
 ) -> Iterator[Tuple[int, Chunk]]:
     indent = '    ' * level
     for offset, chunk in chunks:
@@ -19,6 +19,6 @@ def print_chunks(
         yield base + offset, chunk
 
 
-def drop_offsets(chunks: Iterator[Tuple[int, Chunk]]) -> Iterator[Chunk]:
+def drop_offsets(chunks: Iterable[Tuple[int, Chunk]]) -> Iterator[Chunk]:
     """Drop offset from each (offset, chunk) tuple in given iterator"""
     return (chunk for _, chunk in chunks)

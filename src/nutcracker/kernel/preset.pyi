@@ -1,5 +1,5 @@
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Dict, IO, Iterator, Optional, Set, Tuple, TypeVar
+from typing import Any, Callable, Dict, IO, Iterable, Iterator, Optional, Set, Tuple, TypeVar
 
 from . import types, settings
 
@@ -17,13 +17,13 @@ class _ChunkPreset(settings._ChunkSetting, _DefaultOverride):
 
     def print_chunks(
         self,
-        chunks: Iterator[Tuple[int, types.Chunk]],
+        chunks: Iterable[Tuple[int, types.Chunk]],
         level: int = ...,
         base: int = ...,
     ) -> Iterator[Tuple[int, types.Chunk]]: ...
 
     def drop_offsets(
-        self, chunks: Iterator[Tuple[int, types.Chunk]]
+        self, chunks: Iterable[Tuple[int, types.Chunk]]
     ) -> Iterator[types.Chunk]: ...
 
     def untag(self, stream: IO[bytes]) -> types.Chunk: ...
@@ -32,7 +32,7 @@ class _ChunkPreset(settings._ChunkSetting, _DefaultOverride):
 
     def mktag(self, tag: str, data: bytes) -> bytes: ...
 
-    def write_chunks(self, chunks: Iterator[bytes]) -> bytes: ...
+    def write_chunks(self, chunks: Iterable[bytes]) -> bytes: ...
 
 
 class _ShellPreset(settings._IndexSetting, _ChunkPreset):
