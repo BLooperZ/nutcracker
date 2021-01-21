@@ -6,8 +6,9 @@ import typer
 from nutcracker.utils.fileio import write_file
 
 from nutcracker.utils.funcutils import flatten
+from nutcracker.smush import anim
 from nutcracker.smush.preset import smush
-from nutcracker.smush.decode import decode_nut, decode_san, open_anim_file
+from nutcracker.smush.decode import decode_nut, decode_san
 from nutcracker.smush.compress import strip_compress_san
 
 app = typer.Typer()
@@ -22,7 +23,7 @@ def map(files: List[str] = typer.Argument(..., help='Files to read from')) -> No
     for filename in get_files(files):
         basename = os.path.basename(filename)
         print(f'Mapping file: {basename}')
-        root = open_anim_file(filename)
+        root = anim.from_path(filename)
         smush.render(root)
         continue
 
@@ -36,7 +37,7 @@ def decode(
     for filename in get_files(files):
         basename = os.path.basename(filename)
         print(f'Decoding file: {basename}')
-        root = open_anim_file(filename)
+        root = anim.from_path(filename)
         output_dir = os.path.join(target_dir, basename)
         if not nut:
             decode_san(root, output_dir)
@@ -52,7 +53,7 @@ def compress(
     for filename in get_files(files):
         basename = os.path.basename(filename)
         print(f'Compressing file: {basename}')
-        root = open_anim_file(filename)
+        root = anim.from_path(filename)
         output = os.path.join(target_dir, basename)
         compressed = strip_compress_san(root)
         os.makedirs(target_dir, exist_ok=True)

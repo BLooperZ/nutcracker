@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-import itertools
 import struct
 import zlib
 from dataclasses import dataclass, replace
@@ -18,21 +17,6 @@ from nutcracker.smush.fobj import unobj
 from nutcracker.smush.preset import smush
 from nutcracker.codex.codex import get_decoder
 from nutcracker.graphics.frame import save_single_frame_image
-
-
-def open_anim_file(path: str) -> Element:
-    resource = read_file(path)
-
-    it = itertools.count()
-
-    def set_frame_id(
-        parent: Optional[Element], chunk: Chunk, offset: int
-    ) -> Dict[str, Any]:
-        if chunk.tag != 'FRME':
-            return {}
-        return {'id': next(it)}
-
-    return next(smush.map_chunks(resource, extra=set_frame_id))
 
 
 def clip(lower: int, upper: int, value: int) -> int:

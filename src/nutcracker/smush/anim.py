@@ -1,6 +1,8 @@
 import itertools
-from typing import Iterator, Optional, Tuple
+from typing import Any, Dict, Iterator, Optional, Tuple
 
+from nutcracker.kernel.types import Chunk
+from nutcracker.utils.fileio import read_file
 from nutcracker.smush import ahdr
 from nutcracker.smush.preset import smush
 from nutcracker.smush.types import Element
@@ -37,3 +39,20 @@ def parse(root: Element) -> Tuple[ahdr.AnimationHeader, Iterator[Element]]:
 def compose(header: ahdr.AnimationHeader, frames: Iterator[bytes]) -> bytes:
     bheader = smush.mktag('AHDR', ahdr.to_bytes(header))
     return smush.mktag('ANIM', smush.write_chunks(itertools.chain([bheader], frames)))
+
+
+def from_bytes(resource: bytes) -> Element:
+    it = itertools.count()
+
+    def set_frame_id(
+        parent: Optional[Element], chunk: Chunk, offset: int
+    ) -> Dict[str, Any]:
+        if chunk.tag != 'FRME':
+            return {}
+        return {'id': next(it)}
+
+    return next(smush.map_chunks(resource, extra=set_frame_id))
+
+
+def from_path(path: str) -> Element:
+    return from_bytes(read_file(path))

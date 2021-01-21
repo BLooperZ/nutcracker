@@ -80,7 +80,7 @@ if __name__ == "__main__":
 
     fobjs = list(encode_frame_objects(frames, args.codec, args.fake))
 
-    root = decode.open_anim_file(args.ref)
+    root = anim.from_path(args.ref)
     header, _ = anim.parse(root)
 
     os.makedirs(os.path.dirname(args.target), exist_ok=True)
