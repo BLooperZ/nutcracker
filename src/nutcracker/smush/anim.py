@@ -1,5 +1,5 @@
 import itertools
-from typing import Any, Dict, Iterator, Optional, Tuple
+from typing import Any, Dict, Iterator, NamedTuple, Optional
 
 from nutcracker.kernel.types import Chunk
 from nutcracker.utils.fileio import read_file
@@ -7,6 +7,11 @@ from nutcracker.smush import ahdr
 from nutcracker.smush.preset import smush
 from nutcracker.smush.types import Element
 from nutcracker.smush.element import read_elements, read_data
+
+
+class SmushAnimation(NamedTuple):
+    header: ahdr.AnimationHeader
+    frames: Iterator[Element]
 
 
 def verify_nframes(frames: Iterator[Element], nframes: int) -> Iterator[Element]:
@@ -27,13 +32,13 @@ def verify_maxframe(
         raise ValueError(f'expected maxframe of {limit} but got {maxframe}')
 
 
-def parse(root: Element) -> Tuple[ahdr.AnimationHeader, Iterator[Element]]:
+def parse(root: Element) -> SmushAnimation:
     anim = read_elements('ANIM', root)
     header = ahdr.from_bytes(read_data('AHDR', next(anim)))
 
     frames = verify_nframes(verify_maxframe(anim, header.v2.maxframe), header.nframes)
 
-    return header, frames
+    return SmushAnimation(header, frames)
 
 
 def compose(header: ahdr.AnimationHeader, frames: Iterator[bytes]) -> bytes:
