@@ -4,7 +4,6 @@ import os
 import struct
 from dataclasses import dataclass, replace
 from functools import partial
-from operator import attrgetter
 from typing import Callable, Iterator, Mapping, Optional, Sequence, Tuple
 
 from nutcracker.graphics import image, grid
@@ -138,7 +137,7 @@ def decode_san(root: Element, output_dir: str) -> None:
 
 
 def convert_fobj(datam: bytes) -> Optional[Tuple[image.ImagePosition, bytes]]:
-    meta, data = attrgetter('header', 'data')(unobj(datam))
+    meta, data = unobj(datam)
     width = meta.x2 - meta.x1 if meta.codec != 1 else meta.x2
     height = meta.y2 - meta.y1 if meta.codec != 1 else meta.y2
     decode = get_decoder(meta.codec)

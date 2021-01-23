@@ -2,6 +2,7 @@
 
 import io
 import struct
+from typing import NamedTuple
 import zlib
 from dataclasses import dataclass
 
@@ -29,8 +30,7 @@ FOBJ_META = StructuredTuple(
 )
 
 
-@dataclass(frozen=True, order=True)
-class FrameObject:
+class FrameObject(NamedTuple):
     header: FrameObjectHeader
     data: bytes
 
