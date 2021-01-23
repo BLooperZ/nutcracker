@@ -19,8 +19,8 @@ class FrameObjectHeader:
     y1: int
     x2: int
     y2: int
-    unk1: int
-    unk2: int
+    unk1: int = 0
+    unk2: int = 0
 
 
 FOBJ_META = StructuredTuple(

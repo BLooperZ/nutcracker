@@ -8,13 +8,18 @@ from typing import (
     Sequence,
     Tuple,
     TypeVar,
+    cast,
 )
 
 import numpy as np
 from PIL import Image
 
 from nutcracker.utils import funcutils
-from nutcracker.graphics.image import convert_to_pil_image, ImagePosition, TImage
+from nutcracker.graphics.image import (
+    convert_to_pil_image,
+    ImagePosition,
+    TImage,
+)
 
 T = TypeVar('T')
 
@@ -99,9 +104,9 @@ def count_in_row(pred: Callable[[T], bool], row: Iterable[T]) -> int:
 
 def resize_frame(
     im: TImage, base_xoff: int = BASE_XOFF, base_yoff: int = BASE_YOFF
-) -> Optional[Tuple[ImagePosition, TImage]]:
+) -> Optional[Tuple[ImagePosition, np.ndarray]]:
     frame = list(np.asarray(im))
-    BG = frame[-1][-1]
+    BG = cast(int, frame[-1][-1])
 
     def char_is_bg(c: int) -> bool:
         return c == BG

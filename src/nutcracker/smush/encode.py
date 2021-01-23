@@ -1,27 +1,31 @@
 #!/usr/bin/env python3
 import os
-from dataclasses import replace
+from dataclasses import asdict, replace
+from typing import Iterable, Iterator, Tuple
+from nutcracker.graphics.image import ImagePosition, TImage
+from nutcracker.smush.ahdr import AnimationHeader
 
 from nutcracker.smush.fobj import mkobj, FrameObjectHeader
 from nutcracker.codex.codex import get_encoder
 from nutcracker.smush.preset import smush
-from nutcracker.smush import anim, decode
+from nutcracker.smush import anim
+from nutcracker.utils.fileio import write_file
 
 
 # LEGACY
-def write_nut_file(header, num_chars, chars, filename):
+def make_nut_file(
+    header: AnimationHeader, num_chars: int, chars: Iterable[bytes]
+) -> bytes:
     chars = (smush.mktag('FRME', char) for char in chars)
     header = replace(header, nframes=num_chars)
-    nut_file = anim.compose(header, chars)
-    with open(filename, 'wb') as font_file:
-        font_file.write(nut_file)
+    return anim.compose(header, chars)
 
 
-def encode_frame_objects(frames, codec, fake):
+def encode_frame_objects(
+    frames: Iterable[Tuple[ImagePosition, TImage]], codec: int, fake: int
+) -> Iterator[bytes]:
     for loc, frame in frames:
-        meta = FrameObjectHeader(
-            codec=fake, x1=loc.x1, y1=loc.y1, x2=loc.x2, y2=loc.y2, unk1=0, unk2=0
-        )
+        meta = FrameObjectHeader(codec=fake, **asdict(loc))
         print(meta)
 
         encode = get_encoder(codec)
@@ -84,4 +88,4 @@ if __name__ == "__main__":
     header, _ = anim.parse(root)
 
     os.makedirs(os.path.dirname(args.target), exist_ok=True)
-    write_nut_file(header, len(fobjs), fobjs, args.target)
+    write_file(args.target, make_nut_file(header, len(fobjs), fobjs))
