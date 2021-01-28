@@ -28,8 +28,7 @@ def strict_read(stream: IO[bytes], size: Optional[int] = None) -> bytes:
 def untag(cfg: _ChunkSetting, stream: IO[bytes]) -> Chunk:
     """Read next chunk from given stream."""
     header = cfg.header.unpack(stream)
-    if set(header.tag) == {0}:
-        assert header.size == 0
+    if set(header.tag) == {0} and header.size == 0:
         # Collect rest of chunk as raw data with special tag '____'
         return Chunk('____', strict_read(stream))
     size = header.size - cfg.size_fix
