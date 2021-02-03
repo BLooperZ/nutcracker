@@ -81,6 +81,12 @@ def verb_ops_v8(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (cmd,)
 
 
+def verb_ops_v6(stream: IO[bytes]) -> Iterable[ScriptArg]:
+    cmd = ByteValue(stream)
+    if ord(cmd.op) in {0x7D}:
+        return (cmd, CString(stream))
+    return (cmd,)
+
 def array_ops(stream: IO[bytes]) -> Iterable[ScriptArg]:
     cmd = ByteValue(stream)
     arr = WordValue(stream)
@@ -248,14 +254,14 @@ OPCODES_v6: OpTable = realize({
     0x94: makeop('o6_getVerbFromXY'),
     0x95: makeop('o6_beginOverride'),
     0x96: makeop('o6_endOverride'),
-    # TODO: 0x97: makeop('o6_setObjectName'),
+    0x97: makeop('o6_setObjectName', msg_op),
     0x98: makeop('o6_isSoundRunning'),
     0x99: makeop('o6_setBoxFlags'),
     0x9A: makeop('o6_createBoxMatrix'),
     0x9B: makeop('o6_resourceRoutines', extended_b_op),
     0x9C: makeop('o6_roomOps', extended_b_op),
     0x9D: makeop('o6_actorOps', extended_b_op),
-    0x9E: makeop('o6_verbOps', extended_b_op),
+    0x9E: makeop('o6_verbOps', verb_ops_v6),
     0x9F: makeop('o6_getActorFromXY'),
     0xA0: makeop('o6_findObject'),
     # TODO: 0xa1: makeop('o6_pseudoRoom'),
@@ -312,7 +318,7 @@ OPCODES_v6: OpTable = realize({
     # TODO: 0xe1: makeop('o6_getPixel'),
     # TODO: 0xe3: makeop('o6_pickVarRandom'),
     # TODO: 0xe4: makeop('o6_setBoxSet'),
-    # TODO: 0xec: makeop('o6_getActorLayer'),
+    0xEC: makeop('o6_getActorLayer'),
     # TODO: 0xed: makeop('o6_getObjectNewDir'),
 })
 
