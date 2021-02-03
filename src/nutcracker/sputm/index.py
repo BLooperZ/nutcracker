@@ -116,9 +116,21 @@ def read_inner_uint16le(pid, data, off):
     # res = int.from_bytes(data[12:14], byteorder='little', signed=False)
     return res
 
+
 def read_uint8le(pid, data, off):
     res = int.from_bytes(data[:1], byteorder='little', signed=False)
     return res
+
+
+def read_uint16le(pid, data, off):
+    res = int.from_bytes(data[:2], byteorder='little', signed=False)
+    return res
+
+
+def read_uint32le(pid, data, off):
+    res = int.from_bytes(data[:4], byteorder='little', signed=False)
+    return res
+
 
 def compare_pid_off(directory, base: int = 0):
     def inner(pid, data, off):
@@ -208,7 +220,7 @@ def read_index_v7(root):
         'LFLF': droo,
         'OBIM': read_inner_uint16le_v7,  # check gid for DIG and FT
         'OBCD': read_inner_uint16le_v7,
-        'LSCR': read_uint8le,
+        'LSCR': read_uint16le,
         'SCRP': compare_pid_off(dscr),
         'CHAR': compare_pid_off(dchr),
         'SOUN': compare_pid_off(dsou),
@@ -252,7 +264,7 @@ def read_index_v8(root):
         'LFLF': droo,
         'OBIM': get_object_id_from_name_v8(dobj),
         'OBCD': read_inner_uint16le_v7,
-        'LSCR': read_uint8le,
+        'LSCR': read_uint32le,
         'RMSC': compare_pid_off(drsc, 8),
         'SCRP': compare_pid_off(dscr, 8),
         'CHAR': compare_pid_off(dchr, 8),
@@ -349,7 +361,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
     args = parser.parse_args()
-    
+
     basedir = os.path.basename(args.filename)
 
     # Configuration for HE games

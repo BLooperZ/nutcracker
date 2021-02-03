@@ -74,6 +74,13 @@ def actor_ops_v8(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (cmd,)
 
 
+def actor_ops_v6(stream: IO[bytes]) -> Iterable[ScriptArg]:
+    cmd = ByteValue(stream)
+    if ord(cmd.op) in {0x58}:
+        return (cmd, CString(stream))
+    return (cmd,)
+
+
 def verb_ops_v8(stream: IO[bytes]) -> Iterable[ScriptArg]:
     cmd = ByteValue(stream)
     if ord(cmd.op) in {0x99, 0xA4}:
@@ -204,7 +211,7 @@ OPCODES_v6: OpTable = realize({
     0x60: makeop('o6_startObject'),
     0x61: makeop('o6_drawObject'),
     0x62: makeop('o6_drawObjectAt'),
-    # TODO: 0x63: makeop('o6_drawBlastObject'),
+    0x63: makeop('o6_drawBlastObject'),
     # TODO: 0x64: makeop('o6_setBlastObjectWindow'),
     0x65: makeop('o6_stopObjectCode'),
     0x66: makeop('o6_stopObjectCode'),
@@ -260,7 +267,7 @@ OPCODES_v6: OpTable = realize({
     0x9A: makeop('o6_createBoxMatrix'),
     0x9B: makeop('o6_resourceRoutines', extended_b_op),
     0x9C: makeop('o6_roomOps', extended_b_op),
-    0x9D: makeop('o6_actorOps', extended_b_op),
+    0x9D: makeop('o6_actorOps', actor_ops_v6),
     0x9E: makeop('o6_verbOps', verb_ops_v6),
     0x9F: makeop('o6_getActorFromXY'),
     0xA0: makeop('o6_findObject'),
@@ -299,7 +306,7 @@ OPCODES_v6: OpTable = realize({
     0xC4: makeop('o6_abs'),
     0xC5: makeop('o6_distObjectObject'),
     # TODO: 0xc6: makeop('o6_distObjectPt'),
-    # TODO: 0xc7: makeop('o6_distPtPt'),
+    0xc7: makeop('o6_distPtPt'),
     0xC8: makeop('o6_kernelGetFunctions'),
     0xC9: makeop('o6_kernelSetFunctions'),
     0xCA: makeop('o6_delayFrames'),

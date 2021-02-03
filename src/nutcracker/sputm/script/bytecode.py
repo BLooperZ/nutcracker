@@ -97,6 +97,14 @@ def local_script(data: bytes) -> Tuple[bytes, bytes]:
     return data[:1], data[1:]
 
 
+def local_script_v7(data: bytes) -> Tuple[bytes, bytes]:
+    return data[:2], data[2:]
+
+
+def local_script_v8(data: bytes) -> Tuple[bytes, bytes]:
+    return data[:4], data[4:]
+
+
 def verb_script(data: bytes) -> Tuple[bytes, bytes]:
     serial = b''
     with io.BytesIO(data) as stream:
