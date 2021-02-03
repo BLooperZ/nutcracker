@@ -94,6 +94,7 @@ def verb_ops_v6(stream: IO[bytes]) -> Iterable[ScriptArg]:
         return (cmd, CString(stream))
     return (cmd,)
 
+
 def array_ops(stream: IO[bytes]) -> Iterable[ScriptArg]:
     cmd = ByteValue(stream)
     arr = WordValue(stream)
