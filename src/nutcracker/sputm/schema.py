@@ -132,7 +132,7 @@ SCHEMA = {
         'SQDB',
         'AKFO'
     },
-    'SMAP': DATA, # ?
+    'SMAP': DATA,  # ?
     'IMHD': DATA,
     'CDHD': DATA,
     'VERB': DATA,

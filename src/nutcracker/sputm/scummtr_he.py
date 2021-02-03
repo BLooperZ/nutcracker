@@ -4,13 +4,13 @@ import io
 import glob
 import itertools
 import os
-from typing import Iterable
+from typing import Iterable, Optional
 
 from nutcracker.utils.fileio import write_file
 from nutcracker.sputm.index import read_index_v5tov7, read_index_he, read_file
 from nutcracker.sputm.build import make_index_from_resource
 from nutcracker.sputm.script.bytecode import descumm, get_strings, update_strings, script_map, to_bytes
-from nutcracker.sputm.script.opcodes import OPCODES_v6, OPCODES_he80
+from nutcracker.sputm.script.opcodes import OPCODES_he80, OPCODES_v6, OPCODES_he80
 
 def get_all_scripts(root, opcodes):
     for elem in root:
@@ -41,6 +41,25 @@ def update_element_strings(root, strings, opcodes):
         offset += len(elem.data) + 8
         elem.attribs['size'] = len(elem.data)
         yield elem
+
+
+def escape_message(
+    msg: bytes, escape: Optional[bytes] = None, var_size: int = 2
+) -> bytes:
+    with io.BytesIO(msg) as stream:
+        while True:
+            c = stream.read(1)
+            if c in {b'', b'\0'}:
+                break
+            assert c is not None
+            if c == escape:
+                t = stream.read(1)
+                c += t
+                if ord(t) not in {1, 2, 3, 8}:
+                    c += stream.read(var_size)
+                c = b''.join(f'\\x{v:02X}'.encode() for v in c)
+            yield c
+
 
 if __name__ == '__main__':
     import argparse
@@ -81,11 +100,12 @@ if __name__ == '__main__':
     if args.extract:
         with open(args.textfile, 'w') as f:
             for msg in get_all_scripts(root, script_ops):
-                assert b'\n' not in msg
                 assert b'\\x80' not in msg
                 assert b'\\xd9' not in msg
                 assert b'\\r' not in msg
                 assert b'\\/t' not in msg
+                # msg = b''.join(escape_message(msg, escape=b'\xff', var_size=2))
+                assert b'\n' not in msg
                 line = msg \
                     .replace(b'\r', b'\\r') \
                     .replace(b'\t', b'\\/t') \
