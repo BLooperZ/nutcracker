@@ -1,8 +1,8 @@
 import io
 from typing import Iterable, Iterator, Mapping, Tuple, Type, TypeVar
-from nutcracker.kernel.types import Element
 
 from nutcracker.utils.funcutils import flatten
+from nutcracker.sputm.types import Element
 from nutcracker.sputm.script.opcodes import OpTable
 
 from .parser import CString, RefOffset, ScriptArg, Statement
@@ -117,7 +117,13 @@ def verb_script(data: bytes) -> Tuple[bytes, bytes]:
         return serial, stream.read()
 
 
-script_map = {'SCRP': global_script, 'LSCR': local_script, 'VERB': verb_script}
+script_map = {
+    'SCRP': global_script,
+    'LSCR': local_script,
+    'VERB': verb_script,
+    'ENCD': global_script,
+    'EXCD': global_script,
+}
 
 
 def get_scripts(root: Iterable[Element]) -> Iterator[Element]:

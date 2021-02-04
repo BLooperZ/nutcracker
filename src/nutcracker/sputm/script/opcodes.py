@@ -213,7 +213,7 @@ OPCODES_v6: OpTable = realize({
     0x61: makeop('o6_drawObject'),
     0x62: makeop('o6_drawObjectAt'),
     0x63: makeop('o6_drawBlastObject'),
-    # TODO: 0x64: makeop('o6_setBlastObjectWindow'),
+    0x64: makeop('o6_setBlastObjectWindow'),
     0x65: makeop('o6_stopObjectCode'),
     0x66: makeop('o6_stopObjectCode'),
     0x67: makeop('o6_endCutscene'),
@@ -323,11 +323,11 @@ OPCODES_v6: OpTable = realize({
     0xD7: makeop('o6_bor'),  # bitwise or
     0xD8: makeop('o6_isRoomScriptRunning'),
     # TODO: 0xdd: makeop('o6_findAllObjects'),
-    # TODO: 0xe1: makeop('o6_getPixel'),
+    0xE1: makeop('o6_getPixel'),
     # TODO: 0xe3: makeop('o6_pickVarRandom'),
     # TODO: 0xe4: makeop('o6_setBoxSet'),
     0xEC: makeop('o6_getActorLayer'),
-    # TODO: 0xed: makeop('o6_getObjectNewDir'),
+    0xED: makeop('o6_getObjectNewDir'),
 })
 
 OPCODES_he60 = realize({
