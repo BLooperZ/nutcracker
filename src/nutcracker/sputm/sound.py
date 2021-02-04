@@ -4,8 +4,8 @@ import binascii
 import os
 from typing import Iterable
 
-from nutcracker.utils.fileio import write_file, read_file
-from nutcracker.sputm.build import make_index_from_resource
+from nutcracker.utils.fileio import read_file
+from nutcracker.sputm.build import rebuild_resources
 
 
 def get_all_sounds(root, abs_off=0):
@@ -106,23 +106,4 @@ if __name__ == '__main__':
         updated_resource = list(inject_sound_chunks(root, cstreams))
 
         basename = os.path.basename(args.filename)
-        for t, disk in zip(updated_resource, disks):
-            update_loff(game, t)
-
-            _, ext = os.path.splitext(disk)
-            write_file(
-                f'{basename}{ext}',
-                sputm.mktag(
-                    t.tag, sputm.write_chunks(sputm.mktag(e.tag, e.data) for e in t)
-                ),
-                key=game.chiper_key,
-            )
-
-        _, ext = os.path.splitext(index_file)
-        write_file(
-            f'{basename}{ext}',
-            sputm.write_chunks(
-                make_index_from_resource(updated_resource, index_root, game.base_fix)
-            ),
-            key=game.chiper_key,
-        )
+        rebuild_resources(game, basename, disks, index_root, updated_resource)

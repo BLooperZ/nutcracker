@@ -5,9 +5,9 @@ import os
 from typing import Iterable, Optional
 from string import printable
 
-from nutcracker.utils.fileio import write_file, read_file
+from nutcracker.utils.fileio import read_file
 from nutcracker.sputm.types import Element
-from nutcracker.sputm.build import make_index_from_resource
+from nutcracker.sputm.build import rebuild_resources
 from nutcracker.sputm.script.bytecode import (
     descumm,
     get_strings,
@@ -136,7 +136,6 @@ if __name__ == '__main__':
     from .preset import sputm
     from .resource import detect_resource
     from .index2 import read_game_resources
-    from .build import update_loff
 
     parser = argparse.ArgumentParser(description='read smush file')
     group = parser.add_mutually_exclusive_group()
@@ -178,24 +177,4 @@ if __name__ == '__main__':
             )
 
         basename = os.path.basename(args.filename)
-        for t, disk in zip(updated_resource, disks):
-            update_loff(game, t)
-
-            _, ext = os.path.splitext(disk)
-            write_file(
-                f'{basename}{ext}',
-                sputm.mktag(
-                    t.tag,
-                    sputm.write_chunks(sputm.mktag(e.tag, e.data) for e in t),
-                ),
-                key=game.chiper_key,
-            )
-
-        _, ext = os.path.splitext(index_file)
-        write_file(
-            f'{basename}{ext}',
-            sputm.write_chunks(
-                make_index_from_resource(updated_resource, index_root, game.base_fix)
-            ),
-            key=game.chiper_key,
-        )
+        rebuild_resources(game, basename, disks, index_root, updated_resource)
