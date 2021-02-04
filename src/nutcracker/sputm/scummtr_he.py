@@ -29,7 +29,7 @@ def get_all_scripts(root: Iterable[Element], opcodes: OpTable):
             msg = b''.join(escape_message(elem.data))
             if msg != b'':
                 yield msg
-        if elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
+        elif elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
             if elem.tag in script_map:
                 # print('==================', elem.attribs['path'])
                 _, script_data = script_map[elem.tag](elem.data)
@@ -44,7 +44,9 @@ def update_element_strings(root, strings, opcodes):
     offset = 0
     for elem in root:
         elem.attribs['offset'] = offset
-        if elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
+        if elem.tag == 'OBNA' and elem.data != b'\x00':
+            elem.data = next(strings) + b'\x00'
+        elif elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
             if elem.tag in script_map:
                 serial, script_data = script_map[elem.tag](elem.data)
                 bc = descumm(script_data, opcodes)
@@ -82,6 +84,19 @@ def escape_message(
             elif c == b'\\':
                 c = b'\\\\'
             yield c
+
+
+def encode_seq(seq: bytes):
+    try:
+        return bytes([int(b'0x' + seq[:2], 16)]) + seq[2:]
+    except Exception as e:
+        print(e)
+        return seq
+
+
+def unescape_message(msg: bytes):
+    prefix, *rest = msg.split(b'\\x')
+    return (prefix + b''.join(encode_seq(seq) for seq in rest)).replace(b'\\\\', b'\\')
 
 
 if __name__ == '__main__':
@@ -127,24 +142,37 @@ if __name__ == '__main__':
                 assert b'\\xd9' not in msg
                 assert b'\\r' not in msg
                 assert b'\\/t' not in msg
-                msg = b''.join(escape_message(msg, escape=b'\xff', var_size=2))
-                assert b'\n' not in msg
+                escaped = b''.join(escape_message(msg, escape=b'\xff', var_size=2))
+                assert b'\n' not in escaped
                 line = (
-                    msg.replace(b'\r', b'\\r')
+                    escaped.replace(b'\r', b'\\r')
                     .replace(b'\t', b'\\/t')
                     .replace(b'\x80', b'\\x80')
                     .replace(b'\xd9', b'\\xd9')
                     .replace(b'\x7f', b'\\x7f')
                     .decode('windows-1255')
                 )
+
+                unescaped = (
+                    unescape_message(
+                        line.replace('\r', '').replace('\n', '').encode('windows-1255')
+                    )
+                    .replace(b'\\r', b'\r')
+                    .replace(b'\\/t', b'\t')
+                    .replace(b'\\x80', b'\x80')
+                    .replace(b'\\xd9', b'\xd9')
+                    .replace(b'\\x7f', b'\x7f')
+                )
+                assert unescaped == msg, (unescaped, escaped, msg)
+
                 f.write(line + '\n')
 
     elif args.inject:
         with open(args.textfile, 'r') as f:
             fixed_lines = (
-                line.replace('\r', '')
-                .replace('\n', '')
-                .encode('windows-1255')
+                unescape_message(
+                    line.replace('\r', '').replace('\n', '').encode('windows-1255')
+                )
                 .replace(b'\\r', b'\r')
                 .replace(b'\\/t', b'\t')
                 .replace(b'\\x80', b'\x80')
@@ -158,7 +186,7 @@ if __name__ == '__main__':
 
         basename = os.path.basename(args.filename)
         for t, disk in zip(updated_resource, disks):
-            update_loff(t)
+            update_loff(game, t)
 
             _, ext = os.path.splitext(disk)
             write_file(
