@@ -99,6 +99,36 @@ def unescape_message(msg: bytes):
     return (prefix + b''.join(encode_seq(seq) for seq in rest)).replace(b'\\\\', b'\\')
 
 
+def print_to_msg(line: str, encoding: str = 'windows-1255') -> bytes:
+    return (
+        unescape_message(line.replace('\r', '').replace('\n', '').encode(encoding))
+        .replace(b'\\r', b'\r')
+        .replace(b'\\/t', b'\t')
+        .replace(b'\\x80', b'\x80')
+        .replace(b'\\xd9', b'\xd9')
+        .replace(b'\\x7f', b'\x7f')
+    )
+
+
+def msg_to_print(msg: bytes, encoding: str = 'windows-1255') -> str:
+    assert b'\\x80' not in msg
+    assert b'\\xd9' not in msg
+    assert b'\\r' not in msg
+    assert b'\\/t' not in msg
+    escaped = b''.join(escape_message(msg, escape=b'\xff', var_size=2))
+    assert b'\n' not in escaped
+    line = (
+        escaped.replace(b'\r', b'\\r')
+        .replace(b'\t', b'\\/t')
+        .replace(b'\x80', b'\\x80')
+        .replace(b'\xd9', b'\\xd9')
+        .replace(b'\x7f', b'\\x7f')
+        .decode(encoding)
+    )
+    assert (unescaped := print_to_msg(line, encoding)) == msg, (unescaped, escaped, msg)
+    return line
+
+
 if __name__ == '__main__':
     import argparse
     import pprint
@@ -138,48 +168,11 @@ if __name__ == '__main__':
     if args.extract:
         with open(args.textfile, 'w') as f:
             for msg in get_all_scripts(root, script_ops):
-                assert b'\\x80' not in msg
-                assert b'\\xd9' not in msg
-                assert b'\\r' not in msg
-                assert b'\\/t' not in msg
-                escaped = b''.join(escape_message(msg, escape=b'\xff', var_size=2))
-                assert b'\n' not in escaped
-                line = (
-                    escaped.replace(b'\r', b'\\r')
-                    .replace(b'\t', b'\\/t')
-                    .replace(b'\x80', b'\\x80')
-                    .replace(b'\xd9', b'\\xd9')
-                    .replace(b'\x7f', b'\\x7f')
-                    .decode('windows-1255')
-                )
-
-                unescaped = (
-                    unescape_message(
-                        line.replace('\r', '').replace('\n', '').encode('windows-1255')
-                    )
-                    .replace(b'\\r', b'\r')
-                    .replace(b'\\/t', b'\t')
-                    .replace(b'\\x80', b'\x80')
-                    .replace(b'\\xd9', b'\xd9')
-                    .replace(b'\\x7f', b'\x7f')
-                )
-                assert unescaped == msg, (unescaped, escaped, msg)
-
-                f.write(line + '\n')
+                print(msg_to_print(msg), file=f)
 
     elif args.inject:
         with open(args.textfile, 'r') as f:
-            fixed_lines = (
-                unescape_message(
-                    line.replace('\r', '').replace('\n', '').encode('windows-1255')
-                )
-                .replace(b'\\r', b'\r')
-                .replace(b'\\/t', b'\t')
-                .replace(b'\\x80', b'\x80')
-                .replace(b'\\xd9', b'\xd9')
-                .replace(b'\\x7f', b'\x7f')
-                for line in f
-            )
+            fixed_lines = (print_to_msg(line) for line in f)
             updated_resource = list(
                 update_element_strings(root, fixed_lines, script_ops)
             )
