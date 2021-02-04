@@ -2,7 +2,7 @@
 
 import io
 import os
-from typing import Iterable, Optional
+from typing import Iterable, Iterator, Optional
 from string import printable
 
 from nutcracker.utils.fileio import read_file
@@ -23,7 +23,7 @@ from nutcracker.sputm.script.opcodes import (
 )
 
 
-def get_all_scripts(root: Iterable[Element], opcodes: OpTable):
+def get_all_scripts(root: Iterable[Element], opcodes: OpTable) -> Iterator[bytes]:
     for elem in root:
         if elem.tag == 'OBNA':
             msg = b''.join(escape_message(elem.data))
@@ -40,8 +40,11 @@ def get_all_scripts(root: Iterable[Element], opcodes: OpTable):
                 yield from get_all_scripts(elem.children, opcodes)
 
 
-def update_element_strings(root, strings, opcodes):
+def update_element_strings(
+    root: Iterable[Element], strings: Iterator[bytes], opcodes: OpTable
+) -> Iterator[Element]:
     offset = 0
+    strings = iter(strings)
     for elem in root:
         elem.attribs['offset'] = offset
         if elem.tag == 'OBNA' and elem.data != b'\x00':
@@ -86,7 +89,7 @@ def escape_message(
             yield c
 
 
-def encode_seq(seq: bytes):
+def encode_seq(seq: bytes) -> bytes:
     try:
         return bytes([int(b'0x' + seq[:2], 16)]) + seq[2:]
     except Exception as e:
@@ -94,7 +97,7 @@ def encode_seq(seq: bytes):
         return seq
 
 
-def unescape_message(msg: bytes):
+def unescape_message(msg: bytes) -> bytes:
     prefix, *rest = msg.split(b'\\x')
     return (prefix + b''.join(encode_seq(seq) for seq in rest)).replace(b'\\\\', b'\\')
 
