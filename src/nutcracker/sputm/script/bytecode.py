@@ -111,7 +111,7 @@ def verb_script(data: bytes) -> Tuple[bytes, bytes]:
         while True:
             key = stream.read(1)
             serial += key
-            if key in {b'\0', b'\xFF'}:
+            if key in {b'\0'}:  # , b'\xFF'}:
                 break
             serial += stream.read(2)
         return serial, stream.read()
