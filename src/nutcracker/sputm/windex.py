@@ -1,13 +1,15 @@
 from collections import deque
 
 from nutcracker.utils.funcutils import flatten
-from .script.bytecode import get_scripts, descumm, script_map, print_bytecode
+from .script.bytecode import get_scripts, descumm, script_map
 from .script.opcodes import OPCODES_v6
 
 ops = {}
 
+
 def regop(op):
     ops[op.__name__] = op
+
 
 @regop
 def o6_cursorCommand(op, stack, bytecode):
@@ -32,16 +34,17 @@ def o6_cursorCommand(op, stack, bytecode):
         print('userput soft-off')
     elif sub == 0x99:
         print(f'set-cursor-image {stack.pop()}')
-    elif sub == 0x9a:
+    elif sub == 0x9A:
         print(f'set-cursor-hotspot {stack.pop()} {stack.pop()}')
-    elif sub == 0x9c:
+    elif sub == 0x9C:
         print(f'init-charset {stack.pop()}')
-    elif sub == 0x9d:
+    elif sub == 0x9D:
         print(f'init-charset {[stack.pop() for i in range(stack.pop())]}')
-    elif sub == 0xd6:
+    elif sub == 0xD6:
         print(f'set-cursor-transparent-color {stack.pop()}')
     else:
         raise NotImplementedError(sub)
+
 
 @regop
 def o6_arrayOps(op, stack, bytecode):
@@ -52,10 +55,13 @@ def o6_arrayOps(op, stack, bytecode):
         msg, *rest = rest
         print(f'string ARRAY_{num} = {msg}')
         # stack.append(f'STR_{num}')
+
+
 @regop
 def o6_setClass(op, stack, bytecode):
     assert not op.args
     print(f'set-class {[stack.pop() for i in range(stack.pop())]} {stack.pop()}')
+
 
 @regop
 def o6_dimArray(op, stack, bytecode):
@@ -77,12 +83,14 @@ def o6_dimArray(op, stack, bytecode):
     else:
         raise NotImplementedError(sub)
 
+
 @regop
 def o6_pushWordVar(op, stack, bytecode):
     word, *_rest = op.args
     num = int.from_bytes(word.op, byteorder='little', signed=False)
     stack.append(f'VAR_{num}')
     # print('push-word-var VAR_{num}')
+
 
 @regop
 def o6_roomOps(op, stack, bytecode):
@@ -105,9 +113,13 @@ def o6_roomOps(op, stack, bytecode):
     elif sub == 181:
         print(f'room-fade {stack.pop()}')
     elif sub == 182:
-        print(f'room-intensity-rgb {stack.pop()} {stack.pop()} {stack.pop()} {stack.pop()} {stack.pop()}')
+        print(
+            f'room-intensity-rgb {stack.pop()} {stack.pop()} {stack.pop()} {stack.pop()} {stack.pop()}'
+        )
     elif sub == 183:
-        print(f'room-shadow {stack.pop()} {stack.pop()} {stack.pop()} {stack.pop()} {stack.pop()}')
+        print(
+            f'room-shadow {stack.pop()} {stack.pop()} {stack.pop()} {stack.pop()} {stack.pop()}'
+        )
     elif sub == 186:
         print(f'room-transform {stack.pop()} {stack.pop()} {stack.pop()} {stack.pop()}')
     elif sub == 187:
@@ -117,10 +129,12 @@ def o6_roomOps(op, stack, bytecode):
     else:
         raise NotImplementedError(sub)
 
+
 @regop
 def o6_kernelSetFunctions(op, stack, bytecode):
     args = [stack.pop() for i in range(stack.pop())]
     print(f'kernel-set {args[0]} {args[1:]}')
+
 
 @regop
 def o6_wordArrayWrite(op, stack, bytecode):
@@ -129,11 +143,13 @@ def o6_wordArrayWrite(op, stack, bytecode):
     value, index = stack.pop(), stack.pop()
     print(f'ARRAY_{num}[{index}] = {value}')
 
+
 @regop
 def o6_pushByte(op, stack, bytecode):
     byte, *rest = op.args
     assert not rest
     stack.append(int.from_bytes(byte.op, byteorder='little', signed=False))
+
 
 @regop
 def o6_pushWord(op, stack, bytecode):
@@ -143,9 +159,11 @@ def o6_pushWord(op, stack, bytecode):
     stack.append(value)
     # print(f'push-word {value}')
 
+
 @regop
 def o6_stopSound(op, stack, bytecode):
     print(f'stop-sound {stack.pop()}')
+
 
 @regop
 def o6_jump(op, stack, bytecode):
@@ -153,13 +171,16 @@ def o6_jump(op, stack, bytecode):
     assert not rest
     print(f'goto {off}')
 
+
 @regop
 def o6_beginOverride(op, stack, bytecode):
     print('begin-override')
 
+
 @regop
 def o6_endOverride(op, stack, bytecode):
     print('end-override')
+
 
 @regop
 def o6_writeWordVar(op, stack, bytecode):
@@ -167,6 +188,7 @@ def o6_writeWordVar(op, stack, bytecode):
     num = int.from_bytes(word.op, byteorder='little', signed=False)
     assert not rest
     print(f'VAR_{num} = {stack.pop()}')
+
 
 @regop
 def o6_resourceRoutines(op, stack, bytecode):
@@ -190,7 +212,7 @@ def o6_resourceRoutines(op, stack, bytecode):
         114: 'unlock-costume',
         115: 'unlock-room',
         117: 'load-charset',
-        118: 'kill-charset'
+        118: 'kill-charset',
     }
     if sub in cmds:
         print(f'{cmds[sub]} {stack.pop()}')
@@ -198,6 +220,7 @@ def o6_resourceRoutines(op, stack, bytecode):
         print(f'load-object {stack.pop()}')  # different for >= 7
     else:
         raise NotImplementedError(sub)
+
 
 @regop
 def o6_actorOps(op, stack, bytecode):
@@ -254,12 +277,14 @@ def o6_actorOps(op, stack, bytecode):
     else:
         raise NotImplementedError(sub)
 
+
 @regop
 def o6_if(op, stack, bytecode):
     stats = list(bytecode)
     off, *rest = op.args
     assert not rest
     print(f'if not {stack.pop()} ({stats.index(off.abs) - stats.index(op.offset)}):')
+
 
 @regop
 def o6_ifNot(op, stack, bytecode):
@@ -268,9 +293,11 @@ def o6_ifNot(op, stack, bytecode):
     assert not rest
     print(f'if {stack.pop()} ({stats.index(off.abs) - stats.index(op.offset)}):')
 
+
 @regop
 def o6_eq(op, stack, bytecode):
     stack.append(f'{stack.pop()} == {stack.pop()}')
+
 
 @regop
 def o6_dup(op, stack, bytecode):
@@ -278,20 +305,23 @@ def o6_dup(op, stack, bytecode):
     stack.append(val)
     stack.append(val)
 
+
 @regop
 def o6_neq(op, stack, bytecode):
     stack.append(f'{stack.pop()} != {stack.pop()}')
+
 
 @regop
 def o6_pop(op, stack, bytecode):
     print(f'pop {stack.pop()}')
 
+
 def defop(op, stack, bytecode):
     print(op)
 
+
 if __name__ == '__main__':
     import argparse
-    import os
     import glob
 
     from .preset import sputm
