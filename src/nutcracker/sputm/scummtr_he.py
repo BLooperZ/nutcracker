@@ -26,7 +26,8 @@ from nutcracker.sputm.script.opcodes import (
 def get_all_scripts(root: Iterable[Element], opcodes: OpTable) -> Iterator[bytes]:
     for elem in root:
         if elem.tag == 'OBNA':
-            msg = b''.join(escape_message(elem.data))
+            msg, rest = elem.data.split(b'\x00', maxsplit=1)
+            assert rest == b''
             if msg != b'':
                 yield msg
         elif elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
