@@ -84,7 +84,7 @@ def refresh_offsets(bytecode: ByteCode) -> ByteCode:
 def to_bytes(bytecode: ByteCode) -> bytes:
     with io.BytesIO() as stream:
         for off, stat in bytecode.items():
-            assert off == stream.tell()
+            assert off == stream.tell(), (off, stream.tell())
             stream.write(stat.to_bytes())
         return stream.getvalue()
 
