@@ -368,6 +368,10 @@ def build_obj(args):
         if isinstance(arg, ByteValue):
             if arg.op[0] == 0xFF:
                 break
+            masked = arg.op[0] & 0x1F
+            if masked == 0x01:
+                yield str(value(next(args)))
+                continue
         yield str(arg)
 
 
@@ -532,10 +536,14 @@ def o5_compare_wd(op):
 
 @regop(0x09)
 def o5_put_owner_wd(op):
-    if op.opcode == 0x29:
+    if op.opcode in {0x29, 0x69, 0xA9, 0xE9}:
         obj = op.args[0]
         actor = op.args[1]
         return f'owner-of {value(obj)} is {value(actor)}'
+    if op.opcode in {0x09, 0x49, 0x89, 0xC9}:
+        actor = op.args[0]
+        obj = op.args[1]
+        return f'actor {value(actor)} face-towards {value(obj)}'
 
 
 @regop(0x0A)
@@ -783,6 +791,10 @@ def o5_random_wd(op):
     if op.opcode in {0x16, 0x96}:
         assert isinstance(op.args[1], Variable if op.opcode & 0x80 else ByteValue)
         return f'{value(op.args[0])} = random {value(op.args[1])}'
+    if op.opcode in {0x36, 0x76, 0xB6, 0xF6}:
+        actor = op.args[0]
+        obj = op.args[1]
+        return f'walk {value(actor)} to-object {value(obj)}'
 
 
 @regop(0x17)
@@ -913,11 +925,11 @@ def o5_class_wd(op):
 
 @regop(0x1E)
 def o5_walk_wd(op):
-    if op.opcode == 0x1E:
-        actor = op.args[0]
-        posx = op.args[1]
-        posy = op.args[2]
-        return f'walk {value(actor)} to {value(posx)},{value(posy)}'
+    assert op.opcode & 0x1F == 0x1E
+    actor = op.args[0]
+    posx = op.args[1]
+    posy = op.args[2]
+    return f'walk {value(actor)} to {value(posx)},{value(posy)}'
 
 
 def descumm_v5(data: bytes, opcodes):
@@ -934,9 +946,9 @@ def descumm_v5(data: bytes, opcodes):
                 # print(
                 #     '=============', f'0x{op.offset:04x}', f'0x{op.offset + 8:04d}', op
                 # )
-                print(
-                    f'[{op.offset + 8:08d}]', ops.get(op.opcode & 0x1F, str)(op) or op
-                )
+                # print(
+                #     f'[{op.offset + 8:08d}]', ops.get(op.opcode & 0x1F, str)(op) or op
+                # )
 
             except Exception as e:
                 print(f'{type(e)}: {str(e)}')
@@ -1015,6 +1027,8 @@ if __name__ == '__main__':
 
     print(rnam)
 
+    os.makedirs('scripts', exist_ok=True)
+
     for disk in root:
         for room in sputm.findall('LFLF', disk):
             print(
@@ -1022,10 +1036,17 @@ if __name__ == '__main__':
                 room.attribs['path'],
                 rnam[room.attribs['gid']],
             )
-            for elem in get_scripts(room):
-                print('===============', elem)
-                _, script_data = script_map[elem.tag](elem.data)
-                bytecode = descumm_v5(script_data, OPCODES_v5)
-                # print_bytecode(bytecode)
-                # for off, stat in bytecode.items():
-                #     print(f'{off:08d}', stat)
+            fname = f"scripts/{room.attribs['gid']:04d}_{rnam[room.attribs['gid']]}.scu"
+            with open(fname, 'w') as f:
+                for elem in get_scripts(room):
+                    print('//', elem.tag, elem.attribs['path'], file=f)
+                    _, script_data = script_map[elem.tag](elem.data)
+                    bytecode = descumm_v5(script_data, OPCODES_v5)
+                    # print_bytecode(bytecode)
+                    for off, stat in bytecode.items():
+                        print(
+                            f'[{stat.offset + 8:08d}]',
+                            ops.get(stat.opcode & 0x1F, str)(stat) or stat,
+                            file=f,
+                        )
+                    print(file=f)
