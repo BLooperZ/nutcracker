@@ -489,7 +489,7 @@ def o5_elavation_wd(op):
 
 @regop(0x07)
 def o5_state_wd(op):
-    if op.opcode == 0x07:
+    if op.opcode in {0x07, 0x47, 0x87, 0xC7}:
         return f'state-of {value(op.args[0])} is {value(op.args[1])}'
     if op.opcode == 0x27:
         sub = op.args[0]
@@ -575,7 +575,10 @@ def o5_wait_wd(op):
 
 @regop(0x0C)
 def o5_resource_wd(op):
-    if op.opcode == 0x0C:
+    if op.opcode in {
+        0x0C,
+        # 0x8C  # TODO: commented out to check if this really happens
+    }:
         sub = op.args[0]
         masked = ord(sub.op) & 0x1F
         if masked == 0x01:
@@ -641,8 +644,8 @@ def o5_resource_wd(op):
         rpn = list(build_expr(op.args[1:]))
         infix = rpn_to_infix(rpn)
         return f'{value(op.args[0])} = ${resolve_expr(infix)}'
-    else:
-        return str(op)
+    if op.opcode in {0x6C, 0xEC}:
+        return f'{value(op.args[0])} = actor-width {value(op.args[1])}'
 
 
 @regop(0x0D)
@@ -710,6 +713,8 @@ def o5_inv_wd(op):
         return f'do-animation {value(actor)} {value(chore)}'
     if op.opcode == 0xB1:
         return f'{value(op.args[0])} = inventory-size {value(op.args[1])}'
+    if op.opcode in {0x71, 0xF1}:
+        return f'{value(op.args[0])} = actor-costume {value(op.args[1])}'
 
 
 @regop(0x12)
@@ -778,10 +783,10 @@ def o5_print_wd(op):
 
 @regop(0x15)
 def o5_pos_wd(op):
-    if op.opcode == 0xF5:
+    if op.opcode in {0x35, 0x75, 0xB5, 0xF5}:
         obj = op.args[0]
         return f'{value(obj)} = find-object {value(op.args[1])},{value(op.args[2])}'
-    if op.opcode == 0xD5:
+    if op.opcode in {0x15, 0x55, 0x95, 0xD5}:
         obj = op.args[0]
         return f'{value(obj)} = find-actor {value(op.args[1])},{value(op.args[2])}'
 
@@ -791,6 +796,9 @@ def o5_random_wd(op):
     if op.opcode in {0x16, 0x96}:
         assert isinstance(op.args[1], Variable if op.opcode & 0x80 else ByteValue)
         return f'{value(op.args[0])} = random {value(op.args[1])}'
+    if op.opcode in {0x56, 0xD6}:
+        assert isinstance(op.args[1], Variable if op.opcode & 0x80 else ByteValue)
+        return f'{value(op.args[0])} = actor-moving {value(op.args[1])}'
     if op.opcode in {0x36, 0x76, 0xB6, 0xF6}:
         actor = op.args[0]
         obj = op.args[1]
@@ -881,6 +889,14 @@ def o5_mult_wd(op):
         else:
             assert isinstance(left, Variable) and isinstance(right, WordValue)
         return f'{left} *= {value(right)}'
+    if op.opcode in {0x5B, 0xDB}:
+        left = op.args[0]
+        right = op.args[1]
+        if op.opcode & 0x80:
+            assert isinstance(left, Variable) and isinstance(right, Variable)
+        else:
+            assert isinstance(left, Variable) and isinstance(right, WordValue)
+        return f'{left} /= {value(right)}'
     if op.opcode in {0x7B, 0xFB}:
         var = op.args[0]
         actor = op.args[1]
