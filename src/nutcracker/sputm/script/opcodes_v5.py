@@ -1,13 +1,8 @@
 from functools import partial
-import io
 from typing import Optional, Sequence
 
+from .opcodes import ByteValue, WordValue, RefOffset, CString
 
-from .script.opcodes import ByteValue, WordValue, RefOffset, CString
-from .script.bytecode import (
-    to_bytes,
-    refresh_offsets,
-)
 
 PARAM_1 = 0x80
 PARAM_2 = 0x40
@@ -987,7 +982,12 @@ def o5_actorFromPos(opcode, stream):
         raise NotImplementedError(opcode, 'o5_actorFromPos')
 
 
-OPCODES_v5 = {
+def realize_v5(mapping):
+    # emulate: op = opcodes[opcode & 0x1F](opcode, stream)
+    return dict((0x20 * i + key, val) for i in range(8) for key, val in mapping.items())
+
+
+OPCODES_v5 = realize_v5({
     0x00: xop(o5_stopObjectCode),
     0x01: xop(o5_putActor),
     0x02: xop(o5_startMusic),
@@ -1020,38 +1020,7 @@ OPCODES_v5 = {
     0x1D: xop(o5_ifClassOfIs),
     0x1E: xop(o5_walkActorTo),
     0x1F: xop(o5_isActorInBox),
-}
-
-
-def descumm_v5(data: bytes, opcodes):
-    with io.BytesIO(data) as stream:
-        bytecode = {}
-        while True:
-            next_byte = stream.read(1)
-            if not next_byte:
-                break
-            opcode = ord(next_byte)
-            try:
-                op = opcodes[opcode & 0x1F](opcode, stream)
-                bytecode[op.offset] = op
-                print(f'0x{op.offset:04x}', op)
-
-            except Exception as e:
-                print(f'{type(e)}: {str(e)}')
-                print(f'{stream.tell():04x}', f'0x{opcode:02x}')
-                raise e
-
-        for _off, stat in bytecode.items():
-            for arg in stat.args:
-                if isinstance(arg, RefOffset):
-                    assert arg.abs in bytecode, hex(arg.abs)
-
-        assert to_bytes(bytecode) == data
-        assert to_bytes(refresh_offsets(bytecode)) == data, (
-            to_bytes(refresh_offsets(bytecode)),
-            data,
-        )
-        return bytecode
+})
 
 
 if __name__ == '__main__':
@@ -1060,8 +1029,8 @@ if __name__ == '__main__':
 
     from nutcracker.utils.fileio import read_file
     from nutcracker.utils.funcutils import flatten
-    from .preset import sputm
-    from .script.bytecode import get_scripts, script_map
+    from ..preset import sputm
+    from .bytecode import get_scripts, script_map, descumm
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('files', nargs='+', help='files to read from')
@@ -1077,7 +1046,7 @@ if __name__ == '__main__':
         for elem in get_scripts(sputm.map_chunks(resource)):
             print('===============', elem)
             _, script_data = script_map[elem.tag](elem.data)
-            bytecode = descumm_v5(script_data, OPCODES_v5)
+            bytecode = descumm(script_data, OPCODES_v5)
             # print_bytecode(bytecode)
             # for off, stat in bytecode.items():
             #     print(f'{off:08d}', stat)

@@ -6,14 +6,13 @@ from typing import Optional
 
 
 from .script.opcodes import ByteValue, WordValue, RefOffset
+from .script.opcodes_v5 import Variable, PARAM_1, PARAM_2, OPCODES_v5, value
 from .script.bytecode import (
     to_bytes,
     get_scripts,
     script_map,
     refresh_offsets,
 )
-
-from .scummtr_v5 import Variable, PARAM_1, PARAM_2, OPCODES_v5, value
 
 
 def escape_message(

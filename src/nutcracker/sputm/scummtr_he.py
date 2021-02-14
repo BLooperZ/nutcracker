@@ -15,6 +15,7 @@ from nutcracker.sputm.script.bytecode import (
     script_map,
     to_bytes,
 )
+from nutcracker.sputm.script.opcodes_v5 import OPCODES_v5
 from nutcracker.sputm.script.opcodes import (
     OPCODES_he80,
     OPCODES_v6,
@@ -107,7 +108,7 @@ def print_to_msg(line: str, encoding: str = 'windows-1255') -> bytes:
     return (
         unescape_message(line.replace('\r', '').replace('\n', '').encode(encoding))
         .replace(b'\\r', b'\r')
-        .replace(b'\\/t', b'\t')
+        .replace(b'\\x09', b'\t')
         .replace(b'\\x80', b'\x80')
         .replace(b'\\xd9', b'\xd9')
         .replace(b'\\x7f', b'\x7f')
@@ -118,12 +119,12 @@ def msg_to_print(msg: bytes, encoding: str = 'windows-1255') -> str:
     assert b'\\x80' not in msg
     assert b'\\xd9' not in msg
     assert b'\\r' not in msg
-    assert b'\\/t' not in msg
+    assert b'\\x09' not in msg
     escaped = b''.join(escape_message(msg, escape=b'\xff', var_size=2))
     assert b'\n' not in escaped
     line = (
         escaped.replace(b'\r', b'\\r')
-        .replace(b'\t', b'\\/t')
+        .replace(b'\t', b'\\x09')
         .replace(b'\x80', b'\\x80')
         .replace(b'\xd9', b'\\xd9')
         .replace(b'\x7f', b'\\x7f')
