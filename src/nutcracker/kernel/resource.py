@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import io
+import logging
 from typing import IO, Iterable, Iterator, Tuple, Optional
 
 from .align import align_read_stream, align_write_stream
@@ -42,11 +43,25 @@ def read_chunks(cfg: _ChunkSetting, data: bytes) -> Iterator[Tuple[int, Chunk]]:
         offset = stream.tell()
         assert offset == 0
         while offset < max_size:
+            offset = workaround_x80(cfg, stream)  # workaround, see docstring
             chunk = untag(cfg, stream)
             yield offset, chunk
             offset = align_read_stream(stream, align=cfg.align)
             assert offset == stream.tell()
         assert stream.read() == b''
+
+
+def workaround_x80(cfg: _ChunkSetting, stream: IO[bytes]):
+    """WORKAROUND: in Pajama Sam 2, some DIGI chunks are off by 1.
+    header appears as '\\x80DIG' and index indicate they should start 1 byte afterwards.
+    since header tag needs to be ASCII, it's low risk.
+    """
+    if stream.read(1) == b'\x80':
+        getattr(cfg, 'logger', logging).warning(
+            'found \\x80 between chunks, skipping 1 byte...'
+        )
+        return stream.tell()
+    return stream.seek(-1, io.SEEK_CUR)
 
 
 def mktag(cfg: _ChunkSetting, tag: str, data: bytes) -> bytes:
