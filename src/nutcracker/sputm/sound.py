@@ -106,4 +106,4 @@ if __name__ == '__main__':
         updated_resource = list(inject_sound_chunks(root, cstreams))
 
         basename = os.path.basename(args.filename)
-        rebuild_resources(game, basename, disks, index_root, updated_resource)
+        rebuild_resources(game, basename, index_file, disks, index_root, updated_resource)

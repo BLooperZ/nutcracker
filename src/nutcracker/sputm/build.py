@@ -155,7 +155,7 @@ def update_loff(game, disk):
         loff.data = loff_data
 
 
-def rebuild_resources(game, basename, disks, index_root, updated_resource):
+def rebuild_resources(game, basename, index_file, disks, index_root, updated_resource):
     for t, disk in zip(updated_resource, disks):
         update_loff(game, t)
 
@@ -210,7 +210,7 @@ if __name__ == '__main__':
 
     updated_resource = list(update_element(args.dirname, root, files))
 
-    rebuild_resources(game, basename, disks, index_root, updated_resource)
+    rebuild_resources(game, basename, index_file, disks, index_root, updated_resource)
 
 
 # ## REFERENCE
