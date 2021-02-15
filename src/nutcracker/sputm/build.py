@@ -68,7 +68,7 @@ def make_index_from_resource(resource, ref, base_fix: int = 0):
         'MULT': dirm,
         'AWIZ': dirm,
         'COST': dirc,
-        'TALK': dirs,
+        'TALK': dirn,
     }
 
     dirmap = {
