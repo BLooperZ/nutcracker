@@ -18,6 +18,7 @@ from nutcracker.sputm.script.bytecode import (
 from nutcracker.sputm.script.opcodes_v5 import OPCODES_v5
 from nutcracker.sputm.script.opcodes import (
     OPCODES_he80,
+    OPCODES_he90,
     OPCODES_v6,
     OPCODES_v8,
     OpTable,
@@ -167,7 +168,7 @@ if __name__ == '__main__':
 
     root = read_game_resources(game, idgens, disks, max_depth=5)
 
-    script_ops = OPCODES_v6
+    script_ops = OPCODES_he90
 
     if args.extract:
         with open(args.textfile, 'w') as f:
