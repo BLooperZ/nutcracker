@@ -1,5 +1,7 @@
 from functools import partial
-from typing import Optional, Sequence
+from typing import IO, Optional, Sequence, Type
+
+from nutcracker.sputm.script.parser import ScriptArg
 
 from .opcodes import ByteValue, WordValue, RefOffset, CString
 
@@ -76,7 +78,12 @@ def get_var(stream):
     return var
 
 
-def get_params(opcode, stream, args, masks: Sequence[int] = MASKS):
+def get_params(
+    opcode: int,
+    stream: IO[bytes],
+    args: Sequence[Type[ScriptArg]],
+    masks: Sequence[int] = MASKS,
+):
     # NOTE: need to be lazy for do-sentence (o5_doSentence)
     assert len(args) <= len(masks)
     for mask, ctype in zip(masks, args):
