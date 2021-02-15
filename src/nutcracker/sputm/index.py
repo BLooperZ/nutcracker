@@ -336,8 +336,10 @@ def read_index_he(root):
         'MULT': compare_pid_off(dmul),
         'AWIZ': compare_pid_off(dmul),
         'RMDA': compare_pid_off(drmd),
-        'TALK': compare_pid_off(dtlk),
+        'TALK': compare_pid_off(dsou),
+        'TLKE': compare_pid_off(dtlk),
     }
+
 
 def save_tree(cfg, element, basedir='.'):
     if not element:
