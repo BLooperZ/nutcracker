@@ -146,7 +146,7 @@ def wait_ops_v8(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (cmd,)
 
 
-def write_file(stream: IO[bytes]) -> Iterable[ScriptArg]:
+def file_op(stream: IO[bytes]) -> Iterable[ScriptArg]:
     cmd = ByteValue(stream)
     if ord(cmd.op) in {8}:
         return (cmd, ByteValue(stream))
@@ -307,7 +307,7 @@ OPCODES_v6: OpTable = realize({
     0xC4: makeop('o6_abs'),
     0xC5: makeop('o6_distObjectObject'),
     # TODO: 0xc6: makeop('o6_distObjectPt'),
-    0xc7: makeop('o6_distPtPt'),
+    0xC7: makeop('o6_distPtPt'),
     0xC8: makeop('o6_kernelGetFunctions'),
     0xC9: makeop('o6_kernelSetFunctions'),
     0xCA: makeop('o6_delayFrames'),
@@ -422,14 +422,14 @@ OPCODES_he72: OpTable = realize({
     0xBB: makeop('o72_talkEgo', msg_op),
     0xBC: makeop('o72_dimArray', extended_bw_op),
     0xC0: makeop('o72_dim2dimArray', extended_bw_op),
-    # TODO: 0xc1: makeop('o72_traceStatus'),
+    0xC1: makeop('o72_traceStatus'),
     0xC8: makeop('o72_kernelGetFunctions'),
     0xCE: makeop('o72_drawWizImage'),
     0xCF: makeop('o72_debugInput'),
     0xD5: makeop('o72_jumpToScript', extended_b_op),
     0xDA: makeop('o72_openFile'),
-    0xDB: makeop('o72_readFile', extended_b_op),
-    0xDC: makeop('o72_writeFile', write_file),
+    0xDB: makeop('o72_readFile', file_op),
+    0xDC: makeop('o72_writeFile', file_op),
     0xDD: makeop('o72_findAllObjects'),
     0xDE: makeop('o72_deleteFile'),
     0xDF: makeop('o72_rename'),
@@ -461,14 +461,14 @@ OPCODES_he80: OpTable = realize({
     0x9E: None,
     0xA5: None,
     0xAC: makeop('o80_drawWizPolygon'),
-    0xe0: makeop('o80_drawLine', extended_b_op),
+    0xE0: makeop('o80_drawLine', extended_b_op),
     0xE3: makeop('o80_pickVarRandom', extended_w_op),
 })
 
 OPCODES_he90: OpTable = realize({
     **OPCODES_he80,
-    # TODO: 0x0a: makeop('o90_dup_n'),
-    0x1c: makeop('o90_wizImageOps', extended_b_op),
+    0x0A: makeop('o90_dup_n', extended_w_op),
+    0x1C: makeop('o90_wizImageOps', extended_b_op),
     # TODO: 0x1d: makeop('o90_min'),
     # TODO: 0x1e: makeop('o90_max'),
     # TODO: 0x1f: makeop('o90_sin'),
@@ -483,23 +483,23 @@ OPCODES_he90: OpTable = realize({
     0x28: makeop('o90_setSpriteGroupInfo', extended_b_op),
     0x29: makeop('o90_getWizData', extended_b_op),
     # TODO: 0x2a: makeop('o90_getActorData'),
-    # TODO: 0x2b: makeop('o90_startScriptUnk'),
+    0x2B: makeop('o90_startScriptUnk', extended_b_op),
     # TODO: 0x2c: makeop('o90_jumpToScriptUnk'),
     # TODO: 0x2d: makeop('o90_videoOps'),
     # TODO: 0x2e: makeop('o90_getVideoData'),
-    0x2f: makeop('o90_floodFill', extended_b_op),
+    0x2F: makeop('o90_floodFill', extended_b_op),
     0x30: makeop('o90_mod'),
     # TODO: 0x31: makeop('o90_shl'),
     # TODO: 0x32: makeop('o90_shr'),
     # TODO: 0x33: makeop('o90_xor'),
-    # TODO: 0x34: makeop('o90_findAllObjectsWithClassOf'),
+    0x34: makeop('o90_findAllObjectsWithClassOf'),
     # TODO: 0x35: makeop('o90_getPolygonOverlap'),
     0x36: makeop('o90_cond'),
-    # TODO: 0x37: makeop('o90_dim2dim2Array'),
+    0x37: makeop('o90_dim2dim2Array', extended_bw_op),
     # TODO: 0x38: makeop('o90_redim2dimArray'),
     # TODO: 0x39: makeop('o90_getLinesIntersectionPoint'),
     # TODO: 0x3a: makeop('o90_sortArray'),
-    # TODO: 0x44: makeop('o90_getObjectData'),
+    0x44: makeop('o90_getObjectData', extended_b_op),
     # TODO: 0x94: makeop('o90_getPaletteData'),
     # TODO: 0x9e: makeop('o90_paletteOps'),
     # TODO: 0xa5: makeop('o90_fontUnk'),
