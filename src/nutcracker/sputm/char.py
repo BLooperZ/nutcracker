@@ -84,8 +84,8 @@ def handle_char(data):
 
     with io.BytesIO(char_data) as stream:
         bpp = ord(stream.read(1))
-        assert bpp in (1, 2, 4, 8)
         print(f'{bpp}bpp')
+        assert bpp in {0, 1, 2, 4, 8}, bpp
 
         height = ord(stream.read(1))  # noqa: F841
 
