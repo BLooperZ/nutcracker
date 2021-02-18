@@ -30,6 +30,7 @@ SCHEMA = {
         'MULT',
         'AWIZ',
         'TALK',
+        'TLKE',
         RAWD
     },
     'ROOM': {
@@ -191,6 +192,10 @@ SCHEMA = {
         'RELO',
         'RGBS'
     },
+    'TLKE': {
+        'TEXT',
+    },
+    'TEXT': DATA,
     'WIZH': DATA,
     'WIZD': DATA,
     'CNVS': DATA,

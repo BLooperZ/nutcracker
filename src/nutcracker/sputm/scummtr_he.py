@@ -27,12 +27,12 @@ from nutcracker.sputm.script.opcodes import (
 
 def get_all_scripts(root: Iterable[Element], opcodes: OpTable) -> Iterator[bytes]:
     for elem in root:
-        if elem.tag == 'OBNA':
+        if elem.tag in {'OBNA', 'TEXT'}:
             msg, rest = elem.data.split(b'\x00', maxsplit=1)
             assert rest == b''
             if msg != b'':
                 yield msg
-        elif elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
+        elif elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', 'TLKE', *script_map}:
             if elem.tag in script_map:
                 # print('==================', elem.attribs['path'])
                 _, script_data = script_map[elem.tag](elem.data)
@@ -50,9 +50,9 @@ def update_element_strings(
     strings = iter(strings)
     for elem in root:
         elem.attribs['offset'] = offset
-        if elem.tag == 'OBNA' and elem.data != b'\x00':
+        if elem.tag in {'OBNA', 'TEXT'} and elem.data != b'\x00':
             elem.data = next(strings) + b'\x00'
-        elif elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
+        elif elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', 'TLKE', *script_map}:
             if elem.tag in script_map:
                 serial, script_data = script_map[elem.tag](elem.data)
                 bc = descumm(script_data, opcodes)
