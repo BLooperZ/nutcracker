@@ -52,6 +52,7 @@ def make_index_from_resource(resource, ref, base_fix: int = 0):
     dirc = {}
     dirf = {}
     dirm = {}
+    dirt = {}
     dlfl = {}
     rnam = {}
     dobj = {}
@@ -69,6 +70,7 @@ def make_index_from_resource(resource, ref, base_fix: int = 0):
         'AWIZ': dirm,
         'COST': dirc,
         'TALK': dirn,
+        'TLKE': dirt,
     }
 
     dirmap = {
@@ -80,6 +82,7 @@ def make_index_from_resource(resource, ref, base_fix: int = 0):
         'DIRC': dirc,
         'DIRF': dirf,
         'DIRM': dirm,
+        'DIRT': dirt,
         # LucasArts SCUMM games
         'DSCR': dirs,
         'DRSC': dirr,
