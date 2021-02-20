@@ -419,6 +419,16 @@ def o5_mus_wd(op):
         return f'start-music {value(op.args[0])}'
     if op.opcode in {0x62, 0xE2}:
         return f'stop-script {value(op.args[0])}'
+    if op.opcode in {0x42, 0xC2}:
+        scr = op.args[0]
+        assert op.args[-1].op[0] == 0xFF
+        params = f"({','.join(build_script(op.args[1:]))})"
+        # TODO: how to detect background/recursive in chain script?
+        background = ''
+        recursive = ''
+        # background = 'bak ' if op.opcode & 0x20 else ''
+        # recursive = 'rec ' if op.opcode & 0x40 else ''
+        return f'chain-script {background}{recursive}{value(scr)} {params}'
 
 
 @regop(0x03)
