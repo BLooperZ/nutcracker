@@ -120,6 +120,7 @@ def verb_script(data: bytes) -> Tuple[bytes, bytes]:
 script_map = {
     'SCRP': global_script,
     'LSCR': local_script,
+    'LSC2': local_script_v8,
     'VERB': verb_script,
     'ENCD': global_script,
     'EXCD': global_script,

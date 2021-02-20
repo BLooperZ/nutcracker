@@ -327,7 +327,7 @@ def read_index_he(root):
         'OBIM': read_inner_uint16le,
         'OBCD': read_inner_uint16le,
         'LSCR': read_uint8le,
-        'LSC2': read_uint8le,
+        'LSC2': read_uint32le,
         'SCRP': compare_pid_off(dscr),
         'CHAR': compare_pid_off(dchr),
         'DIGI': compare_pid_off(dsou),
