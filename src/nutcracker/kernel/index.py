@@ -2,7 +2,15 @@
 
 from contextlib import contextmanager
 from dataclasses import replace
-from typing import Any, Dict, Iterator, FrozenSet, Optional, Set, Callable
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    FrozenSet,
+    Iterator,
+    Optional,
+    Set,
+)
 
 from .resource import read_chunks
 from .types import Element, Chunk

@@ -51,7 +51,7 @@ def read_chunks(cfg: _ChunkSetting, data: bytes) -> Iterator[Tuple[int, Chunk]]:
         assert stream.read() == b''
 
 
-def workaround_x80(cfg: _ChunkSetting, stream: IO[bytes]):
+def workaround_x80(cfg: _ChunkSetting, stream: IO[bytes]) -> int:
     """WORKAROUND: in Pajama Sam 2, some DIGI chunks are off by 1.
     header appears as '\\x80DIG' and index indicate they should start 1 byte afterwards.
     since header tag needs to be ASCII, it's low risk.
