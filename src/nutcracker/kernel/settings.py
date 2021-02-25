@@ -3,9 +3,8 @@ import struct
 from dataclasses import dataclass, field
 from typing import Mapping, Optional, Set
 
-from .types import ChunkHeader
 from .structured import StructuredTuple
-
+from .types import ChunkHeader
 
 SCUMM_CHUNK = StructuredTuple(('size', 'tag'), struct.Struct('<I2s'), ChunkHeader)
 IFF_CHUNK = StructuredTuple(('tag', 'size'), struct.Struct('>4sI'), ChunkHeader)

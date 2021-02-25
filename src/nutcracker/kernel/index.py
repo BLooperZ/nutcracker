@@ -2,19 +2,11 @@
 
 from contextlib import contextmanager
 from dataclasses import replace
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    FrozenSet,
-    Iterator,
-    Optional,
-    Set,
-)
+from typing import Any, Callable, Dict, FrozenSet, Iterator, Optional, Set
 
 from .resource import read_chunks
-from .types import Element, Chunk
 from .settings import _IndexSetting
+from .types import Chunk, Element
 
 
 class MissingSchemaKey(Exception):
@@ -111,8 +103,8 @@ def generate_schema(cfg: _IndexSetting, data: bytes) -> Dict[str, Set[str]]:
 
 
 if __name__ == '__main__':
-    import os
     import argparse
+    import os
     from pprint import pprint
 
     import yaml

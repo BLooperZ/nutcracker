@@ -1,7 +1,6 @@
 import struct
 from dataclasses import dataclass
-from typing import Generic, IO, Sequence, TypeVar, Callable
-
+from typing import IO, Callable, Generic, Sequence, TypeVar
 
 T = TypeVar('T')
 

@@ -1,7 +1,18 @@
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Dict, IO, Iterable, Iterator, Optional, Set, Tuple, TypeVar
+from typing import (
+    IO,
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    Optional,
+    Set,
+    Tuple,
+    TypeVar,
+)
 
-from . import types, settings
+from . import settings, types
 
 _SettingT = TypeVar('_SettingT', bound='_DefaultOverride')
 

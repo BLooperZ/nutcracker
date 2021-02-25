@@ -2,11 +2,11 @@
 
 import io
 import logging
-from typing import IO, Iterable, Iterator, Tuple, Optional
+from typing import IO, Iterable, Iterator, Optional, Tuple
 
 from .align import align_read_stream, align_write_stream
-from .types import Chunk, ChunkHeader
 from .settings import _ChunkSetting
+from .types import Chunk, ChunkHeader
 
 
 class UnexpectedBufferSize(EOFError):

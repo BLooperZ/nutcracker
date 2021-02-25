@@ -20,12 +20,14 @@ class _ChunkPreset(settings._ChunkSetting, _DefaultOverride):
     drop_offsets = staticmethod(chunk.drop_offsets)
     print_chunks = staticmethod(chunk.print_chunks)
 
+    # isort: off
     from .resource import (
         untag,
         read_chunks,
         mktag,
         write_chunks,
     )
+    # isort: on
 
 
 @dataclass(frozen=True)
@@ -37,10 +39,12 @@ class _ShellPreset(settings._IndexSetting, _ChunkPreset):
     findpath = staticmethod(tree.findpath)
     render = staticmethod(tree.render)
 
+    # isort: off
     from .index import (
         map_chunks,
         generate_schema,
     )
+    # isort: on
 
 
 preset = _ChunkPreset()
