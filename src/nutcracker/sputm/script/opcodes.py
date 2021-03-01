@@ -500,6 +500,7 @@ OPCODES_he90: OpTable = realize({
     # TODO: 0x39: makeop('o90_getLinesIntersectionPoint'),
     0x3A: makeop('o90_sortArray', extended_bw_op),
     0x44: makeop('o90_getObjectData', extended_b_op),
+    0x69: makeop('disabled_windowOps', extended_b_op),
     0x94: makeop('o90_getPaletteData', extended_b_op),
     0x9e: makeop('o90_paletteOps', extended_b_op),
     # TODO: 0xa5: makeop('o90_fontUnk'),
