@@ -96,8 +96,9 @@ def encode_images_v8(basedir, imag, obj_name, room_id, rnam):
                 sputm.render(next(sputm(schema=s).map_chunks(sputm.mktag('SMAP', encoded))))
             yield imxx, encoded
             print((im_path, imxx))
-            if imxx.tag == 'BOMP':
-                assert encoded == imxx.data, (encoded, imxx.data)
+            # # uncomment for testing image import without changes
+            # if imxx.tag == 'BOMP':
+            #     assert encoded == imxx.data, (encoded, imxx.data)
         else:
             yield imxx, None
 

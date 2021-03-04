@@ -24,6 +24,7 @@ numpy = "^1.19.1"
 parse = "^1.18.0"
 Pillow = "^8.0.1"
 typer = "^0.3.2"
+PyYAML = "^5.4.1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
@@ -47,12 +48,8 @@ skip-string-normalization = true
 style = "https://raw.githubusercontent.com/wemake-services/wemake-python-styleguide/master/styles/mypy.toml"
 
 [tool.isort]
+profile = "black"
 multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = true
-ensure_newline_before_comments = true
-line_length = 88
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
