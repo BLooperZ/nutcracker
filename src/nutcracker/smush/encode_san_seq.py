@@ -12,11 +12,11 @@ import numpy as np
 from nutcracker.codex.codex import get_encoder
 from nutcracker.graphics.image import ImagePosition
 from nutcracker.kernel.types import Element
-from nutcracker.smush import anim, fobj
+from nutcracker.smush import anim, fobj, ahdr
 from nutcracker.smush.preset import smush
 from nutcracker.utils.fileio import write_file
 
-from typing import List, Optional, Sequence
+from typing import Deque, Iterable, Iterator, List, Optional, Sequence, Set
 
 UINT16LE = struct.Struct('<H')
 
@@ -37,7 +37,7 @@ def convert_fobj_meta(datam: bytes) -> int:
     return 0
 
 
-def decode_frame(header, idx, frame):
+def decode_frame(header: ahdr.AnimationHeader, idx: int, frame: Element) -> FrameGenCtx:
     ctx = FrameGenCtx(idx=idx, frame=frame)
     for comp in frame.children:
         if comp.tag == 'FOBJ':
@@ -50,7 +50,11 @@ def decode_frame(header, idx, frame):
     return ctx
 
 
-def get_sequence_frames(header, frames, saved):
+def get_sequence_frames(
+    header: ahdr.AnimationHeader,
+    frames: Iterator[FrameGenCtx],
+    saved: Deque[FrameGenCtx],
+) -> Iterator[FrameGenCtx]:
     assert not saved
     for frame in frames:
         if frame.seq_ind == 0:
@@ -59,7 +63,7 @@ def get_sequence_frames(header, frames, saved):
         yield frame
 
 
-def get_frame_image(directory, idx: int) -> Sequence[Sequence[int]]:
+def get_frame_image(directory: str, idx: int) -> Sequence[Sequence[int]]:
     im = Image.open(os.path.join(directory, f'FRME_{idx:05d}.png'))
     return list(np.asarray(im))
 
@@ -77,7 +81,7 @@ def encode_fake(image: Sequence[Sequence[int]], chunk: bytes) -> bytes:
     return fobj.mkobj(meta, encoded)
 
 
-def encode_seq(sequence, directory):
+def encode_seq(sequence: Iterable[FrameGenCtx], directory: str) -> Iterator[bytes]:
     for frame in sequence:
         fdata: List[bytes] = []
         for comp in frame.frame:
@@ -96,7 +100,9 @@ def encode_seq(sequence, directory):
         yield smush.write_chunks(fdata)
 
 
-def split_sequences(header, frames):
+def split_sequences(
+    header: ahdr.AnimationHeader, frames: Iterable[Element]
+) -> Iterator[Iterator[FrameGenCtx]]:
     saved = deque(maxlen=1)
     frames = (decode_frame(header, idx, frame) for idx, frame in enumerate(frames))
     saved.append(next(frames))
@@ -110,11 +116,13 @@ def split_sequences(header, frames):
             pass
 
 
-def check_dirty(frame_range, files):
+def check_dirty(frame_range: Iterable[int], files: Set[str]) -> bool:
     return any(f'FRME_{num:05d}.png' in files for num in frame_range)
 
 
-def replace_dirty_sequences(header, frames, directory):
+def replace_dirty_sequences(
+    header: ahdr.AnimationHeader, frames: Iterable[Element], directory: str
+) -> Iterator[bytes]:
     # split frames to sequences
     # for frames in each sequence (range?)
     # if any of the frame images in the sequence exists in parameter
