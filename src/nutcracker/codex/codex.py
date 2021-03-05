@@ -90,7 +90,7 @@ def encode1(bmap):
             grouped = [list(group) for c, group in itertools.groupby(line)]
             eg = list(encode_groups(grouped))
             # print('ENCODED', eg)
-            linedata = b''.join(bytes([l, *g]) for l, g in eg)
+            linedata = b''.join(bytes([ll, *g]) for ll, g in eg)
             sized = (
                 len(linedata).to_bytes(2, byteorder='little', signed=False) + linedata
             )
