@@ -30,24 +30,34 @@ def unidecoder(width, height, f):
         return lines
 
 
-def encode_line_44(width, line, bg):
-    le = b''
-    done = 0
-    while done < width:
-        i = 0
-        while done + i < width and line[done + i] == bg:
-            i += 1
-        off = i
-        while done + i < width and line[done + i] != bg:
-            i += 1
-        lst = line[done + off : done + i]
-        le += struct.pack('<H', off)
-        lst += b'' if (done + i < width) else b'\x00'
-        if len(lst) > 0:
-            le += struct.pack('<H', len(lst) - 1) + bytes(lst)
-        done += i
+def join_segments(segments):
+    return b''.join(
+        (
+            struct.pack('<H', off)
+            + (struct.pack('<H', len(lst) - 1) + lst if lst else b'')
+        )
+        for off, lst in segments
+    )
 
-    return le
+
+def split_segments_44(line, bg):
+    off = 0
+    width = len(line)
+    pos = 0
+    for is_bg, group in itertools.groupby(line, key=lambda val: val == bg):
+        lst = bytes(group)
+        pos += len(lst)
+        if not is_bg:
+            yield off, lst + (b'' if pos < width else b'\x00')
+        off = len(lst)
+    assert pos >= width
+    if is_bg:
+        yield off, b'\x00'
+
+
+def encode_line_44(width, line, bg):
+    assert width == len(line)
+    return join_segments(split_segments_44(line, bg))
 
 
 def codec44(width, height, out):
@@ -59,70 +69,22 @@ def codec44(width, height, out):
     return buf + b'\x00' * (len(buf) % 2)
 
 
-# def get_segments_21(line, bg):
-
-#     import itertools
-
-#     off = 0
-#     lst = b''
-#     for is_bg, group in itertools.groupby(line, key=lambda val: val == bg):
-#         lst = bytes(group)
-#         if not is_bg:
-#             yield off, lst
-#         off = len(lst)
-#         if not is_bg:
-#             lst = b''
-#     yield len(lst) + 1, b''
-
-
-def encode_line_21(width, line, bg):
-
-    # print('============', width)
-
-    le = b''
+def split_segments_21(line, bg):
     off = 0
     lst = b''
     for is_bg, group in itertools.groupby(line, key=lambda val: val == bg):
         lst = bytes(group)
         if not is_bg:
-            le += struct.pack('<H', off) + struct.pack('<H', len(lst) - 1) + lst
+            yield off, lst
         off = len(lst)
         if not is_bg:
             lst = b''
-    le += struct.pack('<H', len(lst) + 1)
-
-    # le2 = b''.join(
-    #     (
-    #         struct.pack('<H', off)
-    #         + (struct.pack('<H', len(lst) - 1) + lst if lst else b'')
-    #     )
-    #     for off, lst in get_segments_21(line, bg)
-    # )
-    # assert le == le2, (le, le2)
-    assert le == encode_line_21_old(width, line, bg)
-    return le
+    yield len(lst) + 1, b''
 
 
-def encode_line_21_old(width, line, bg):
-    le = b''
-    done = 0
-    while done <= width:
-        i = 0
-        while done + i < width and line[done + i] == bg:
-            i += 1
-        off = i
-        r = i + 1
-        if done + r > width:
-            le += struct.pack('<H', r)
-            break
-        while done + i < width and line[done + i] != bg:
-            i += 1
-        lst = line[done + off : done + i]
-        le += struct.pack('<H', off)
-        if len(lst) > 0:
-            le += struct.pack('<H', len(lst) - 1) + bytes(lst)
-        done += i
-    return le
+def encode_line_21(width, line, bg):
+    assert width == len(line)
+    return join_segments(split_segments_21(line, bg))
 
 
 def codec21(width, height, out):
