@@ -1,4 +1,3 @@
-import struct
 import io
 import itertools
 
@@ -32,10 +31,7 @@ def unidecoder(width, height, f):
 
 def join_segments(segments):
     return b''.join(
-        (
-            struct.pack('<H', off)
-            + (struct.pack('<H', len(lst) - 1) + lst if lst else b'')
-        )
+        UINT16LE.pack(off) + (UINT16LE.pack(len(lst) - 1) + lst if lst else b'')
         for off, lst in segments
     )
 
@@ -52,9 +48,8 @@ def split_segments_base(line, bg):
 
 
 def split_segments_44(line, bg):
-    off = 0
-    width = len(line)
     pos = 0
+    width = len(line)
     for off, lst in split_segments_base(line, bg):
         pos += off + len(lst)
         yield off, lst + (b'' if pos < width else b'\x00')
@@ -75,12 +70,7 @@ def codec44(width, height, out):
 
 
 def split_segments_21(line, bg):
-    off = 0
-    width = len(line)
-    pos = 0
     for off, lst in split_segments_base(line, bg):
-        pos += off + len(lst)
-        assert lst or pos == width, (lst, pos, width)
         yield off + (0 if lst else 1), lst
     if lst:
         yield 1, b''
