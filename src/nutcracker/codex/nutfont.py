@@ -40,19 +40,24 @@ def join_segments(segments):
     )
 
 
+def split_segments_base(line, bg):
+    off = 0
+    for is_bg, group in itertools.groupby(line, key=lambda val: val == bg):
+        lst = bytes(group)
+        if not is_bg:
+            yield off, lst
+        off = len(lst)
+    if is_bg:
+        yield off, b''
+
+
 def split_segments_44(line, bg):
     off = 0
     width = len(line)
     pos = 0
-    for is_bg, group in itertools.groupby(line, key=lambda val: val == bg):
-        lst = bytes(group)
-        pos += len(lst)
-        if not is_bg:
-            yield off, lst + (b'' if pos < width else b'\x00')
-        off = len(lst)
-    assert pos >= width
-    if is_bg:
-        yield off, b'\x00'
+    for off, lst in split_segments_base(line, bg):
+        pos += off + len(lst)
+        yield off, lst + (b'' if pos < width else b'\x00')
 
 
 def encode_line_44(width, line, bg):
@@ -71,15 +76,14 @@ def codec44(width, height, out):
 
 def split_segments_21(line, bg):
     off = 0
-    lst = b''
-    for is_bg, group in itertools.groupby(line, key=lambda val: val == bg):
-        lst = bytes(group)
-        if not is_bg:
-            yield off, lst
-        off = len(lst)
-        if not is_bg:
-            lst = b''
-    yield len(lst) + 1, b''
+    width = len(line)
+    pos = 0
+    for off, lst in split_segments_base(line, bg):
+        pos += off + len(lst)
+        assert lst or pos == width, (lst, pos, width)
+        yield off + (0 if lst else 1), lst
+    if lst:
+        yield 1, b''
 
 
 def encode_line_21(width, line, bg):
