@@ -2,34 +2,9 @@ import io
 import itertools
 from typing import Sequence
 
-from nutcracker.utils import funcutils
 
-def encode_groups(groups):
-    old_abs = b''
-    for group in groups:
-        assert len(group) > 0
-        if set(group) == {0}:
-            while len(group) > 127:
-                yield old_abs + (255).to_bytes(1, byteorder='little', signed=False)
-                old_abs = b''
-                group = group[127:]
-            yield old_abs + (2 * len(group) + 1).to_bytes(1, byteorder='little', signed=False)
-            old_abs = b''
-        else:
-            absolute = bytes(group)
-            encoded = bytes(group[:1])
-            if 1 + len(encoded) + len(old_abs) < 1 + len(old_abs[1:] + absolute):
-                yield old_abs + (4 * (len(group) - 1) + 2).to_bytes(1, byteorder='little', signed=False) + encoded
-                old_abs = b''
-            else:
-                new_abs = old_abs[1:] + absolute
-                while len(new_abs) > 64:
-                    yield (252).to_bytes(1, byteorder='little', signed=False) + new_abs[:64]
-                    old_abs = b''
-                    new_abs = new_abs[64:]
-                old_abs = (4 * (len(new_abs) - 1)).to_bytes(1, byteorder='little', signed=False) + new_abs
-    if old_abs:
-        yield old_abs
+from .base import wrap_uint16le, unwrap_uint16le
+
 
 def encode_lined_rle(bmap: Sequence[Sequence[int]]) -> bytes:
     with io.BytesIO() as stream:
@@ -38,13 +13,16 @@ def encode_lined_rle(bmap: Sequence[Sequence[int]]) -> bytes:
                 stream.write(b'\00\00')
                 continue
 
-            grouped = [list(group) for c, group in itertools.groupby(line)]
+            grouped = [list(group) for _, group in itertools.groupby(line)]
             eg = list(encode_rle_groups(grouped))
             # print('ENCODED', eg)
-            linedata = b''.join(bytes([l, *(() if l & 1 else g)]) for l, g in eg)
-            sized = len(linedata).to_bytes(2, byteorder='little', signed=False) + linedata
-            stream.write(sized)
+            stream.write(
+                wrap_uint16le(
+                    b''.join(bytes([ll, *(() if ll & 1 else g)]) for ll, g in eg)
+                )
+            )
         return stream.getvalue()
+
 
 def decode_rle_group(line, width):
     out = [0 for _ in range(width)]
@@ -53,12 +31,15 @@ def decode_rle_group(line, width):
         while stream.tell() < len(line) and currx < width:
             code = ord(stream.read(1))
             if code & 1:  # skip count
-                currx += (code >> 1)
+                currx += code >> 1
             else:
                 count = (code >> 2) + 1
-                out[currx:currx+count] = stream.read(1) * count if code & 2 else stream.read(count)
+                out[currx : currx + count] = (
+                    stream.read(1) * count if code & 2 else stream.read(count)
+                )
                 currx += count
     return out
+
 
 def decode_rle_group_gen(line, width):
     with io.BytesIO(line) as stream:
@@ -68,51 +49,14 @@ def decode_rle_group_gen(line, width):
                 yield (code, [0] * (code >> 1))
             else:
                 count = (code >> 2) + 1
-                yield (code, list(stream.read(1) * count if code & 2 else stream.read(count)))
+                yield (
+                    code,
+                    list(stream.read(1) * count if code & 2 else stream.read(count)),
+                )
+
 
 def to_byte(num):
     return bytes([num])
-
-def encode_rle_groups(groups):
-    buf = []
-    for group in groups:
-        assert len(group) > 0
-        if set(group) == {0}:
-            if buf:
-                yield (4 * (len(buf) - 1), list(buf))
-                buf = []
-            while len(group) > 127:
-                yield (2 * 127 + 1, [0] * 127)
-                group = group[127:]
-                if group:
-                    yield (2 * 1 + 1, [0])
-                    group = group[1:]
-            if group:
-                yield (2 * len(group) + 1, group)
-        else:
-            raw = 1 + len(buf) + len(group)
-            encoded = 1 + len(buf) + 2
-            # print(buf, group)
-            if raw < encoded or (buf and raw == encoded):
-                buf += group
-                while len(buf) > 64:
-                    yield (4 * (64 - 1), buf[:64])
-                    buf = buf[64:]
-            else:
-                if buf:
-                    yield (4 * (len(buf) - 1), list(buf))
-                    buf = []
-                while len(group) > 64:
-                    yield (4 * (64 - 1) + 2, group[:64])
-                    group = group[64:]
-                yield (4 * (len(group) - 1) + 2, group)
-    if buf:
-        yield (4 * (len(buf) - 1), list(buf))
-
-
-
-
-
 
 
 def encode_rle_groups(groups, buf=()):
@@ -121,11 +65,10 @@ def encode_rle_groups(groups, buf=()):
     groups = iter(groups)
     for group in groups:
 
-
         if set(group) == {0}:
             if buf:
                 # if len(set(buf)) == 1:
-                #     yield (4 * (len(buf) - 1) + 2, buf[:1]) 
+                #     yield (4 * (len(buf) - 1) + 2, buf[:1])
                 # else:
                 yield (4 * (len(buf) - 1), list(buf))
                 buf = []
@@ -158,12 +101,10 @@ def encode_rle_groups(groups, buf=()):
                     else:
                         yield from encode_rle_groups(groups, buf=buf)
 
-
             else:
                 if buf:
                     yield (4 * (len(buf) - 1), list(buf))
                     buf = []
-
 
                 if len(group) > 64:
                     yield (4 * (64 - 1) + 2, group[:1])
@@ -181,21 +122,20 @@ def encode_rle_groups(groups, buf=()):
 
 def decode_lined_rle(data, width, height, verify=True):
     with io.BytesIO(data) as stream:
-        lines = [
-            stream.read(
-                int.from_bytes(stream.read(2), signed=False, byteorder='little')
-            ) for _ in range(height)
-        ]
+        lines = [unwrap_uint16le(stream) for _ in range(height)]
     output = [decode_rle_group(line, width) for line in lines]
     output2 = [list(decode_rle_group_gen(line, width)) for line in lines]
 
-    for l, o in zip(lines, output2):
-        g = [list(group) for c, group in itertools.groupby(b''.join(bytes(oo) for _, oo in o))]
+    for ll, o in zip(lines, output2):
+        g = [
+            list(group)
+            for c, group in itertools.groupby(b''.join(bytes(oo) for _, oo in o))
+        ]
         e = [t for t in encode_rle_groups(g)]
-        o = [(c, gl[:1]) if c & (1|2) else (c, gl) for c, gl in o]
+        o = [(c, gl[:1]) if c & (1 | 2) else (c, gl) for c, gl in o]
         if e != o:
             print('================')
-            print('ORIG', list(l))
+            print('ORIG', list(ll))
             print('REGROUPED', g)
             print('OGROUPS', o)
             print('ENCODED', e)
@@ -203,16 +143,12 @@ def decode_lined_rle(data, width, height, verify=True):
         encoded = encode_lined_rle(output)
 
         with io.BytesIO(encoded) as stream:
-            elines = [
-                stream.read(
-                    int.from_bytes(stream.read(2), signed=False, byteorder='little')
-                ) for _ in range(height)
-            ]
+            elines = [unwrap_uint16le(stream) for _ in range(height)]
         ex = False
-        for idx, (l, e) in enumerate(zip(lines, elines)):
-            if not l == e:
+        for idx, (ll, e) in enumerate(zip(lines, elines)):
+            if not ll == e:
                 print(idx)
-                print('ORIGiNA', l)
+                print('ORIGiNA', ll)
                 print('ENCODED', e)
                 ex = True
         if ex:
