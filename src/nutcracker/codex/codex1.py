@@ -2,6 +2,8 @@ import io
 import itertools
 import struct
 
+from .base import unwrap_uint16le
+
 UINT16LE = struct.Struct('<H')
 
 
@@ -69,7 +71,7 @@ def decode1(width, height, f):
     out = [BG for _ in range(width * height)]
 
     with io.BytesIO(f) as stream:
-        lines = [stream.read(read_le_uint16(stream.read(2))) for _ in range(height)]
+        lines = [unwrap_uint16le(stream) for _ in range(height)]
         tail = stream.read()
         assert tail in {b'', b'\00'}, tail
 
