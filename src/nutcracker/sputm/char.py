@@ -8,9 +8,9 @@ from typing import Set, NamedTuple
 import numpy as np
 from PIL import Image
 
-from nutcracker.codex.rle import decode_lined_rle
 from nutcracker.graphics import image
-from .bpp_codec import decode_bpp_char
+from nutcracker.codex.rle import decode_lined_rle
+from nutcracker.codex.bpp_codec import decode_bpp_char
 
 
 class DataFrame(NamedTuple):
@@ -126,6 +126,7 @@ if __name__ == '__main__':
     print(files)
     for filename in files:
 
+        print('==============', filename)
         basename = os.path.basename(filename)
         with open(filename, 'rb') as res:
             data = sputm.assert_tag('CHAR', sputm.untag(res))

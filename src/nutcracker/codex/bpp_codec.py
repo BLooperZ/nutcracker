@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-import io
 from typing import Sequence
 
 from nutcracker.utils.funcutils import grouper, flatten
 
-def decode_bpp_char(data: bytes, width: int, height: int, bpp: int = 1) -> Sequence[Sequence[int]]:
+
+def decode_bpp_char(
+    data: bytes, width: int, height: int, bpp: int = 1
+) -> Sequence[Sequence[int]]:
     assert width != 0 and height != 0
     # print([f'{x:08b}' for x in data])
     bits = ''.join(f'{x:08b}' for x in data)
@@ -12,9 +14,12 @@ def decode_bpp_char(data: bytes, width: int, height: int, bpp: int = 1) -> Seque
     bmap = [int(''.join(next(gbits)), 2) for _ in range(height * width)]
 
     char = list(grouper(bmap, width))
-    
+
     left = [int(''.join(gb), 2) for gb in gbits]  # why there is still data left?
-    print(left)
+    # print('DATA', data)
+    # print('CHAR', char)
+    print('LEFT', left, height, width)
+
     # char += list(grouper(left, width, fillvalue=0))
 
     # char = list(grouper(bmap, width, fillvalue=0))
@@ -22,7 +27,8 @@ def decode_bpp_char(data: bytes, width: int, height: int, bpp: int = 1) -> Seque
     # assert encoded == data, (encoded, data)
     return char
 
-def encode_bpp_char(bmap: Sequence[Sequence[int]], bpp = 1) -> bytes:
+
+def encode_bpp_char(bmap: Sequence[Sequence[int]], bpp: int = 1) -> bytes:
     # height = len(bmap)
     # width = len(bmap[0])
     fbits = flatten(''.join(f'{x:0{bpp}b}' for x in flatten(bmap)))
