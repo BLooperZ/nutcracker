@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
-import io
 import os
 
 import numpy as np
+from PIL import Image
+
 
 from nutcracker.graphics import image
 
-from .index import read_index_v5tov7, read_index_he, read_file
+from .index import read_file
 from .proom import (
     read_rmhd,
     read_rmhd_structured,
@@ -147,6 +148,13 @@ def get_rooms(root):
             else:
                 yield from get_rooms(elem.children)
 
+EGA = (
+    (0,0,0), (0,0,170), (0,170,0), (0,170,170),
+    (170,0,0), (170,0,170), (170,85,0), (170,170,170),
+    (85,85,85), (85,85,255), (85,255,85), (85,255,255),
+    (255,85,85), (255,85,255), (255,255,85), (255,255,255)
+)
+EGA = np.asarray(EGA, dtype=np.uint8)
 
 if __name__ == '__main__':
     import argparse
@@ -161,6 +169,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
+    parser.add_argument('--ega', action='store_true', help='output is in EGA mode')
     args = parser.parse_args()
 
     basedir = os.path.basename(args.filename)
@@ -192,11 +201,25 @@ if __name__ == '__main__':
 
         for lflf in get_rooms(t):
             header, palette, room, rmim = read_room_settings(lflf)
+            epal = np.frombuffer(sputm.find('EPAL', room).data, dtype=np.uint8)
             room_bg = None
             room_id = lflf.attribs.get('gid')
 
             for path, room_bg, zpxx in read_room(header, rmim):
-                room_bg.putpalette(palette)
+                if args.ega:
+                    room_bg = np.asarray(room_bg)
+                    room_bg1 = epal[room_bg] % 16
+                    room_bg2 = epal[room_bg] // 16
+                    room_bg3 = np.copy(room_bg1)
+                    room_bg4 = np.copy(room_bg2)
+                    room_bg3[::2, :] = room_bg2[::2, :]
+                    room_bg4[::2, :] = room_bg1[::2, :]
+                    room_bg = np.dstack([room_bg3, room_bg4]).reshape(room_bg.shape[0], room_bg.shape[1] * 2)
+                    room_bg = np.repeat(room_bg, 2, axis=0)
+                    # print(room_bg.shape)
+                    room_bg = Image.fromarray(EGA[np.asarray(room_bg)])
+                else:
+                    room_bg.putpalette(palette)
 
                 path = f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else path
 
