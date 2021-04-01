@@ -10,7 +10,6 @@ from nutcracker.utils.funcutils import grouper, flatten
 from nutcracker.graphics.image import convert_to_pil_image
 from nutcracker.codex import codex
 from nutcracker.codex import bomb, rle
-from nutcracker.sputm import bpp_codec
 
 from typing import Iterator, NamedTuple, Sequence, Tuple
 
@@ -111,6 +110,8 @@ def decode_frame(akhd, ci, cd, palette):
 
     width = int.from_bytes(ci[0:2], signed=False, byteorder='little')
     height = int.from_bytes(ci[2:4], signed=False, byteorder='little')
+
+    print(akhd, width, height)
 
     if akhd.codec == 1:
         try:

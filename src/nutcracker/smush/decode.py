@@ -119,7 +119,7 @@ def decode_nut(root: Element, output_dir: str) -> None:
         nchars, enumerate(lchars), transparency=transparency, bgs=BGS
     )
     palette = list(header.palette)
-    palette[3 * transparency : 3 * transparency + 3] = [109, 109, 109]
+    palette[3 * transparency :][:3] = [109, 109, 109]
     bim.putpalette(palette)
     bim.save(os.path.join(output_dir, 'chars.png'))
 

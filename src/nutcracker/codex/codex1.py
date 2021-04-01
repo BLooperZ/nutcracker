@@ -12,7 +12,7 @@ def read_le_uint16(f):
 
 
 def to_matrix(w, h, data):
-    return [data[i * w : (i + 1) * w] for i in range(h)]
+    return [data[i * w :][:w] for i in range(h)]
 
 
 def encode1(bmap):

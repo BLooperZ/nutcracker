@@ -72,7 +72,7 @@ def read_game_resources(game, idgens, disks, max_depth=None):
                     offs = sputm.untag(stream)
                     offs = {
                         int.from_bytes(
-                            offs.data[4*i:4*i+4],
+                            offs.data[4*i:][:4],
                             byteorder='little',
                             signed=False
                         ): i + 1

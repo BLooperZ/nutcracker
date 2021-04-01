@@ -49,6 +49,7 @@ def read_chunks(cfg: _ChunkSetting, data: bytes) -> Iterator[Tuple[int, Chunk]]:
             offset = align_read_stream(stream, align=cfg.align)
             assert offset == stream.tell()
         assert stream.read() == b''
+        assert offset == max_size
 
 
 def workaround_x80(cfg: _ChunkSetting, stream: IO[bytes]) -> int:
