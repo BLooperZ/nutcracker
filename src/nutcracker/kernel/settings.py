@@ -1,38 +1,37 @@
 import logging
-import struct
 from dataclasses import dataclass, field
 from typing import Mapping, Optional, Set
 
-from .structured import StructuredTuple
-from .types import ChunkHeader
+from .buffer import BufferLike
+from .chunk import ChunkFactory, ScummChunk, IFFChunk, Chunk
 
-SCUMM_CHUNK = StructuredTuple(('size', 'tag'), struct.Struct('<I2s'), ChunkHeader)
-IFF_CHUNK = StructuredTuple(('tag', 'size'), struct.Struct('>4sI'), ChunkHeader)
 
-INCLUSIVE = IFF_CHUNK.size
-EXCLUSIVE = 0
+SCUMM_CHUNK = ScummChunk()
+IFF_CHUNK_EX = IFFChunk(size_fix=IFFChunk.EXCLUSIVE)
+IFF_CHUNK_IN = IFFChunk(size_fix=IFFChunk.INCLUSIVE)
 
 
 @dataclass(frozen=True)
 class _ChunkSetting:
     """Setting for resource chunks
 
-    size_fix: int -
-        can be used to determine whether size from chunk header
-        is INCLUSIVE* (8) or EXCLUSIVE (0).
-
-    * size of chunk header = 4CC tag (4) + word size (default 4) = 8 bytes
-
     align: int (default 2) -
         data alignment for chunk start offsets.
 
-    header: stream <-> ChunkHeader (default IFF_CHUNK) -
-        structure to read/write chunk header
+    chunk: stream <-> Chunk (default IFF_CHUNK_EX) -
+        factory to read/write chunk header
     """
 
-    size_fix: int = EXCLUSIVE
     align: int = 2
-    header: StructuredTuple[ChunkHeader] = IFF_CHUNK
+    chunk: ChunkFactory = IFF_CHUNK_EX
+
+    def untag(self, buffer: BufferLike, offset: int = 0) -> Chunk:
+        """Read chunk from given buffer."""
+        return self.chunk.untag(buffer, offset=offset)
+
+    def mktag(self, tag: str, data: bytes) -> bytes:
+        """Create chunk bytes from given tag and data."""
+        return self.chunk.mktag(tag, data)
 
 
 @dataclass(frozen=True)

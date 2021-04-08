@@ -1,6 +1,6 @@
 import struct
 from dataclasses import dataclass
-from typing import IO, Callable, Generic, Sequence, TypeVar
+from typing import Callable, Generic, IO, Sequence, TypeVar
 
 T = TypeVar('T')
 
@@ -16,7 +16,10 @@ class StructuredTuple(Generic[T]):
         return self.structure.size
 
     def unpack(self, stream: IO[bytes]) -> T:
-        values = self.structure.unpack(stream.read(self.structure.size))
+        return self.unpack_from(stream.read(self.structure.size))
+
+    def unpack_from(self, data: bytes, offset: int = 0) -> T:
+        values = self.structure.unpack_from(data, offset=offset)
         return self.factory(**dict(zip(self.fields, values)))
 
     def pack(self, data: T) -> bytes:

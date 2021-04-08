@@ -2,9 +2,9 @@
 import os
 from dataclasses import asdict, replace
 from typing import Iterable, Iterator, Tuple
+
 from nutcracker.graphics.image import ImagePosition, TImage
 from nutcracker.smush.ahdr import AnimationHeader
-
 from nutcracker.smush.fobj import mkobj, FrameObjectHeader
 from nutcracker.codex.codex import get_encoder
 from nutcracker.smush.preset import smush

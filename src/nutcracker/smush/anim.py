@@ -1,11 +1,10 @@
 import itertools
 from typing import Any, Dict, Iterator, NamedTuple, Optional
 
-from nutcracker.kernel.types import Chunk
 from nutcracker.utils.fileio import read_file
 from nutcracker.smush import ahdr
 from nutcracker.smush.preset import smush
-from nutcracker.smush.types import Element
+from nutcracker.smush.types import Chunk, Element
 from nutcracker.smush.element import read_elements, read_data
 
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import io
 import struct
 from typing import NamedTuple
 import zlib
@@ -36,9 +35,8 @@ class FrameObject(NamedTuple):
 
 
 def unobj(data: bytes) -> FrameObject:
-    with io.BytesIO(data) as stream:
-        header = FOBJ_META.unpack(stream)
-        return FrameObject(header, stream.read())
+    header = FOBJ_META.unpack_from(data)
+    return FrameObject(header, data[FOBJ_META.size:])
 
 
 def mkobj(meta: FrameObjectHeader, data: bytes) -> bytes:

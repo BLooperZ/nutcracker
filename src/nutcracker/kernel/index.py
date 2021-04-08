@@ -6,7 +6,8 @@ from typing import Any, Callable, Dict, FrozenSet, Iterator, Optional, Set
 
 from .resource import read_chunks
 from .settings import _IndexSetting
-from .types import Chunk, Element
+from .chunk import Chunk, IFFChunk
+from .element import Element
 
 
 class MissingSchemaKey(Exception):
@@ -46,7 +47,7 @@ def check_schema(cfg: _IndexSetting, ptag: Optional[str], tag: str) -> None:
 
 
 def create_element(offset: int, chunk: Chunk, **attrs: Any) -> Element:
-    return Element(*chunk, {'offset': offset, 'size': len(chunk.data), **attrs}, [])
+    return Element(chunk, {'offset': offset, 'size': len(chunk.data), **attrs}, [])
 
 
 def map_chunks(
@@ -61,6 +62,7 @@ def map_chunks(
         return
     if parent and not cfg.schema.get(parent.tag):
         return
+    data = memoryview(data)
     with exception_ptag_context(ptag):
         for offset, chunk in read_chunks(cfg, data):
             check_schema(cfg, ptag, chunk.tag)
@@ -69,7 +71,7 @@ def map_chunks(
                 offset, chunk, **(extra(parent, chunk, offset) if extra else {})
             )
             yield elem.content(
-                map_chunks(cfg, chunk.data, parent=elem, level=level + 1, extra=extra)
+                map_chunks(cfg, chunk._buffer[chunk._slice], parent=elem, level=level + 1, extra=extra)
             )
 
 
@@ -124,7 +126,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     cfg = _IndexSetting(
-        size_fix=args.size_fix, align=args.align, max_depth=args.max_depth
+        chunk=IFFChunk(size_fix=args.size_fix),
+        align=args.align,
+        max_depth=args.max_depth,
     )
 
     schema = None

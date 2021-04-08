@@ -5,7 +5,7 @@ from typing import IO, Iterator, Optional
 
 from parse import parse
 
-from .types import Element, ElementTree
+from .element import Element, ElementTree
 
 
 def findall(tag: str, root: ElementTree) -> Iterator[Element]:

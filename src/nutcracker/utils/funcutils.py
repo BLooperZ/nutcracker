@@ -1,5 +1,5 @@
 from itertools import chain, zip_longest
-from typing import Iterable, Iterator, Sequence, TypeVar
+from typing import Iterable, Iterator, Optional, Sequence, TypeVar
 
 T = TypeVar('T')
 
@@ -11,7 +11,7 @@ def flatten(ls: Iterable[Iterable[T]]) -> Iterator[T]:
 
 
 def grouper(
-    iterable: Iterable[T], n: int, fillvalue: T = None
+    iterable: Iterable[T], n: int, fillvalue: Optional[T] = None
 ) -> Iterator[Sequence[T]]:
     """Collect data into fixed-length chunks or blocks."""
     # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"

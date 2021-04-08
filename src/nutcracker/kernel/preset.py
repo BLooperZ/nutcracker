@@ -1,7 +1,7 @@
 from dataclasses import dataclass, replace
 from typing import Any, TypeVar
 
-from . import chunk, settings, tree
+from . import helpers, settings, tree
 
 _SettingT = TypeVar('_SettingT', bound='_DefaultOverride')
 
@@ -16,15 +16,13 @@ class _DefaultOverride:
 class _ChunkPreset(settings._ChunkSetting, _DefaultOverride):
 
     # static pass through
-    assert_tag = staticmethod(chunk.assert_tag)
-    drop_offsets = staticmethod(chunk.drop_offsets)
-    print_chunks = staticmethod(chunk.print_chunks)
+    assert_tag = staticmethod(helpers.assert_tag)
+    drop_offsets = staticmethod(helpers.drop_offsets)
+    print_chunks = staticmethod(helpers.print_chunks)
 
     # isort: off
     from .resource import (
-        untag,
         read_chunks,
-        mktag,
         write_chunks,
     )
     # isort: on

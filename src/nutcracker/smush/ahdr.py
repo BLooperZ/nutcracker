@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import io
 import struct
 from dataclasses import dataclass, replace
 from typing import Optional
@@ -41,16 +40,17 @@ AHDR_V2 = StructuredTuple(
 )
 
 
-def from_bytes(data: bytes) -> AnimationHeader:
-    with io.BytesIO(data) as stream:
-        header = AHDR_V1.unpack(stream)
-        if header.version == 2:
-            header = replace(header, v2=AHDR_V2.unpack(stream))
-        if stream.read():
-            raise ValueError('got extra trailing data')
-        if header.v2.dummy2 or header.v2.dummy3:
-            raise ValueError('non-zero value in header dummies')
-        return header
+def from_bytes(data: bytes, offset: int = 0) -> AnimationHeader:
+    header = AHDR_V1.unpack_from(data, offset)
+    offset += AHDR_V1.size
+    if header.version == 2:
+        header = replace(header, v2=AHDR_V2.unpack_from(data, AHDR_V1.size))
+        offset += AHDR_V2.size
+    if len(data[offset:]) > 0:
+        raise ValueError('got extra trailing data')
+    if header.v2.dummy2 or header.v2.dummy3:
+        raise ValueError('non-zero value in header dummies')
+    return header
 
 
 def to_bytes(header: AnimationHeader) -> bytes:

@@ -11,7 +11,7 @@ import numpy as np
 
 from nutcracker.codex.codex import get_encoder
 from nutcracker.graphics.image import ImagePosition
-from nutcracker.kernel.types import Element
+from nutcracker.kernel.element import Element
 from nutcracker.smush import anim, fobj, ahdr
 from nutcracker.smush.preset import smush
 from nutcracker.utils.fileio import write_file
