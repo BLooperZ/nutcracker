@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-from .codex37_np import decode37 as e_decode37, fake_encode37
-from .codex47_np import decode47 as e_decode47, fake_encode47
-from .codex1 import encode1, decode1
-from .nutfont import unidecoder, codec21, codec44
+from .codex1 import decode1, encode1
+from .codex37_np import decode37 as e_decode37
+from .codex37_np import fake_encode37
+from .codex47_np import decode47 as e_decode47
+from .codex47_np import fake_encode47
+from .nutfont import codec21, codec44, unidecoder
 
 # DECODE
 

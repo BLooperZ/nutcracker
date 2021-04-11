@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 
 import io
-import os
 from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
 
 from nutcracker.codex.codex import decode1
-from nutcracker.codex.smap import decode_smap, decode_he, read_uint16le, read_uint32le, parse_strip
+from nutcracker.codex.smap import decode_he, decode_smap, read_uint16le, read_uint32le
+
 from .preset import sputm
 from .room import convert_to_pil_image, read_room_background_v8
+
 
 def read_room_background(image, width, height, zbuffers):
     if image.tag == 'SMAP':

@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol, Sequence, Tuple, Union
 
-from PIL import Image
 import numpy as np
-
+from PIL import Image
 
 Box = Union[Tuple[int, ...]]
 Matrix = Sequence[Sequence[int]]

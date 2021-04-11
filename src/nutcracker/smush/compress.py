@@ -1,11 +1,9 @@
-#!/usr/bin/env python3
-
 from typing import Iterable, Iterator
 
 from nutcracker.smush import anim
-from nutcracker.smush.types import Element
-from nutcracker.smush.preset import smush
 from nutcracker.smush.fobj import compress
+from nutcracker.smush.preset import smush
+from nutcracker.smush.types import Element
 
 
 def compress_frame_data(frame: Element) -> Iterator[bytes]:
@@ -14,19 +12,19 @@ def compress_frame_data(frame: Element) -> Iterator[bytes]:
         if comp.tag == 'FOBJ' and first_fobj:
             first_fobj = False
             yield smush.mktag('ZFOB', compress(comp.data))
+        elif comp.tag == 'PSAD':
             continue
-        if comp.tag == 'PSAD':
             # print('skipping sound stream')
-            continue
         else:
             first_fobj = first_fobj and comp.tag != 'ZFOB'
             yield smush.mktag(comp.tag, comp.data)
-            continue
 
 
 def compress_frames(frames: Iterable[Element]) -> Iterator[bytes]:
-    for frame in frames:
-        yield smush.mktag('FRME', smush.write_chunks(compress_frame_data(frame)))
+    yield from (
+        smush.mktag('FRME', smush.write_chunks(compress_frame_data(frame)))
+        for frame in frames
+    )
 
 
 def strip_compress_san(root: Element) -> bytes:

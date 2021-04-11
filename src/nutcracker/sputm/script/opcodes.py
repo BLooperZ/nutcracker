@@ -1,14 +1,14 @@
 from functools import partial
-from typing import Callable, Dict, IO, Iterable, Mapping, Optional, TypeVar
+from typing import IO, Callable, Dict, Iterable, Mapping, Optional, TypeVar
 
 from .parser import (
     ByteValue,
     CString,
     DWordValue,
     RefOffset,
-    WordValue,
-    Statement,
     ScriptArg,
+    Statement,
+    WordValue,
 )
 
 OpTable = Mapping[int, Callable[[int, IO[bytes]], Statement]]

@@ -5,22 +5,20 @@ import os
 import numpy as np
 from PIL import Image
 
-
 from nutcracker.graphics import image
 
 from .index import read_file
+from .preset import sputm
 from .proom import (
-    read_rmhd,
-    read_rmhd_structured,
+    convert_to_pil_image,
     read_imhd,
     read_imhd_v7,
     read_imhd_v8,
+    read_rmhd,
+    read_rmhd_structured,
     read_room_background,
     read_room_background_v8,
-    convert_to_pil_image
 )
-
-from .preset import sputm
 
 
 def read_room_settings(lflf):
@@ -159,13 +157,11 @@ EGA = np.asarray(EGA, dtype=np.uint8)
 if __name__ == '__main__':
     import argparse
     import pprint
-    from typing import Dict
 
-    from .types import Chunk
-    from .index2 import read_directory, read_game_resources
-    from .index import compare_pid_off, read_rnam
-    from .resource import detect_resource
     from nutcracker.graphics.frame import resize_pil_image
+
+    from .index2 import read_game_resources
+    from .resource import detect_resource
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')

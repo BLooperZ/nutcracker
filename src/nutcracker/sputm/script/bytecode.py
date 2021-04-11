@@ -1,12 +1,11 @@
 import io
 from typing import Iterable, Iterator, Mapping, Tuple, Type, TypeVar
 
-from nutcracker.utils.funcutils import flatten
-from nutcracker.sputm.types import Element
 from nutcracker.sputm.script.opcodes import OpTable
+from nutcracker.sputm.types import Element
+from nutcracker.utils.funcutils import flatten
 
 from .parser import CString, RefOffset, ScriptArg, Statement
-
 
 S_Arg = TypeVar('S_Arg', bound=ScriptArg)
 ByteCode = Mapping[int, Statement]
@@ -140,9 +139,9 @@ if __name__ == '__main__':
     import argparse
     import glob
 
-    from ..preset import sputm
     from nutcracker.utils.fileio import read_file
 
+    from ..preset import sputm
     from .opcodes import OPCODES_he80
 
     parser = argparse.ArgumentParser(description='read smush file')

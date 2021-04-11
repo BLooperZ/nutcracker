@@ -3,8 +3,7 @@ from typing import IO, Optional, Sequence, Type
 
 from nutcracker.sputm.script.parser import ScriptArg
 
-from .opcodes import ByteValue, WordValue, RefOffset, CString
-
+from .opcodes import ByteValue, CString, RefOffset, WordValue
 
 PARAM_1 = 0x80
 PARAM_2 = 0x40
@@ -1036,8 +1035,9 @@ if __name__ == '__main__':
 
     from nutcracker.utils.fileio import read_file
     from nutcracker.utils.funcutils import flatten
+
     from ..preset import sputm
-    from .bytecode import get_scripts, script_map, descumm
+    from .bytecode import descumm, get_scripts, script_map
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('files', nargs='+', help='files to read from')

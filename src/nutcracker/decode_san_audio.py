@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
+import glob
 import io
 import os
 import struct
-import glob
 from functools import partial
 
 from nutcracker.utils import funcutils
@@ -43,8 +43,7 @@ def verify_nframes(frames, nframes):
 if __name__ == '__main__':
     import argparse
 
-    from nutcracker.smush import anim
-    from nutcracker.smush import smush
+    from nutcracker.smush import anim, smush
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')

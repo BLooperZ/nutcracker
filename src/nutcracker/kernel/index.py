@@ -4,10 +4,10 @@ from contextlib import contextmanager
 from dataclasses import replace
 from typing import Any, Callable, Dict, FrozenSet, Iterator, Optional, Set
 
+from .chunk import Chunk
+from .element import Element
 from .resource import read_chunks
 from .settings import _IndexSetting
-from .chunk import Chunk, IFFChunk
-from .element import Element
 
 
 class MissingSchemaKey(Exception):
@@ -27,10 +27,10 @@ class MissingSchemaEntry(Exception):
 def exception_ptag_context(ptag: Optional[str]) -> Iterator[None]:
     try:
         yield
-    except Exception as e:
-        if not hasattr(e, 'ptag'):
-            e.ptag = ptag  # type: ignore
-        raise e
+    except Exception as exc:
+        if not hasattr(exc, 'ptag'):
+            exc.ptag = ptag  # type: ignore
+        raise exc
 
 
 def check_schema(cfg: _IndexSetting, ptag: Optional[str], tag: str) -> None:
@@ -39,11 +39,11 @@ def check_schema(cfg: _IndexSetting, ptag: Optional[str], tag: str) -> None:
             raise MissingSchemaEntry(ptag, tag)
         if tag not in cfg.schema:
             raise MissingSchemaKey(tag)
-    except (MissingSchemaKey, MissingSchemaEntry) as e:
+    except (MissingSchemaKey, MissingSchemaEntry) as exc:
         if cfg.strict:
-            raise e
+            raise exc
         else:
-            cfg.logger.warning(e)
+            cfg.logger.warning(exc)
 
 
 def create_element(offset: int, chunk: Chunk, **attrs: Any) -> Element:
@@ -68,16 +68,22 @@ def map_chunks(
             check_schema(cfg, ptag, chunk.tag)
 
             elem = create_element(
-                offset, chunk, **(extra(parent, chunk, offset) if extra else {})
+                offset, chunk, **(extra(parent, chunk, offset) if extra else {}),
             )
             yield elem.content(
-                map_chunks(cfg, chunk._buffer[chunk._slice], parent=elem, level=level + 1, extra=extra)
+                map_chunks(
+                    cfg,
+                    chunk.slice(chunk.buffer),
+                    parent=elem,
+                    level=level + 1,
+                    extra=extra,
+                ),
             )
 
 
 def generate_schema(cfg: _IndexSetting, data: bytes) -> Dict[str, Set[str]]:
     EMPTY: FrozenSet[str] = frozenset()
-    DUMMY: FrozenSet[str] = frozenset({'__DUMMY__'})
+    DUMMY: FrozenSet[str] = frozenset(('__DUMMY__',))
 
     schema: Dict[str, FrozenSet[str]] = {}
 
@@ -94,65 +100,11 @@ def generate_schema(cfg: _IndexSetting, data: bytes) -> Dict[str, Set[str]]:
         except MissingSchemaEntry as miss:
             schema[miss.ptag] -= DUMMY
             schema[miss.ptag] |= {miss.tag}
-        except Exception as e:
+        except Exception as exc:
             # pylint: disable=no-member
-            assert hasattr(e, 'ptag')
-            if schema.get(e.ptag) == EMPTY:  # type: ignore
+            assert hasattr(exc, 'ptag')
+            if schema.get(exc.ptag) == EMPTY:  # type: ignore
                 raise ValueError(
-                    'Cannot create schema for given file with given configuration'
+                    'Cannot create schema for given file with given configuration',
                 )
-            schema[e.ptag] = EMPTY  # type: ignore
-
-
-if __name__ == '__main__':
-    import argparse
-    import os
-    from pprint import pprint
-
-    import yaml
-
-    from nutcracker.utils.fileio import read_file
-
-    from . import tree
-
-    parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('filename', help='filename to read from')
-    parser.add_argument('--size-fix', default=0, type=int, help='header size fix')
-    parser.add_argument('--align', default=1, type=int, help='alignment between chunks')
-    parser.add_argument('--schema', type=str, help='load saved schema from file')
-    parser.add_argument('--chiper-key', default='0x00', type=str, help='xor key')
-    parser.add_argument('--max-depth', default=None, type=int, help='max depth')
-    parser.add_argument('--schema-dump', type=str, help='save schema to file')
-    args = parser.parse_args()
-
-    cfg = _IndexSetting(
-        chunk=IFFChunk(size_fix=args.size_fix),
-        align=args.align,
-        max_depth=args.max_depth,
-    )
-
-    schema = None
-    if args.schema:
-        with open(args.schema, 'r') as f:
-            schema = yaml.safe_load(f)
-
-    data = read_file(args.filename, key=int(args.chiper_key, 16))
-
-    schema = schema or generate_schema(cfg, data)
-
-    pprint(schema)
-
-    if args.schema_dump:
-        with open(args.schema_dump, 'w') as f:
-            yaml.dump(schema, f)
-
-    def update_element_path(
-        parent: Optional[Element], chunk: Chunk, offset: int
-    ) -> Dict[str, str]:
-        dirname = parent.attribs['path'] if parent else ''
-        res = {'path': os.path.join(dirname, chunk.tag)}
-        return res
-
-    root = map_chunks(replace(cfg, schema=schema), data, extra=update_element_path)
-    for t in root:
-        tree.render(t)
+            schema[exc.ptag] = EMPTY  # type: ignore

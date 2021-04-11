@@ -14,12 +14,8 @@ from typing import (
 import numpy as np
 from PIL import Image
 
+from nutcracker.graphics.image import ImagePosition, TImage, convert_to_pil_image
 from nutcracker.utils import funcutils
-from nutcracker.graphics.image import (
-    convert_to_pil_image,
-    ImagePosition,
-    TImage,
-)
 
 T = TypeVar('T')
 

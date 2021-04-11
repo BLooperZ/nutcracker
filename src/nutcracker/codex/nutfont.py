@@ -1,7 +1,7 @@
 import io
 import itertools
 
-from .base import UINT16LE, wrap_uint16le, unwrap_uint16le
+from .base import UINT16LE, unwrap_uint16le, wrap_uint16le
 
 BG = 39
 

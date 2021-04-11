@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-from dataclasses import asdict, dataclass, replace
-from collections import deque
-import os
-import glob
-from itertools import chain
-import struct
 
-from PIL import Image
+import glob
+import os
+import struct
+from collections import deque
+from dataclasses import asdict, dataclass, replace
+from itertools import chain
+from typing import Deque, Iterable, Iterator, List, Optional, Sequence, Set
+
 import numpy as np
+from PIL import Image
 
 from nutcracker.codex.codex import get_encoder
 from nutcracker.graphics.image import ImagePosition
 from nutcracker.kernel.element import Element
-from nutcracker.smush import anim, fobj, ahdr
+from nutcracker.smush import ahdr, anim, fobj
 from nutcracker.smush.preset import smush
 from nutcracker.utils.fileio import write_file
-
-from typing import Deque, Iterable, Iterator, List, Optional, Sequence, Set
 
 UINT16LE = struct.Struct('<H')
 
 
 @dataclass(frozen=True)
-class FrameGenCtx:
+class FrameGenCtx(object):
     idx: int
     frame: Optional[Element] = None
     seq_ind: Optional[int] = None
@@ -32,7 +32,7 @@ def convert_fobj_meta(datam: bytes) -> int:
     meta, data = fobj.unobj(datam)
     if meta.codec == 47:
         return UINT16LE.unpack(data[:2])[0]
-    if meta.codec == 47:
+    elif meta.codec == 37:
         return UINT16LE.unpack(data[2:4])[0]
     return 0
 
@@ -43,7 +43,7 @@ def decode_frame(header: ahdr.AnimationHeader, idx: int, frame: Element) -> Fram
         if comp.tag == 'FOBJ':
             decoded = convert_fobj_meta(comp.data)
             ctx = replace(ctx, seq_ind=decoded)
-        if comp.tag == 'ZFOB':
+        elif comp.tag == 'ZFOB':
             data = fobj.decompress(comp.data)
             decoded = convert_fobj_meta(data)
             ctx = replace(ctx, seq_ind=decoded)
@@ -89,19 +89,17 @@ def encode_seq(sequence: Iterable[FrameGenCtx], directory: str) -> Iterator[byte
                 screen = get_frame_image(directory, frame.idx)
                 encoded = encode_fake(screen, fobj.decompress(comp.data))
                 fdata += [smush.mktag('ZFOB', fobj.compress(encoded))]
-                continue
-            if comp.tag == 'FOBJ':
+            elif comp.tag == 'FOBJ':
                 screen = get_frame_image(directory, frame.idx)
                 fdata += [smush.mktag('FOBJ', encode_fake(screen, comp.data))]
-                continue
             else:
                 fdata += [smush.mktag(comp.tag, comp.data)]
-                continue
         yield smush.write_chunks(fdata)
 
 
 def split_sequences(
-    header: ahdr.AnimationHeader, frames: Iterable[Element]
+    header: ahdr.AnimationHeader,
+    frames: Iterable[Element],
 ) -> Iterator[Iterator[FrameGenCtx]]:
     saved = deque(maxlen=1)
     frames = (decode_frame(header, idx, frame) for idx, frame in enumerate(frames))
@@ -121,16 +119,18 @@ def check_dirty(frame_range: Iterable[int], files: Set[str]) -> bool:
 
 
 def replace_dirty_sequences(
-    header: ahdr.AnimationHeader, frames: Iterable[Element], directory: str
+    header: ahdr.AnimationHeader,
+    frames: Iterable[Element],
+    directory: str,
 ) -> Iterator[bytes]:
     # split frames to sequences
     # for frames in each sequence (range?)
     # if any of the frame images in the sequence exists in parameter
     # re-encode sequence
     # yield each frame
-    files = set(
+    files = {
         os.path.basename(file) for file in glob.iglob(os.path.join(directory, '*.png'))
-    )
+    }
     for sequence in split_sequences(header, frames):
         seq = list(sequence)
         frame_range = range(seq[0].idx, 1 + seq[-1].idx)
@@ -138,8 +138,7 @@ def replace_dirty_sequences(
         if dirty:
             yield from encode_seq(seq, directory)
         else:
-            for frame in seq:
-                yield frame.frame.data
+            yield from (frame.frame.data for frame in seq)
 
 
 def encode_san(root: Element, directory: str) -> bytes:

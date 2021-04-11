@@ -2,9 +2,9 @@ import io
 import struct
 from typing import Iterator, Tuple
 
-from nutcracker.utils.funcutils import flatten
 from nutcracker.chiper import xor
 from nutcracker.sputm.index import compare_pid_off
+from nutcracker.utils.funcutils import flatten
 
 UINT16LE = struct.Struct('<H')
 
@@ -63,12 +63,13 @@ def read_index(root):
 
 if __name__ == '__main__':
     import argparse
-    import os
     import glob
+    import os
     from pprint import pprint
 
-    from .preset import earwax
     from nutcracker.utils.fileio import read_file
+
+    from .preset import earwax
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('files', nargs='+', help='files to read from')

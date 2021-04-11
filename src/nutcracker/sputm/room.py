@@ -2,14 +2,13 @@
 import io
 import os
 import struct
-
 from functools import partial
 
 import numpy as np
 
-from nutcracker.graphics.image import convert_to_pil_image
 from nutcracker.codex.codex import decode1
-from nutcracker.codex.smap import decode_smap, read_uint32le, read_uint16le
+from nutcracker.codex.smap import decode_smap, read_uint16le, read_uint32le
+from nutcracker.graphics.image import convert_to_pil_image
 
 from .preset import sputm
 

@@ -5,10 +5,10 @@ from functools import partial
 
 import numpy as np
 
-from nutcracker.utils.funcutils import flatten
-from nutcracker.graphics import grid
-from nutcracker.codex.rle import encode_lined_rle
 from nutcracker.codex.bpp_codec import encode_bpp_char
+from nutcracker.codex.rle import encode_lined_rle
+from nutcracker.graphics import grid
+from nutcracker.utils.funcutils import flatten
 
 
 def calc_bpp(x: int):

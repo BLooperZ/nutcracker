@@ -8,7 +8,9 @@ from .settings import _ChunkSetting
 
 
 def read_chunks(
-    cfg: _ChunkSetting, buffer: BufferLike, offset: int = 0
+    cfg: _ChunkSetting,
+    buffer: BufferLike,
+    offset: int = 0,
 ) -> Iterator[Tuple[int, Chunk]]:
     """Read all chunks from given bytes."""
     data = memoryview(buffer)
@@ -26,13 +28,13 @@ def workaround_x80(cfg: _ChunkSetting, buffer: BufferLike, offset: int = 0) -> i
     header appears as '\\x80DIG' and index indicate they should start 1 byte afterwards.
     since header tag needs to be ASCII, it's low risk.
     """
-    if buffer[offset] == 0x80:
+    SKIP_BYTE_VALUE = 0x80
+    if buffer[offset] == SKIP_BYTE_VALUE:
         getattr(cfg, 'logger', logging).warning(
-            'found \\x80 between chunks, skipping 1 byte...'
+            'found \\x80 between chunks, skipping 1 byte...',
         )
         return offset + 1
     return offset
-
 
 
 def write_chunks(cfg: _ChunkSetting, chunks: Iterable[Union[bytes, Chunk]]) -> bytes:

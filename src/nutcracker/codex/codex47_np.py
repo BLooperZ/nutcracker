@@ -1,8 +1,8 @@
 import io
 import logging
 import struct
-from enum import Enum
 from datetime import datetime
+from enum import Enum
 
 import numpy as np
 

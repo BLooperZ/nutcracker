@@ -1,13 +1,13 @@
 from dataclasses import dataclass, replace
 from typing import Any, TypeVar
 
-from . import helpers, settings, tree
+from . import iterchunk, settings, tree
 
 _SettingT = TypeVar('_SettingT', bound='_DefaultOverride')
 
 
 @dataclass(frozen=True)
-class _DefaultOverride:
+class _DefaultOverride(object):
     def __call__(self: _SettingT, **kwargs: Any) -> _SettingT:
         return replace(self, **kwargs)
 
@@ -16,9 +16,9 @@ class _DefaultOverride:
 class _ChunkPreset(settings._ChunkSetting, _DefaultOverride):
 
     # static pass through
-    assert_tag = staticmethod(helpers.assert_tag)
-    drop_offsets = staticmethod(helpers.drop_offsets)
-    print_chunks = staticmethod(helpers.print_chunks)
+    assert_tag = staticmethod(iterchunk.assert_tag)
+    drop_offsets = staticmethod(iterchunk.drop_offsets)
+    print_chunks = staticmethod(iterchunk.print_chunks)
 
     # isort: off
     from .resource import (

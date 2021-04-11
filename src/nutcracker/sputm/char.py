@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 import io
 import struct
-from itertools import chain
 from functools import partial
-from typing import Set, NamedTuple
+from itertools import chain
+from typing import NamedTuple, Set
 
 import numpy as np
 from PIL import Image
 
-from nutcracker.graphics import image
-from nutcracker.codex.rle import decode_lined_rle
 from nutcracker.codex.bpp_codec import decode_bpp_char
+from nutcracker.codex.rle import decode_lined_rle
+from nutcracker.graphics import image
 
 
 class DataFrame(NamedTuple):
@@ -110,8 +110,8 @@ def handle_char(data):
 
 if __name__ == '__main__':
     import argparse
-    import os
     import glob
+    import os
 
     from nutcracker.graphics import grid
     from nutcracker.utils.funcutils import flatten

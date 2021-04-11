@@ -1,11 +1,11 @@
 import itertools
 from typing import Any, Dict, Iterator, NamedTuple, Optional
 
-from nutcracker.utils.fileio import read_file
 from nutcracker.smush import ahdr
+from nutcracker.smush.element import read_data, read_elements
 from nutcracker.smush.preset import smush
 from nutcracker.smush.types import Chunk, Element
-from nutcracker.smush.element import read_elements, read_data
+from nutcracker.utils.fileio import read_file
 
 
 class SmushAnimation(NamedTuple):
@@ -21,7 +21,8 @@ def verify_nframes(frames: Iterator[Element], nframes: int) -> Iterator[Element]
 
 
 def verify_maxframe(
-    frames: Iterator[Element], limit: Optional[int]
+    frames: Iterator[Element],
+    limit: Optional[int],
 ) -> Iterator[Element]:
     maxframe = 0
     for elem in frames:
@@ -49,7 +50,9 @@ def from_bytes(resource: bytes) -> Element:
     it = itertools.count()
 
     def set_frame_id(
-        parent: Optional[Element], chunk: Chunk, offset: int
+        parent: Optional[Element],
+        chunk: Chunk,
+        offset: int,
     ) -> Dict[str, Any]:
         if chunk.tag != 'FRME':
             return {}

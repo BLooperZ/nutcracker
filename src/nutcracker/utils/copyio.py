@@ -1,6 +1,6 @@
-import io
 import functools
-from typing import Callable, Optional, Iterator
+import io
+from typing import Callable, Iterator, Optional
 
 
 def buffered(

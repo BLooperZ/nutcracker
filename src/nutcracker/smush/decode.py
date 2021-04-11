@@ -6,13 +6,13 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import Callable, Iterator, Mapping, Optional, Sequence, Tuple
 
-from nutcracker.graphics import image, grid
-from nutcracker.smush import anim
-from nutcracker.smush.types import Element
-from nutcracker.smush.ahdr import AnimationHeader
-from nutcracker.smush.fobj import unobj, decompress
 from nutcracker.codex.codex import get_decoder
+from nutcracker.graphics import grid, image
 from nutcracker.graphics.frame import save_single_frame_image
+from nutcracker.smush import anim
+from nutcracker.smush.ahdr import AnimationHeader
+from nutcracker.smush.fobj import decompress, unobj
+from nutcracker.smush.types import Element
 
 
 def clip(lower: int, upper: int, value: int) -> int:
@@ -22,8 +22,8 @@ def clip(lower: int, upper: int, value: int) -> int:
 clip_byte = partial(clip, 0, 255)
 
 
-def delta_color(org_color: int, delta_color: int) -> int:
-    return clip_byte((129 * org_color + delta_color) // 128)
+def delta_color(org_color: int, delta: int) -> int:
+    return clip_byte((129 * org_color + delta) // 128)
 
 
 @dataclass(frozen=True)
@@ -101,7 +101,8 @@ def generate_frames(
         ctx = replace(ctx, frame=frame)
         for comp in frame.children:
             ctx = DECODE_FRAME_IMAGE.get(comp.tag, unsupported_frame_comp)(
-                ctx, comp.data
+                ctx,
+                comp.data,
             )
         assert ctx.screen is not None
         yield ctx
@@ -116,7 +117,10 @@ def decode_nut(root: Element, output_dir: str) -> None:
     transparency = 39
     BGS = [b'\05', b'\04']
     bim = grid.create_char_grid(
-        nchars, enumerate(lchars), transparency=transparency, bgs=BGS
+        nchars,
+        enumerate(lchars),
+        transparency=transparency,
+        bgs=BGS,
     )
     palette = list(header.palette)
     palette[3 * transparency :][:3] = [109, 109, 109]
@@ -142,7 +146,7 @@ def convert_fobj(datam: bytes) -> Optional[Tuple[image.ImagePosition, bytes]]:
     height = meta.y2 - meta.y1 if meta.codec != 1 else meta.y2
     decode = get_decoder(meta.codec)
     if decode == NotImplemented:
-        print(f"Codec not implemented: {meta.codec}")
+        print(f'Codec not implemented: {meta.codec}')
         return None
 
     # assert len(datam) % 2 == 0, (basename, meta['codec'])

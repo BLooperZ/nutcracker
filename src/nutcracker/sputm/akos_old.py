@@ -3,10 +3,10 @@ import io
 import os
 import struct
 from functools import partial
-
-from nutcracker.utils.funcutils import grouper, flatten
-
 from typing import Iterator, NamedTuple, Sequence, Tuple
+
+from nutcracker.utils.funcutils import flatten, grouper
+
 
 class AkosHeader(NamedTuple):
     unk_1: int

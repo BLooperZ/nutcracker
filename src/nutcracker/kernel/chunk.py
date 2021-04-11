@@ -1,40 +1,52 @@
+import builtins
 from dataclasses import dataclass
 from functools import cached_property
-from struct import Struct
-from typing import ClassVar, Iterator, Protocol, Sequence, Union, overload
+from typing import IO, Iterator, NamedTuple, Protocol, Sequence, Union, overload
 
-from .buffer import splice, BufferLike
+from .buffer import BufferLike, Splicer, splice
+from .structured import Structured
+
+
+class ChunkHeader(NamedTuple):
+    etag: bytes
+    size: int
 
 
 @dataclass(frozen=True)
-class Chunk:
+class Chunk(object):
     tag: str
-    _buffer: BufferLike
-    _slice: slice
+    buffer: BufferLike
+    slice: Splicer
 
     @cached_property
     def data(self) -> bytes:
-        return bytes(self._buffer[self._slice])
+        return bytes(self.slice(self.buffer))
 
     def __len__(self) -> int:
-        return len(self._buffer)
+        return len(self.buffer)
 
     def __bytes__(self) -> bytes:
-        return bytes(self._buffer)
+        return bytes(self.buffer)
 
     def __iter__(self) -> Iterator[Union[str, bytes]]:
         return iter((self.tag, self.data))
 
     @overload
-    def __getitem__(self, index: int) -> Union[str, bytes]: ...
-    @overload
-    def __getitem__(self, index: slice) -> Sequence[Union[str, bytes]]: ...
+    def __getitem__(self, index: int) -> Union[str, bytes]:
+        ...
 
-    def __getitem__(self, index: Union[slice, int]) -> Union[Sequence[Union[str, bytes]], str, bytes]:
+    @overload
+    def __getitem__(self, index: builtins.slice) -> Sequence[Union[str, bytes]]:
+        ...
+
+    def __getitem__(
+        self,
+        index: Union[builtins.slice, int],
+    ) -> Union[Sequence[Union[str, bytes]], str, bytes]:
         return tuple(self)[index]
 
     def __repr__(self) -> str:
-        return f'Chunk<{self.tag}>[{len(self)}]'
+        return 'Chunk<{tag}>[{size}]'.format(tag=self.tag, size=len(self))
 
 
 class ChunkFactory(Protocol):
@@ -46,44 +58,49 @@ class ChunkFactory(Protocol):
 
 
 @dataclass(frozen=True)
-class ScummChunk(ChunkFactory):
+class _StructuredChunkHeader(Structured[ChunkHeader]):
+    _struct: Structured[ChunkHeader]
 
-    structure: ClassVar[Struct] = Struct('<I2s')
+    @property
+    def size(self) -> int:
+        return self._struct.size
 
-    def untag(self, buffer: BufferLike, offset: int = 0) -> Chunk:
-        size, tag = self.structure.unpack_from(buffer, offset)
-        return Chunk(
-            tag.decode('ascii'),
-            splice(buffer, offset, size),
-            slice(self.structure.size, size),
-        )
+    def unpack(self, stream: IO[bytes]) -> ChunkHeader:
+        return self.unpack_from(stream.read(self.size))
 
-    def mktag(self, tag: str, data: bytes) -> bytes:
-        return self.structure.pack(tag.encode('ascii'), len(data)) + data
+    def unpack_from(self, buffer: BufferLike, offset: int = 0) -> ChunkHeader:
+        return self._struct.unpack_from(buffer, offset)
+
+    def pack(self, data: ChunkHeader) -> bytes:
+        return self._struct.pack(data)
 
 
 @dataclass(frozen=True)
-class IFFChunk(ChunkFactory):
-    structure: ClassVar[Struct] = Struct('>4sI')
-    INCLUSIVE: ClassVar[int] = 0
-    EXCLUSIVE: ClassVar[int] = structure.size
-
-    size_fix: int = EXCLUSIVE
-
+class StructuredChunk(ChunkFactory, _StructuredChunkHeader):
     def untag(self, buffer: BufferLike, offset: int = 0) -> Chunk:
-        tag, size = self.structure.unpack_from(buffer, offset)
-        if set(tag) == {0} and size == 0:
-            size = len(buffer) - offset
-        else:
-            size += self.size_fix
+        header = self.unpack_from(buffer, offset)
+        splicer = Splicer(self.size, header.size - self.size)
         return Chunk(
-            tag.decode('ascii'),
-            splice(buffer, offset, size),
-            slice(self.structure.size, size),
+            header.etag.decode('ascii'),
+            splice(buffer, offset, header.size),
+            splicer,
         )
 
     def mktag(self, tag: str, data: bytes) -> bytes:
-        etag = tag.encode('ascii')
-        if set(etag) == {0}:
-            return self.structure.pack(b'', 0) + data
-        return self.structure.pack(etag, len(data) - self.size_fix) + data
+        return self.pack(ChunkHeader(tag.encode('ascii'), len(data))) + data
+
+
+@dataclass(frozen=True)
+class SizeFixedChunk(StructuredChunk):
+    size_fix: int = 0
+
+    def unpack_from(self, buffer: BufferLike, offset: int = 0) -> ChunkHeader:
+        etag, size = self._struct.unpack_from(buffer, offset)
+        if set(etag) == {0} and size == 0:
+            return ChunkHeader(etag, len(buffer) - offset)
+        return ChunkHeader(etag, size + self.size_fix)
+
+    def pack(self, data: ChunkHeader) -> bytes:
+        if set(data.etag) == {0}:
+            return self._struct.pack(ChunkHeader(b'', 0))
+        return self._struct.pack(ChunkHeader(data.etag, data.size - self.size_fix))

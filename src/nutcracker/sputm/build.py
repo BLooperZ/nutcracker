@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 
-import io
 import glob
+import io
 import os
 from typing import Iterable
 
+from nutcracker.sputm.index import read_directory_leg as read_dir
+from nutcracker.sputm.index import read_directory_leg_v8 as read_dir_v8
+from nutcracker.sputm.index import read_dlfl
 from nutcracker.utils.fileio import read_file, write_file
-from nutcracker.sputm.index import (
-    read_directory_leg as read_dir,
-    read_directory_leg_v8 as read_dir_v8,
-    read_dlfl,
-)
 
 from .preset import sputm
 from .types import Element
@@ -185,8 +183,8 @@ def rebuild_resources(game, basename, index_file, disks, index_root, updated_res
 if __name__ == '__main__':
     import argparse
 
-    from .resource import detect_resource
     from .index2 import read_game_resources
+    from .resource import detect_resource
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('dirname', help='directory to read from')

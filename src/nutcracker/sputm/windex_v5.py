@@ -4,15 +4,9 @@ from collections import deque
 from string import printable
 from typing import Optional
 
-
-from .script.opcodes import ByteValue, WordValue, RefOffset
-from .script.opcodes_v5 import Variable, PARAM_1, PARAM_2, OPCODES_v5, value
-from .script.bytecode import (
-    to_bytes,
-    get_scripts,
-    script_map,
-    refresh_offsets,
-)
+from .script.bytecode import get_scripts, refresh_offsets, script_map, to_bytes
+from .script.opcodes import ByteValue, RefOffset, WordValue
+from .script.opcodes_v5 import PARAM_1, PARAM_2, OPCODES_v5, Variable, value
 
 
 def escape_message(
@@ -1025,9 +1019,10 @@ if __name__ == '__main__':
 
     from nutcracker.utils.fileio import read_file
     from nutcracker.utils.libio import suppress_stdout
+
+    from .index2 import read_game_resources
     from .preset import sputm
     from .resource import detect_resource
-    from .index2 import read_game_resources
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')

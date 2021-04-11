@@ -11,7 +11,9 @@ def assert_tag(target: str, chunk: Chunk) -> bytes:
 
 
 def print_chunks(
-    chunks: Iterable[Tuple[int, Chunk]], level: int = 0, base: int = 0
+    chunks: Iterable[Tuple[int, Chunk]],
+    level: int = 0,
+    base: int = 0,
 ) -> Iterator[Tuple[int, Chunk]]:
     indent = '    ' * level
     for offset, chunk in chunks:

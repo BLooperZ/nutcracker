@@ -3,17 +3,15 @@ import io
 import os
 import struct
 from functools import partial
+from typing import Iterator, NamedTuple, Sequence, Tuple
 
 import numpy as np
 
-from nutcracker.utils.funcutils import grouper, flatten
+from nutcracker.codex import bomb, codex, rle
 from nutcracker.graphics.image import convert_to_pil_image
-from nutcracker.codex import codex
-from nutcracker.codex import bomb, rle
-
-from typing import Iterator, NamedTuple, Sequence, Tuple
-
 from nutcracker.kernel.types import Element
+from nutcracker.utils.funcutils import flatten, grouper
+
 
 class AkosHeader(NamedTuple):
     unk_1: int
@@ -174,11 +172,12 @@ def read_akos_resource(resource):
 
 if __name__ == '__main__':
     import argparse
-    import os
     import glob
+    import os
+
+    from nutcracker.utils.fileio import read_file
 
     from .preset import sputm
-    from nutcracker.utils.fileio import read_file
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('files', nargs='+', help='files to read from')

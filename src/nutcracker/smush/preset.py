@@ -1,4 +1,4 @@
-from nutcracker.kernel import settings, preset
+from nutcracker.kernel import preset, settings
 
 from .schema import SCHEMA
 

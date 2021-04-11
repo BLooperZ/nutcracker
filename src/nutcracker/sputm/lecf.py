@@ -2,7 +2,6 @@
 import io
 import os
 import struct
-
 from functools import partial
 
 if __name__ == '__main__':

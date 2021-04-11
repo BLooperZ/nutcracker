@@ -4,8 +4,8 @@ import binascii
 import os
 from typing import Iterable
 
-from nutcracker.utils.fileio import read_file
 from nutcracker.sputm.build import rebuild_resources
+from nutcracker.utils.fileio import read_file
 
 
 def get_all_sounds(root, abs_off=0):
@@ -51,10 +51,10 @@ if __name__ == '__main__':
     import argparse
     import pprint
 
+    from .build import update_loff
+    from .index2 import read_game_resources
     from .preset import sputm
     from .resource import detect_resource
-    from .index2 import read_game_resources
-    from .build import update_loff
 
     parser = argparse.ArgumentParser(description='read smush file')
     group = parser.add_mutually_exclusive_group()

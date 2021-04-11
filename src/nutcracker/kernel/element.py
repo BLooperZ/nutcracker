@@ -1,12 +1,14 @@
 from collections import Counter
 from dataclasses import dataclass, replace
-from typing import Any, Dict, Iterable, Iterator, Sequence, Union
+from typing import Any, Dict, Iterable, Iterator, Optional, Sequence, Union
 
 from .chunk import Chunk
 
+ElementTree = Union[Iterator['Element'], 'Element', None]
+
 
 @dataclass
-class Element:
+class Element(object):
     """Indexing metadata for chunk containers
 
     chunk: Chunk
@@ -36,10 +38,17 @@ class Element:
 
     def __repr__(self) -> str:
         attribs = ' '.join(f'{key}={val}' for key, val in self.attribs.items())
-        inner = Counter(child.tag for child in self.children)
-        children = ','.join(f'{tag}*{count}' if count > 1 else tag for tag, count in inner.items())
-        has_more = ',...' if len(inner) > 3 else ''
-        return f'Element<{self.tag}>[{attribs}, children={{{children}{has_more}}}]'
+        children = ','.join(_format_children(self, max_show=4))
+        return f'Element<{self.tag}>[{attribs}, children={{{children}}}]'
 
 
-ElementTree = Union[Iterator[Element], Element, None]
+def _format_children(
+    root: Iterable[Element],
+    max_show: Optional[int] = None,
+) -> Iterator[str]:
+    counts = Counter(child.tag for child in root)
+    for idx, (tag, count) in enumerate(counts.items()):
+        if not (max_show is None or idx < max_show):
+            yield '...'
+            return
+        yield f'{tag}*{count}' if count > 1 else tag

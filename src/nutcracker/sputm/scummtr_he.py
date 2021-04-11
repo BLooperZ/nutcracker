@@ -2,20 +2,17 @@
 
 import io
 import os
-from typing import Iterable, Iterator, Optional
 from string import printable
+from typing import Iterable, Iterator, Optional
 
-from nutcracker.utils.fileio import read_file
-from nutcracker.sputm.types import Element
 from nutcracker.sputm.build import rebuild_resources
 from nutcracker.sputm.script.bytecode import (
     descumm,
     get_strings,
-    update_strings,
     script_map,
     to_bytes,
+    update_strings,
 )
-from nutcracker.sputm.script.opcodes_v5 import OPCODES_v5
 from nutcracker.sputm.script.opcodes import (
     OPCODES_he80,
     OPCODES_he90,
@@ -23,6 +20,9 @@ from nutcracker.sputm.script.opcodes import (
     OPCODES_v8,
     OpTable,
 )
+from nutcracker.sputm.script.opcodes_v5 import OPCODES_v5
+from nutcracker.sputm.types import Element
+from nutcracker.utils.fileio import read_file
 
 
 def get_all_scripts(root: Iterable[Element], opcodes: OpTable) -> Iterator[bytes]:
@@ -139,9 +139,9 @@ if __name__ == '__main__':
     import argparse
     import pprint
 
+    from .index2 import read_game_resources
     from .preset import sputm
     from .resource import detect_resource
-    from .index2 import read_game_resources
 
     parser = argparse.ArgumentParser(description='read smush file')
     group = parser.add_mutually_exclusive_group()

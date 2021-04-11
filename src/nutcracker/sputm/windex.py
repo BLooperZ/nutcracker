@@ -1,7 +1,8 @@
 from collections import deque
 
 from nutcracker.utils.funcutils import flatten
-from .script.bytecode import get_scripts, descumm, script_map
+
+from .script.bytecode import descumm, get_scripts, script_map
 from .script.opcodes import OPCODES_v6
 
 ops = {}
@@ -324,8 +325,9 @@ if __name__ == '__main__':
     import argparse
     import glob
 
-    from .preset import sputm
     from nutcracker.utils.fileio import read_file
+
+    from .preset import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('files', nargs='+', help='files to read from')

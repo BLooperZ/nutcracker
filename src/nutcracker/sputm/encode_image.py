@@ -7,12 +7,13 @@ import struct
 import numpy as np
 from PIL import Image
 
-from nutcracker.sputm.index import read_index_v5tov7, read_index_he
+from nutcracker.codex.codex import decode1, encode1
+from nutcracker.codex.smap import decode_smap, encode_smap, fake_encode_strip
+from nutcracker.sputm.index import read_index_he, read_index_v5tov7
 from nutcracker.utils.fileio import write_file
-from nutcracker.codex.codex import encode1, decode1
-from nutcracker.codex.smap import encode_smap, fake_encode_strip, decode_smap
 
 from .preset import sputm
+
 
 def read_room_background(image, format):
     if image.tag == 'SMAP':

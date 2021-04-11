@@ -1,18 +1,17 @@
 #!/usr/bin/env python3
 
 import struct
-from typing import NamedTuple
 import zlib
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from nutcracker.kernel.structured import StructuredTuple
-
 
 UINT32BE = struct.Struct('>I')
 
 
 @dataclass(frozen=True, order=True)
-class FrameObjectHeader:
+class FrameObjectHeader(object):
     codec: int
     x1: int
     y1: int
@@ -36,7 +35,7 @@ class FrameObject(NamedTuple):
 
 def unobj(data: bytes) -> FrameObject:
     header = FOBJ_META.unpack_from(data)
-    return FrameObject(header, data[FOBJ_META.size:])
+    return FrameObject(header, data[FOBJ_META.size :])
 
 
 def mkobj(meta: FrameObjectHeader, data: bytes) -> bytes:

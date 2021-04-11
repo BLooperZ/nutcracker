@@ -11,9 +11,9 @@ from .element import Element, ElementTree
 def findall(tag: str, root: ElementTree) -> Iterator[Element]:
     if not root:
         return
-    for c in root:
-        if parse(tag, c.tag, evaluate_result=False):
-            yield c
+    for elem in root:
+        if parse(tag, elem.tag, evaluate_result=False):
+            yield elem
 
 
 def find(tag: str, root: ElementTree) -> Optional[Element]:
@@ -29,7 +29,9 @@ def findpath(path: str, root: Optional[Element]) -> Optional[Element]:
 
 
 def render(
-    element: Optional[Element], level: int = 0, stream: IO[str] = sys.stdout
+    element: Optional[Element],
+    level: int = 0,
+    stream: IO[str] = sys.stdout,
 ) -> None:
     if not element:
         return
@@ -42,8 +44,8 @@ def render(
     closing = '' if element.children else ' /'
     print(f'{indent}<{element.tag}{attribs}{closing}>', file=stream)
     if element.children:
-        for c in element.children:
-            render(c, level=level + 1, stream=stream)
+        for elem in element.children:
+            render(elem, level=level + 1, stream=stream)
         print(f'{indent}</{element.tag}>', file=stream)
 
 

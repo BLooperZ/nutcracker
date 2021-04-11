@@ -2,7 +2,6 @@
 import io
 import struct
 import wave
-
 from functools import partial
 
 if __name__ == '__main__':

@@ -1,26 +1,42 @@
 import struct
 from dataclasses import dataclass
-from typing import Callable, Generic, IO, Sequence, TypeVar
+from typing import IO, Callable, Generic, Protocol, Sequence, TypeVar, cast
 
-T = TypeVar('T')
+T_Struct = TypeVar('T_Struct')
 
 
-@dataclass
-class StructuredTuple(Generic[T]):
-    fields: Sequence[str]
-    structure: struct.Struct
-    factory: Callable[..., T]
+class Structured(Protocol[T_Struct]):
+    @property
+    def size(self) -> int:
+        ...
+
+    def unpack(self, stream: IO[bytes]) -> T_Struct:
+        ...
+
+    def unpack_from(self, data: bytes, offset: int = 0) -> T_Struct:
+        ...
+
+    def pack(self, data: T_Struct) -> bytes:
+        ...
+
+
+@dataclass(frozen=True)
+class StructuredTuple(Structured, Generic[T_Struct]):
+    _fields: Sequence[str]
+    _structure: struct.Struct
+    _factory: Callable[..., T_Struct]
 
     @property
     def size(self) -> int:
-        return self.structure.size
+        return self._structure.size
 
-    def unpack(self, stream: IO[bytes]) -> T:
-        return self.unpack_from(stream.read(self.structure.size))
+    def unpack(self, stream: IO[bytes]) -> T_Struct:
+        return self.unpack_from(stream.read(self._structure.size))
 
-    def unpack_from(self, data: bytes, offset: int = 0) -> T:
-        values = self.structure.unpack_from(data, offset=offset)
-        return self.factory(**dict(zip(self.fields, values)))
+    def unpack_from(self, data: bytes, offset: int = 0) -> T_Struct:
+        factory = cast(Callable[..., T_Struct], self._factory)
+        values = self._structure.unpack_from(data, offset=offset)
+        return factory(**dict(zip(self._fields, values)))
 
-    def pack(self, data: T) -> bytes:
-        return self.structure.pack(*[getattr(data, field) for field in self.fields])
+    def pack(self, data: T_Struct) -> bytes:
+        return self._structure.pack(*[getattr(data, field) for field in self._fields])

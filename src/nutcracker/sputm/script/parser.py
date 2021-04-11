@@ -1,4 +1,4 @@
-from typing import Callable, IO, Iterable, Iterator, Optional
+from typing import IO, Callable, Iterable, Iterator, Optional
 
 
 def read_message(

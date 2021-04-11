@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from typing import Sequence
 
-from nutcracker.utils.funcutils import grouper, flatten
+from nutcracker.utils.funcutils import flatten, grouper
 
 
 def decode_bpp_char(

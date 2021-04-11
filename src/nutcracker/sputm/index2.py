@@ -2,15 +2,17 @@
 
 import io
 import itertools
+import operator
 import os
 import pprint
-import operator
 from functools import partial
 from itertools import takewhile
 
 from nutcracker.chiper import xor
+
+from .index import compare_pid_off, read_file, save_tree
 from .preset import sputm
-from .index import save_tree, read_file, compare_pid_off
+
 
 def read_directory(data):
     with io.BytesIO(data) as s:
@@ -89,8 +91,8 @@ if __name__ == '__main__':
     import argparse
     from typing import Dict
 
-    from .types import Chunk
     from .resource import detect_resource
+    from .types import Chunk
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')

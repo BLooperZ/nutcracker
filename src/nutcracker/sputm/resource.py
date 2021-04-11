@@ -1,19 +1,17 @@
 import glob
 import os
-import itertools
 from dataclasses import dataclass
-from typing import Sequence, Callable
+from typing import Callable, Sequence
 
 from parse import parse
 
 from nutcracker.sputm.index import (
-    read_index_v8,
-    read_index_v7,
-    read_index_v5tov7,
     read_index_he,
-    read_directory_leg as read_dir,
-    read_dlfl
+    read_index_v5tov7,
+    read_index_v7,
+    read_index_v8,
 )
+
 
 @dataclass(frozen=True)
 class GameResourceConfig:

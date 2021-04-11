@@ -2,8 +2,7 @@ import io
 import itertools
 from typing import Sequence
 
-
-from .base import wrap_uint16le, unwrap_uint16le
+from .base import unwrap_uint16le, wrap_uint16le
 
 
 def encode_lined_rle(bmap: Sequence[Sequence[int]]) -> bytes:

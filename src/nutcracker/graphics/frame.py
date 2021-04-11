@@ -2,13 +2,13 @@
 from operator import attrgetter
 from typing import Iterator, Optional, Sequence, Tuple, Union
 
-from nutcracker.graphics.image import (
-    convert_to_pil_image,
-    ImagePosition,
-    TImage,
-    Matrix,
-)
 from nutcracker.graphics.grid import get_bg_color
+from nutcracker.graphics.image import (
+    ImagePosition,
+    Matrix,
+    TImage,
+    convert_to_pil_image,
+)
 
 BGS = [b'\05', b'\04']
 

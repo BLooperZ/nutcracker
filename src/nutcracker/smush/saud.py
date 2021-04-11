@@ -4,9 +4,9 @@ import os
 import struct
 import wave
 
-from . import smush
-
 from nutcracker.utils import funcutils
+
+from . import smush
 
 
 def read_le_uint16(f):

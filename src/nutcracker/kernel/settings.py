@@ -1,18 +1,22 @@
 import logging
 from dataclasses import dataclass, field
+from struct import Struct
 from typing import Mapping, Optional, Set
 
 from .buffer import BufferLike
-from .chunk import ChunkFactory, ScummChunk, IFFChunk, Chunk
+from .chunk import Chunk, ChunkFactory, ChunkHeader, SizeFixedChunk, StructuredChunk
+from .structured import StructuredTuple
 
+SCUMM_CHUNK_HEADER = StructuredTuple(('size', 'etag'), Struct('<I2s'), ChunkHeader)
+IFF_CHUNK_HEADER = StructuredTuple(('etag', 'size'), Struct('>4sI'), ChunkHeader)
 
-SCUMM_CHUNK = ScummChunk()
-IFF_CHUNK_EX = IFFChunk(size_fix=IFFChunk.EXCLUSIVE)
-IFF_CHUNK_IN = IFFChunk(size_fix=IFFChunk.INCLUSIVE)
+SCUMM_CHUNK = StructuredChunk(SCUMM_CHUNK_HEADER)
+IFF_CHUNK_IN = SizeFixedChunk(IFF_CHUNK_HEADER)
+IFF_CHUNK_EX = SizeFixedChunk(IFF_CHUNK_HEADER, size_fix=IFF_CHUNK_HEADER.size)
 
 
 @dataclass(frozen=True)
-class _ChunkSetting:
+class _ChunkSetting(ChunkFactory):
     """Setting for resource chunks
 
     align: int (default 2) -

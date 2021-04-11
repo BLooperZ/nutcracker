@@ -6,16 +6,11 @@ import os
 import numpy as np
 
 from nutcracker.utils.fileio import read_file, write_file
-from .proom import (
-    read_imhd,
-    read_imhd_v7,
-    read_imhd_v8,
-)
-from .pproom import (
-    read_room_settings,
-    get_rooms,
-)
+
 from .encode_image import encode_block_v8
+from .pproom import get_rooms, read_room_settings
+from .proom import read_imhd, read_imhd_v7, read_imhd_v8
+
 
 def read_room(header, rmim):
     if rmim.tag == 'RMIM':
@@ -120,11 +115,11 @@ if __name__ == '__main__':
     import pprint
     from typing import Dict
 
-    from .types import Chunk
-    from .index2 import read_directory, read_game_resources
     from .index import compare_pid_off, read_rnam
+    from .index2 import read_directory, read_game_resources
     from .preset import sputm
     from .resource import detect_resource
+    from .types import Chunk
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('dirname', help='directory to read from')

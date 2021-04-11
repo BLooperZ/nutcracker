@@ -2,15 +2,17 @@
 
 import io
 import itertools
+import operator
 import os
 import pprint
-import operator
 from functools import partial
 from itertools import takewhile
 
 from nutcracker.chiper import xor
 from nutcracker.utils.fileio import read_file
+
 from .preset import sputm
+
 
 def read_directory_leg(data):
     with io.BytesIO(data) as s:
