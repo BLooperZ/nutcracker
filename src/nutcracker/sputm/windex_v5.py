@@ -1043,7 +1043,7 @@ if __name__ == '__main__':
     with suppress_stdout():
         rnam, idgens = game.read_index(index_root)
 
-    root = read_game_resources(game, idgens, disks, max_depth=game.max_depth)
+    root = read_game_resources(game, idgens, disks, max_depth=5)
 
     print(rnam)
 
