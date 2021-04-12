@@ -68,7 +68,9 @@ def map_chunks(
             check_schema(cfg, ptag, chunk.tag)
 
             elem = create_element(
-                offset, chunk, **(extra(parent, chunk, offset) if extra else {}),
+                offset,
+                chunk,
+                **(extra(parent, chunk, offset) if extra else {}),
             )
             yield elem.content(
                 map_chunks(

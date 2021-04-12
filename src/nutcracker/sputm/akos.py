@@ -9,7 +9,7 @@ import numpy as np
 
 from nutcracker.codex import bomb, codex, rle
 from nutcracker.graphics.image import convert_to_pil_image
-from nutcracker.kernel.types import Element
+from nutcracker.smush.types import Element
 from nutcracker.utils.funcutils import flatten, grouper
 
 
@@ -21,6 +21,7 @@ class AkosHeader(NamedTuple):
     unk_3: int
     codec: int
 
+
 def akos_header_from_bytes(data: bytes) -> AkosHeader:
     with io.BytesIO(data) as stream:
         return AkosHeader(
@@ -29,8 +30,9 @@ def akos_header_from_bytes(data: bytes) -> AkosHeader:
             unk_2=ord(stream.read(1)),
             num_anims=int.from_bytes(stream.read(2), signed=False, byteorder='little'),
             unk_3=int.from_bytes(stream.read(2), signed=False, byteorder='little'),
-            codec=int.from_bytes(stream.read(2), signed=False, byteorder='little')
+            codec=int.from_bytes(stream.read(2), signed=False, byteorder='little'),
         )
+
 
 def akof_from_bytes(data: bytes) -> Iterator[Tuple[int, int]]:
     with io.BytesIO(data) as stream:
@@ -42,6 +44,7 @@ def akof_from_bytes(data: bytes) -> Iterator[Tuple[int, int]]:
             ci_off = int.from_bytes(entry[4:6], signed=False, byteorder='little')
             print(cd_off, ci_off)
             yield cd_off, ci_off
+
 
 def decode1(width, height, pal, data):
     if len(pal.data) == 32:
@@ -88,21 +91,25 @@ def decode1(width, height, pal, data):
                     if _width == 0:
                         return convert_to_pil_image(out, size=(width, height))
 
+
 def decode5(width, height, pal, data):
     with io.BytesIO(data) as stream:
         lines = [
             stream.read(
                 int.from_bytes(stream.read(2), signed=False, byteorder='little')
-            ) for _ in range(height)
+            )
+            for _ in range(height)
         ]
 
     out = [bomb.decode_line(line, width) for line in lines]
 
     return convert_to_pil_image(out, size=(width, height))
 
+
 def decode32(width, height, pal, data):
     out = rle.decode_lined_rle(data, width, height, verify=False)
     return convert_to_pil_image(out, size=(width, height))
+
 
 def decode_frame(akhd, ci, cd, palette):
 
@@ -124,6 +131,7 @@ def decode_frame(akhd, ci, cd, palette):
     else:
         print(akhd.codec)
         raise NotImplementedError()
+
 
 def read_akos_resource(resource):
     # akos = check_tag('AKOS', next(sputm.map_chunks(resource)))
@@ -158,7 +166,7 @@ def read_akos_resource(resource):
 
     ends = akof[1:] + [(len(akcd.data), len(akci.data))]
     for (cd_start, ci_start), (cd_end, ci_end) in zip(akof, ends):
-        ci = akci.data[ci_start:ci_start+8]
+        ci = akci.data[ci_start : ci_start + 8]
         # print(len(ci))
         # if not akhd.codec in {32}:
         #     continue
@@ -183,7 +191,6 @@ if __name__ == '__main__':
     parser.add_argument('files', nargs='+', help='files to read from')
     parser.add_argument('--chiper-key', default='0x00', type=str, help='xor key')
     args = parser.parse_args()
-
 
     files = sorted(set(flatten(glob.iglob(r) for r in args.files)))
     print(files)

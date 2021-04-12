@@ -16,9 +16,11 @@ class AkosHeader(NamedTuple):
     unk_3: int
     codec: int
 
+
 def assert_stop_iter(iter: Iterator) -> None:
     for chunk in chunks:
         raise ValueError(f'expected EOF, got {chunk}')
+
 
 def akos_header_from_bytes(data: bytes) -> AkosHeader:
     with io.BytesIO(data) as stream:
@@ -34,8 +36,9 @@ def akos_header_from_bytes(data: bytes) -> AkosHeader:
         unk_2=unk_2,
         num_anims=num_anims,
         unk_3=unk_3,
-        codec=codec
+        codec=codec,
     )
+
 
 def akof_from_bytes(data: bytes) -> Iterator[Tuple[int, int]]:
     with io.BytesIO(data) as stream:
@@ -47,6 +50,7 @@ def akof_from_bytes(data: bytes) -> Iterator[Tuple[int, int]]:
             ci_off = int.from_bytes(entry[4:6], signed=False, byteorder='little')
             print(cd_off, ci_off)
             yield cd_off, ci_off
+
 
 if __name__ == '__main__':
     import argparse

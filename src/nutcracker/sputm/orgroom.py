@@ -25,6 +25,7 @@ def read_room(header, rmim):
         assert len(wrap.children) == 2, len(wrap.children)
         yield from wrap.children[1:]
 
+
 def read_objects(room):
     for obim in sputm.findall('OBIM', room):
         imhd = sputm.find('IMHD', obim).data
@@ -63,6 +64,7 @@ def read_objects(room):
 
                 #     yield path, name, bomp, obj_x, obj_y
 
+
 def encode_images_v8(basedir, imag, obj_name, room_id, rnam):
     for iidx, imxx in enumerate(imag.children[1:]):
         path = imxx.attribs['path']
@@ -81,14 +83,20 @@ def encode_images_v8(basedir, imag, obj_name, room_id, rnam):
             encoded = encode_block_v8(im_path, imxx.tag)
             if image.tag == 'SMAP':
                 zpln = sputm.find('ZPLN', image)
-                assert sputm.mktag('BSTR', sputm.find('BSTR', image).data) + sputm.mktag('ZPLN', zpln.data) == imxx.data
+                assert (
+                    sputm.mktag('BSTR', sputm.find('BSTR', image).data)
+                    + sputm.mktag('ZPLN', zpln.data)
+                    == imxx.data
+                )
                 assert zpln
                 encoded += sputm.mktag('ZPLN', zpln.data)
                 print(zpln.data)
                 print('ORIG')
                 sputm.render(image)
                 print('ENCODED')
-                sputm.render(next(sputm(schema=s).map_chunks(sputm.mktag('SMAP', encoded))))
+                sputm.render(
+                    next(sputm(schema=s).map_chunks(sputm.mktag('SMAP', encoded)))
+                )
             yield imxx, encoded
             print((im_path, imxx))
             # # uncomment for testing image import without changes
@@ -96,6 +104,7 @@ def encode_images_v8(basedir, imag, obj_name, room_id, rnam):
             #     assert encoded == imxx.data, (encoded, imxx.data)
         else:
             yield imxx, None
+
 
 def make_wrap(images):
     off = 8 + 4 * len(images)
@@ -106,9 +115,9 @@ def make_wrap(images):
             datastream.write(elim)
             off += len(elim)
         return sputm.mktag(
-            'WRAP',
-            sputm.mktag('OFFS', offstream.getvalue()) + datastream.getvalue()
+            'WRAP', sputm.mktag('OFFS', offstream.getvalue()) + datastream.getvalue()
         )
+
 
 if __name__ == '__main__':
     import argparse
@@ -151,7 +160,9 @@ if __name__ == '__main__':
 
             for imxx in read_room(header, rmim):
 
-                im_path = f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else path
+                im_path = (
+                    f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else path
+                )
                 im_path = im_path.replace(os.path.sep, '_')
                 im_path = os.path.join(base, 'backgrounds', f'{im_path}.png')
 
@@ -165,34 +176,29 @@ if __name__ == '__main__':
                     if encoded:
                         if image.tag == 'SMAP':
                             zpln = sputm.find('ZPLN', image)
-                            assert sputm.mktag('BSTR', sputm.find('BSTR', image).data) + sputm.mktag('ZPLN', zpln.data) == imxx.data
+                            assert (
+                                sputm.mktag('BSTR', sputm.find('BSTR', image).data)
+                                + sputm.mktag('ZPLN', zpln.data)
+                                == imxx.data
+                            )
                             assert zpln
                             encoded += sputm.mktag('ZPLN', zpln.data)
 
                         os.makedirs(os.path.dirname(res_path), exist_ok=True)
-                        write_file(
-                            res_path,
-                            sputm.mktag(imxx.tag, encoded)
-                        )
+                        write_file(res_path, sputm.mktag(imxx.tag, encoded))
                     print((im_path, res_path, imxx.tag))
-
 
             for path, obj_name, imag, _, _ in read_objects(room):
                 if imag.tag == 'WRAP':
-                    images = list(encode_images_v8(
-                        os.path.join(base, 'objects'),
-                        imag,
-                        obj_name,
-                        room_id,
-                        rnam
-                    ))
+                    images = list(
+                        encode_images_v8(
+                            os.path.join(base, 'objects'), imag, obj_name, room_id, rnam
+                        )
+                    )
                     if any(custome is not None for imxx, custome in images):
                         res_path = os.path.join(args.dirname, imag.attribs['path'])
                         os.makedirs(os.path.dirname(res_path), exist_ok=True)
-                        write_file(
-                            res_path,
-                            make_wrap(images)
-                        )
+                        write_file(res_path, make_wrap(images))
 
                         # path = bomp.attribs['path']
                         # name = f'{obj_name}_{iidx:04d}'

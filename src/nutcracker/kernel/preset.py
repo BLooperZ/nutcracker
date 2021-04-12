@@ -25,6 +25,7 @@ class _ChunkPreset(settings._ChunkSetting, _DefaultOverride):
         read_chunks,
         write_chunks,
     )
+
     # isort: on
 
 
@@ -42,6 +43,7 @@ class _ShellPreset(settings._IndexSetting, _ChunkPreset):
         map_chunks,
         generate_schema,
     )
+
     # isort: on
 
 

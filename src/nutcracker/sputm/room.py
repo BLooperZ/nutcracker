@@ -31,7 +31,9 @@ def read_room_background_v8(image, width, height, zbuffers):
 
 
 def read_room_background(rdata, width, height, zbuffers):
-    image, *zplanes = sputm.drop_offsets(sputm.print_chunks(sputm.read_chunks(rdata), level=2))
+    image, *zplanes = sputm.drop_offsets(
+        sputm.print_chunks(sputm.read_chunks(rdata), level=2)
+    )
     # print(smap)
     for c in zplanes:
         pass
@@ -65,10 +67,9 @@ def read_room_background(rdata, width, height, zbuffers):
         print(tag, data)
         # raise ValueError(f'Unknown image codec: {tag}')
 
+
 def decode_rmim(data, width, height):
-    rchunks = sputm.drop_offsets(
-        sputm.print_chunks(sputm.read_chunks(data), level=1)
-    )
+    rchunks = sputm.drop_offsets(sputm.print_chunks(sputm.read_chunks(data), level=1))
 
     rmih = sputm.assert_tag('RMIH', next(rchunks))
     assert len(rmih) == 2
@@ -79,6 +80,7 @@ def decode_rmim(data, width, height):
     roombg = read_room_background(image_data, width, height, zbuffers)
     assert not list(rchunks)
     return convert_to_pil_image(roombg)
+
 
 def parse_room_noimgs(room):
     chunks = sputm.print_chunks(sputm.read_chunks(room))
@@ -104,7 +106,13 @@ def parse_room_noimgs(room):
                             pass
                         if wtag == 'APAL':
                             palette = wdata
-    return {'palette': palette, 'transparent': transparent, 'width': rwidth, 'height': rheight}
+    return {
+        'palette': palette,
+        'transparent': transparent,
+        'width': rwidth,
+        'height': rheight,
+    }
+
 
 if __name__ == '__main__':
     import argparse
@@ -169,10 +177,14 @@ if __name__ == '__main__':
                                 pass
                     if rtag == f'IM{1 + curr_obj:02d}':
                         print(rtag)
-                        roombg = read_room_background(rdata, obj_width, obj_height, None)
+                        roombg = read_room_background(
+                            rdata, obj_width, obj_height, None
+                        )
                         im = convert_to_pil_image(roombg)
                         im.putpalette(palette)
-                        im.save(f'obj_{cidx:05d}_{ridx:05d}_{rtag}_{os.path.basename(args.filename)}.png')
+                        im.save(
+                            f'obj_{cidx:05d}_{ridx:05d}_{rtag}_{os.path.basename(args.filename)}.png'
+                        )
                         curr_obj += 1
                 assert curr_obj == obj_num_imnn, (curr_obj, obj_num_imnn)
         # save raw

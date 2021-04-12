@@ -44,6 +44,7 @@ def read_room_background(image, width, height, zbuffers):
         print(image.tag, image.data)
         # raise ValueError(f'Unknown image codec: {tag}')
 
+
 @dataclass
 class RoomHeader:
     width: int
@@ -52,6 +53,7 @@ class RoomHeader:
     version: Optional[int] = None
     zbuffers: Optional[int] = None
     transparency: Optional[int] = None
+
 
 def read_rmhd_structured(data):
     version = None
@@ -83,8 +85,9 @@ def read_rmhd_structured(data):
         robjs=robjs,
         version=version,
         zbuffers=zbuffers,
-        transparency=transparency
+        transparency=transparency,
     )
+
 
 def read_rmhd(data):
     print(data)
@@ -109,6 +112,7 @@ def read_rmhd(data):
         zbuffers = int.from_bytes(data[16:20], signed=False, byteorder='little')
         transparency = int.from_bytes(data[20:24], signed=False, byteorder='little')
     return rwidth, rheight, robjs
+
 
 def read_room(lflf):
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
@@ -148,6 +152,7 @@ def read_room(lflf):
             im.putpalette(palette)
             yield idx, im, ()
 
+
 def read_imhd(data):
     # pylint: disable=unused-variable
     with io.BytesIO(data) as stream:
@@ -166,6 +171,7 @@ def read_imhd(data):
             # TODO: read hotspots
             pass
         return obj_id, obj_height, obj_width, obj_x, obj_y
+
 
 def read_imhd_v7(data):
     # pylint: disable=unused-variable
@@ -186,6 +192,7 @@ def read_imhd_v7(data):
             pass
         return obj_id, obj_height, obj_width, obj_x, obj_y
 
+
 def read_imhd_v8(data):
     # pylint: disable=unused-variable
     with io.BytesIO(data) as stream:
@@ -203,6 +210,7 @@ def read_imhd_v8(data):
             # TODO: read hotspots
             pass
         return name, obj_height, obj_width, obj_x, obj_y
+
 
 def read_objects(lflf):
     room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
@@ -235,10 +243,13 @@ def read_objects(lflf):
             for idx, imag in enumerate(sputm.findall('IMAG', obim)):
                 assert idx == 0
                 iim = sputm.find('WRAP', imag)
-                bgim = read_room_background_v8(iim.children[1], obj_width, obj_height, 0)
+                bgim = read_room_background_v8(
+                    iim.children[1], obj_width, obj_height, 0
+                )
                 im = convert_to_pil_image(bgim)
                 im.putpalette(palette)
                 yield 0, f'{name}_STATE_{idx}', im
+
 
 if __name__ == '__main__':
     import argparse

@@ -31,42 +31,58 @@ if __name__ == '__main__':
             for cidx, (off, (tag, data)) in enumerate(sputm.read_chunks(chunk)):
                 if tag == 'SCRP':
                     os.makedirs('SCRIPTS', exist_ok=True)
-                    with open(os.path.join('SCRIPTS', f'SCRP_{cidx:04d}_{idx:04d}'), 'wb') as out:
+                    with open(
+                        os.path.join('SCRIPTS', f'SCRP_{cidx:04d}_{idx:04d}'), 'wb'
+                    ) as out:
                         out.write(sputm.mktag('SCRP', data))
                     continue
                 if tag == 'DIGI':
                     os.makedirs('DIGIS', exist_ok=True)
-                    with open(os.path.join('DIGIS', f'DIGI_{cidx:04d}_{idx:04d}'), 'wb') as out:
+                    with open(
+                        os.path.join('DIGIS', f'DIGI_{cidx:04d}_{idx:04d}'), 'wb'
+                    ) as out:
                         out.write(sputm.mktag('DIGI', data))
                 if tag == 'TLKE':
                     print(data)
                     exit(1)
                 if tag == 'CHAR':
                     os.makedirs('CHARS', exist_ok=True)
-                    with open(os.path.join('CHARS', f'CHAR_{cidx:04d}_{idx:04d}'), 'wb') as out:
+                    with open(
+                        os.path.join('CHARS', f'CHAR_{cidx:04d}_{idx:04d}'), 'wb'
+                    ) as out:
                         out.write(sputm.mktag('CHAR', data))
                 if tag == 'RMIM':
                     rmim = data
                 if tag == 'ROOM':
                     os.makedirs('ROOMS', exist_ok=True)
-                    with open(os.path.join('ROOMS', f'ROOM_{cidx:04d}_{idx:04d}'), 'wb') as out:
+                    with open(
+                        os.path.join('ROOMS', f'ROOM_{cidx:04d}_{idx:04d}'), 'wb'
+                    ) as out:
                         out.write(sputm.mktag(tag, data))
-                if tag == 'RMDA': # ROOM without RMIM
+                if tag == 'RMDA':  # ROOM without RMIM
                     os.makedirs('RMDAS', exist_ok=True)
-                    with open(os.path.join('RMDAS', f'RMDA_{cidx:04d}_{idx:04d}'), 'wb') as out:
+                    with open(
+                        os.path.join('RMDAS', f'RMDA_{cidx:04d}_{idx:04d}'), 'wb'
+                    ) as out:
                         out.write(sputm.mktag(tag, data))
                     ctx = parse_room_noimgs(data)
                     assert rmim
                     im = decode_rmim(rmim, ctx['width'], ctx['height'])
                     im.putpalette(ctx['palette'])
-                    im.save(f'room_{idx:05d}_{cidx:05d}_{tag}_{os.path.basename(args.filename)}.png')
+                    im.save(
+                        f'room_{idx:05d}_{cidx:05d}_{tag}_{os.path.basename(args.filename)}.png'
+                    )
                 if tag == 'SOUN':
                     os.makedirs('SOUNDS', exist_ok=True)
-                    with open(os.path.join('SOUNDS', f'{hoff + off + 16:08x}.voc'), 'wb') as out:
+                    with open(
+                        os.path.join('SOUNDS', f'{hoff + off + 16:08x}.voc'), 'wb'
+                    ) as out:
                         out.write(data)
                 if tag == 'AKOS':
                     os.makedirs('AKOS', exist_ok=True)
-                    with open(os.path.join('AKOS', f'AKOS{cidx:04d}_{idx:04d}'), 'wb') as out:
+                    with open(
+                        os.path.join('AKOS', f'AKOS{cidx:04d}_{idx:04d}'), 'wb'
+                    ) as out:
                         out.write(sputm.mktag('AKOS', data))
             # save raw
             print('==========')

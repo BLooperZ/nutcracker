@@ -16,7 +16,10 @@ if __name__ == '__main__':
     with open(args.filename, 'rb') as res:
         tlkb = sputm.assert_tag('TLKB', sputm.untag(res))
         assert res.read() == b''
-        chunks = (sputm.assert_tag('TALK', chunk) for chunk in sputm.drop_offsets(sputm.read_chunks(tlkb)))
+        chunks = (
+            sputm.assert_tag('TALK', chunk)
+            for chunk in sputm.drop_offsets(sputm.read_chunks(tlkb))
+        )
         for idx, chunk in enumerate(chunks):
             sound = b''
             for _, (tag, data) in sputm.read_chunks(chunk):
@@ -47,7 +50,7 @@ if __name__ == '__main__':
             with wave.open(f'OUT/TALK_SDAT_{idx:04d}.WAV', 'w') as wav:
                 # aud.write(b'\x80' * frame_audio_size[12] * frame_no)
                 wav.setnchannels(1)
-                wav.setsampwidth(1) 
+                wav.setsampwidth(1)
                 wav.setframerate(sample_rate)
                 wav.writeframesraw(sound)
             print('==========')

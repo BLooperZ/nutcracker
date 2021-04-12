@@ -17,11 +17,15 @@ from .preset import sputm
 def read_directory(data):
     with io.BytesIO(data) as s:
         num = int.from_bytes(s.read(1), byteorder='little', signed=False)
-        merged = [(
-            int.from_bytes(s.read(1), byteorder='little', signed=False),
-            int.from_bytes(s.read(4), byteorder='little', signed=False)
-        ) for i in range(num)]
+        merged = [
+            (
+                int.from_bytes(s.read(1), byteorder='little', signed=False),
+                int.from_bytes(s.read(4), byteorder='little', signed=False),
+            )
+            for i in range(num)
+        ]
         return merged
+
 
 def read_game_resources(game, idgens, disks, max_depth=None):
     for didx, disk in enumerate(disks):
@@ -48,7 +52,7 @@ def read_game_resources(game, idgens, disks, max_depth=None):
                 # droo = {k: v for k, v  in droo.items() if v == (didx + 1, 0)}
                 # droo = {k: (disk, offs[k]) for k, (disk, _)  in droo.items()}
 
-                droo = {k: (didx + 1, v) for k, v  in offs.items()}
+                droo = {k: (didx + 1, v) for k, v in offs.items()}
                 idgens['LFLF'] = compare_pid_off(droo, 16 - game.base_fix)
 
             get_gid = idgens.get(chunk.tag)
@@ -57,9 +61,17 @@ def read_game_resources(game, idgens, disks, max_depth=None):
             elif parent.attribs['path'] in wraps:
                 gid = wraps[parent.attribs['path']].get(offset)
             else:
-                gid = get_gid and get_gid(parent and parent.attribs['gid'], chunk.data, offset)
+                gid = get_gid and get_gid(
+                    parent and parent.attribs['gid'], chunk.data, offset
+                )
 
-            base = chunk.tag + (f'_{gid:04d}' if gid is not None else '' if not get_gid else f'_o_{offset:04X}')
+            base = chunk.tag + (
+                f'_{gid:04d}'
+                if gid is not None
+                else ''
+                if not get_gid
+                else f'_o_{offset:04X}'
+            )
 
             dirname = parent.attribs['path'] if parent else ''
             path = os.path.join(dirname, base)
@@ -74,10 +86,9 @@ def read_game_resources(game, idgens, disks, max_depth=None):
                     offs = sputm.untag(stream)
                     offs = {
                         int.from_bytes(
-                            offs.data[4*i:][:4],
-                            byteorder='little',
-                            signed=False
-                        ): i + 1
+                            offs.data[4 * i :][:4], byteorder='little', signed=False
+                        ): i
+                        + 1
                         for i in range(len(offs.data) // 4)
                     }
                 wraps[path] = offs
@@ -85,7 +96,10 @@ def read_game_resources(game, idgens, disks, max_depth=None):
             res = {'path': path, 'gid': gid}
             return res
 
-        yield from sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
+        yield from sputm(max_depth=max_depth).map_chunks(
+            resource, extra=update_element_path
+        )
+
 
 if __name__ == '__main__':
     import argparse
@@ -97,7 +111,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
     args = parser.parse_args()
-    
+
     basedir = os.path.basename(args.filename)
 
     game = detect_resource(args.filename)

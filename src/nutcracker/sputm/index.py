@@ -17,16 +17,30 @@ from .preset import sputm
 def read_directory_leg(data):
     with io.BytesIO(data) as s:
         num = int.from_bytes(s.read(2), byteorder='little', signed=False)
-        rnums = [int.from_bytes(s.read(1), byteorder='little', signed=False) for i in range(num)]
-        offs = [int.from_bytes(s.read(4), byteorder='little', signed=False) for i in range(num)]
+        rnums = [
+            int.from_bytes(s.read(1), byteorder='little', signed=False)
+            for i in range(num)
+        ]
+        offs = [
+            int.from_bytes(s.read(4), byteorder='little', signed=False)
+            for i in range(num)
+        ]
         return enumerate(zip(rnums, offs))
+
 
 def read_directory_leg_v8(data):
     with io.BytesIO(data) as s:
         num = int.from_bytes(s.read(4), byteorder='little', signed=False)
-        rnums = [int.from_bytes(s.read(1), byteorder='little', signed=False) for i in range(num)]
-        offs = [int.from_bytes(s.read(4), byteorder='little', signed=False) for i in range(num)]
+        rnums = [
+            int.from_bytes(s.read(1), byteorder='little', signed=False)
+            for i in range(num)
+        ]
+        offs = [
+            int.from_bytes(s.read(4), byteorder='little', signed=False)
+            for i in range(num)
+        ]
         return enumerate(zip(rnums, offs))
+
 
 def read_rnam(data, key=0xFF):
     with io.BytesIO(data) as s:
@@ -37,10 +51,12 @@ def read_rnam(data, key=0xFF):
             name = xor.read(s, 9, key=key).split(b'\0')[0].decode()
             yield rnum, name
 
+
 def readcstr(stream, read_fn):
     bound_read = iter(partial(read_fn, stream, 1), b'')
     res = b''.join(takewhile(partial(operator.ne, b'\00'), bound_read))
     return res.decode() if res else None
+
 
 def read_rnam_he(data, key=0xFF):
     with io.BytesIO(data) as s:
@@ -58,12 +74,14 @@ def read_anam(data):
         names = [s.read(9).split(b'\0')[0].decode() for i in range(num)]
         return enumerate(names)
 
+
 def read_dobj(data):
     with io.BytesIO(data) as s:
         num = int.from_bytes(s.read(2), byteorder='little', signed=False)
         values = list(s.read(num))
         # [(state, owner)]
         return enumerate((val >> 4, val & 0xFF) for val in values)
+
 
 def read_dobj_v8(data):
     with io.BytesIO(data) as s:
@@ -76,28 +94,41 @@ def read_dobj_v8(data):
             obj_class = int.from_bytes(s.read(4), byteorder='little', signed=False)
             yield name, (obj_id, state, room, obj_class)
 
+
 def read_dobj_v7(data):
     with io.BytesIO(data) as s:
         num = int.from_bytes(s.read(2), byteorder='little', signed=False)
         states = list(s.read(num))
         rooms = list(s.read(num))
-        classes = [int.from_bytes(s.read(4), byteorder='little', signed=False) for _ in range(num)]
+        classes = [
+            int.from_bytes(s.read(4), byteorder='little', signed=False)
+            for _ in range(num)
+        ]
         return enumerate(zip(states, rooms, classes))
+
 
 def read_dobj_he(data):
     with io.BytesIO(data) as s:
         num = int.from_bytes(s.read(2), byteorder='little', signed=False)
         states = list(s.read(num))
         owners = list(s.read(num))
-        rooms =  list(s.read(num))
-        classes = [int.from_bytes(s.read(4), byteorder='little', signed=False) for _ in range(num)]
+        rooms = list(s.read(num))
+        classes = [
+            int.from_bytes(s.read(4), byteorder='little', signed=False)
+            for _ in range(num)
+        ]
         return enumerate(zip(states, owners, rooms, classes))
+
 
 def read_dlfl(data):
     with io.BytesIO(data) as s:
         num = int.from_bytes(s.read(2), byteorder='little', signed=False)
-        offs = [int.from_bytes(s.read(4), byteorder='little', signed=False) for i in range(num)]
+        offs = [
+            int.from_bytes(s.read(4), byteorder='little', signed=False)
+            for i in range(num)
+        ]
         return enumerate(offs)
+
 
 # def read_directory(data):
 #     with io.BytesIO(data) as s:
@@ -108,9 +139,11 @@ def read_dlfl(data):
 #         ) for i in range(num)]
 #         print(enumerate(merged))
 
+
 def read_inner_uint16le_v7(pid, data, off):
     res = int.from_bytes(data[12:14], byteorder='little', signed=False)
     return res
+
 
 def read_inner_uint16le(pid, data, off):
     res = int.from_bytes(data[8:10], byteorder='little', signed=False)
@@ -137,12 +170,16 @@ def read_uint32le(pid, data, off):
 def compare_pid_off(directory, base: int = 0):
     def inner(pid, data, off):
         return next((k for k, v in directory.items() if v == (pid, off + base)), None)
+
     return inner
+
 
 def compare_off_he(directory):
     def inner(pid, data, off):
         return next((k for k, v in directory.items() if v == off + 16), None)
+
     return inner
+
 
 def read_index_v5tov7(root):
     for t in root:
@@ -187,6 +224,7 @@ def read_index_v5tov7(root):
         'AKOS': compare_pid_off(dcos),
     }
 
+
 def read_index_v7(root):
     for t in root:
         sputm.render(t)
@@ -229,6 +267,7 @@ def read_index_v7(root):
         'COST': compare_pid_off(dcos),
         'AKOS': compare_pid_off(dcos),
     }
+
 
 def read_index_v8(root):
     for t in root:
@@ -275,11 +314,14 @@ def read_index_v8(root):
         'AKOS': compare_pid_off(dcos, 8),
     }
 
+
 def get_object_id_from_name_v8(dobj):
     def compare_name(pid, data, off):
         name = data[8:48].split(b'\0')[0].decode()
         return dobj[name][0]
+
     return compare_name
+
 
 def read_index_he(root):
     dtlk = None  # prevent `referenced before assignment` error
@@ -419,7 +461,13 @@ if __name__ == '__main__':
         get_gid = idgens.get(chunk.tag)
         gid = get_gid and get_gid(parent and parent.attribs['gid'], chunk.data, offset)
 
-        base = chunk.tag + (f'_{gid:04d}' if gid is not None else '' if not get_gid else f'_o_{offset:04X}')
+        base = chunk.tag + (
+            f'_{gid:04d}'
+            if gid is not None
+            else ''
+            if not get_gid
+            else f'_o_{offset:04X}'
+        )
 
         dirname = parent.attribs['path'] if parent else ''
         path = os.path.join(dirname, base)

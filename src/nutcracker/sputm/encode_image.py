@@ -46,10 +46,11 @@ def read_room_background(image, format):
         print(image.tag, image.data)
         # raise ValueError(f'Unknown image codec: {tag}')
 
+
 def encode_block_v8(filename, blocktype):
     im = Image.open(filename)
     npim = np.asarray(im, dtype=np.uint8)
-    
+
     if blocktype == 'SMAP':
         smap = encode_smap(npim)
         assert np.array_equal(npim, decode_smap(*npim.shape, smap))
@@ -57,14 +58,10 @@ def encode_block_v8(filename, blocktype):
         # return sputm.mktag(blocktype, smap)
 
         num_strips = im.width // 8
-        offs = smap[:num_strips * 4]
-        data = smap[4 * num_strips:]
+        offs = smap[: num_strips * 4]
+        data = smap[4 * num_strips :]
         smap_v8 = sputm.mktag(
-            'BSTR',
-            sputm.mktag(
-                'WRAP',
-                sputm.mktag('OFFS', offs) + data
-            )
+            'BSTR', sputm.mktag('WRAP', sputm.mktag('OFFS', offs) + data)
         )
 
         # verify
@@ -83,6 +80,7 @@ def encode_block_v8(filename, blocktype):
         # v8
         return struct.pack('<2I', *npim.shape[::-1]) + bomp
         return None
+
 
 if __name__ == '__main__':
     import argparse

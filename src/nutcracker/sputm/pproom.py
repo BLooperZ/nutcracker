@@ -27,7 +27,9 @@ def read_room_settings(lflf):
     trns = sputm.find('TRNS', room)
     if trns:
         assert header.transparency is None
-        header.transparency = sputm.find('TRNS', room).data  # pylint: disable=unused-variable
+        header.transparency = sputm.find(
+            'TRNS', room
+        ).data  # pylint: disable=unused-variable
     palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).data
 
     rmim = sputm.find('RMIM', room) or sputm.find('RMIM', lflf)
@@ -36,17 +38,22 @@ def read_room_settings(lflf):
         # 'Game Version < 7'
         assert header.zbuffers is None
         assert len(rmih.data) == 2
-        header.zbuffers = 1 + int.from_bytes(rmih.data, signed=False, byteorder='little')
+        header.zbuffers = 1 + int.from_bytes(
+            rmih.data, signed=False, byteorder='little'
+        )
         assert 1 <= header.zbuffers <= 8
 
     return header, palette, room, rmim or sputm.find('IMAG', room)
+
 
 def read_room(header, rmim):
     if rmim.tag == 'RMIM':
         # 'Game Version < 7'
         for imxx in sputm.findall('IM{:02x}', rmim):
             assert imxx.tag == 'IM00', imxx.tag
-            bgim = read_room_background(imxx.children[0], header.width, header.height, header.zbuffers)
+            bgim = read_room_background(
+                imxx.children[0], header.width, header.height, header.zbuffers
+            )
             if bgim is None:
                 continue
             im = convert_to_pil_image(bgim)
@@ -68,7 +75,9 @@ def read_room(header, rmim):
             s = sputm.generate_schema(chunk)
             image = next(sputm(schema=s).map_chunks(chunk))
 
-            bgim = read_room_background_v8(image, header.width, header.height, header.zbuffers)
+            bgim = read_room_background_v8(
+                image, header.width, header.height, header.zbuffers
+            )
             if bgim is None:
                 continue
             im = convert_to_pil_image(bgim)
@@ -80,6 +89,7 @@ def read_room(header, rmim):
             path = imxx.attribs['path']
 
             yield path, im, zpxx
+
 
 def read_objects(room):
     for obim in sputm.findall('OBIM', room):
@@ -146,11 +156,24 @@ def get_rooms(root):
             else:
                 yield from get_rooms(elem.children)
 
+
 EGA = (
-    (0,0,0), (0,0,170), (0,170,0), (0,170,170),
-    (170,0,0), (170,0,170), (170,85,0), (170,170,170),
-    (85,85,85), (85,85,255), (85,255,85), (85,255,255),
-    (255,85,85), (255,85,255), (255,255,85), (255,255,255)
+    (0, 0, 0),
+    (0, 0, 170),
+    (0, 170, 0),
+    (0, 170, 170),
+    (170, 0, 0),
+    (170, 0, 170),
+    (170, 85, 0),
+    (170, 170, 170),
+    (85, 85, 85),
+    (85, 85, 255),
+    (85, 255, 85),
+    (85, 255, 255),
+    (255, 85, 85),
+    (255, 85, 255),
+    (255, 255, 85),
+    (255, 255, 255),
 )
 EGA = np.asarray(EGA, dtype=np.uint8)
 
@@ -210,7 +233,9 @@ if __name__ == '__main__':
                     room_bg4 = np.copy(room_bg2)
                     room_bg3[::2, :] = room_bg2[::2, :]
                     room_bg4[::2, :] = room_bg1[::2, :]
-                    room_bg = np.dstack([room_bg3, room_bg4]).reshape(room_bg.shape[0], room_bg.shape[1] * 2)
+                    room_bg = np.dstack([room_bg3, room_bg4]).reshape(
+                        room_bg.shape[0], room_bg.shape[1] * 2
+                    )
                     room_bg = np.repeat(room_bg, 2, axis=0)
                     # print(room_bg.shape)
                     room_bg = Image.fromarray(EGA[np.asarray(room_bg)])
@@ -241,6 +266,8 @@ if __name__ == '__main__':
                 im.save(os.path.join(base, 'objects', f'{path}.png'))
 
                 if room_bg:
-                    im_layer = resize_pil_image(*room_bg.size, 39, im, image.ImagePosition(x1=obj_x, y1=obj_y))
+                    im_layer = resize_pil_image(
+                        *room_bg.size, 39, im, image.ImagePosition(x1=obj_x, y1=obj_y)
+                    )
                     im_layer.putpalette(palette)
                     im_layer.save(os.path.join(base, 'objects_layers', f'{path}.png'))

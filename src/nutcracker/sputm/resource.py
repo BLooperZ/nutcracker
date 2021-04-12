@@ -27,7 +27,11 @@ def detect_resource(path):
     if os.path.exists(f'{path}.000'):
         # Configuration for SCUMM v5-v6 games
         pattern = '.{i:03d}'
-        resources = [res for res in resources if parse(f'{path}{pattern}', res, evaluate_result=False)]
+        resources = [
+            res
+            for res in resources
+            if parse(f'{path}{pattern}', res, evaluate_result=False)
+        ]
         read_index = read_index_v5tov7
         chiper_key = 0x69
         max_depth = 4
@@ -36,7 +40,13 @@ def detect_resource(path):
     if os.path.exists(f'{path}.HE0'):
         # Configuration for HE games
         pattern = '.HE{i:d}'
-        resources = sorted([res for res in resources if parse(f'{path}{pattern}', res, evaluate_result=False)])[:2]
+        resources = sorted(
+            [
+                res
+                for res in resources
+                if parse(f'{path}{pattern}', res, evaluate_result=False)
+            ]
+        )[:2]
         if os.path.exists(f'{path}.(a)'):
             resources = [resources[0], f'{path}.(a)']
         read_index = read_index_he
@@ -47,12 +57,23 @@ def detect_resource(path):
     if os.path.exists(f'{path}.LA0'):
         # Configuration for SCUMM v7 games
         pattern = '.LA{i:d}'
-        resources = sorted([res for res in resources if parse(f'{path}{pattern}', res, evaluate_result=False)])
-        read_index = read_index_v8 if os.path.basename(path) == 'COMI' else read_index_v7
+        resources = sorted(
+            [
+                res
+                for res in resources
+                if parse(f'{path}{pattern}', res, evaluate_result=False)
+            ]
+        )
+        read_index = (
+            read_index_v8 if os.path.basename(path) == 'COMI' else read_index_v7
+        )
         chiper_key = 0x00
         max_depth = 4
         base_fix = 8 if os.path.basename(path) == 'COMI' else 0
-        return GameResourceConfig(resources, read_index, chiper_key, max_depth, base_fix)
+        return GameResourceConfig(
+            resources, read_index, chiper_key, max_depth, base_fix
+        )
+
 
 if __name__ == '__main__':
     import argparse

@@ -13,7 +13,7 @@ SCHEMA = {
     RAWD: DATA,
     'LECF': {
         'LOFF',
-        'LFLF'
+        'LFLF',
     },
     'LOFF': DATA,
     'LFLF': {
@@ -31,7 +31,7 @@ SCHEMA = {
         'AWIZ',
         'TALK',
         'TLKE',
-        RAWD
+        RAWD,
     },
     'ROOM': {
         'RMHD',
@@ -51,7 +51,7 @@ SCHEMA = {
         'EXCD',
         'ENCD',
         'NLSC',
-        'LSCR'
+        'LSCR',
     },
     'RMDA': {
         'RMHD',
@@ -65,18 +65,18 @@ SCHEMA = {
         'NLSC',
         'LSC2',
         'LSCR',
-        'POLD'
+        'POLD',
     },
     'RMHD': DATA,
     'RMIM': {
         'RMIH',
-        'IM00'
+        'IM00',
     },
     'TRNS': DATA,
     'EPAL': DATA,
     'CYCL': DATA,
     'PALS': {
-        'WRAP'
+        'WRAP',
     },
     'OFFS': DATA,
     'APAL': DATA,
@@ -86,10 +86,10 @@ SCHEMA = {
         'SMAP',
         'BOMP',
         'AWIZ',
-        'SEQI'
+        'SEQI',
     },
     'IMAG': {
-        'WRAP'
+        'WRAP',
     },
     'OBIM': {
         'IMHD',
@@ -100,12 +100,12 @@ SCHEMA = {
         'ENCD',
         'EXCD',
         'OBCD',
-        'LSCR'
+        'LSCR',
     },
     'OBCD': {
         'CDHD',
         'OBNA',
-        'VERB'
+        'VERB',
     },
     **{f'IM{i:02X}': IMXX for i in range(17)},
     **{f'ZP{i:02X}': DATA for i in range(1, 5)},
@@ -131,7 +131,7 @@ SCHEMA = {
         'CLRS',
         'IMGL',
         'SQDB',
-        'AKFO'
+        'AKFO',
     },
     'SMAP': DATA,  # ?
     'IMHD': DATA,
@@ -160,7 +160,7 @@ SCHEMA = {
     'DIGI': {
         'HSHD',
         'SDAT',
-        'SBNG'
+        'SBNG',
     },
     'HSHD': DATA,
     'SDAT': DATA,
@@ -178,11 +178,11 @@ SCHEMA = {
     'AKFO': DATA,
     'MULT': {
         'DEFA',
-        'WRAP'
+        'WRAP',
     },
     'DEFA': {
         'RGBS',
-        'CNVS'
+        'CNVS',
     },
     'AWIZ': {
         'WIZH',
@@ -190,7 +190,7 @@ SCHEMA = {
         'CNVS',
         'SPOT',
         'RELO',
-        'RGBS'
+        'RGBS',
     },
     'TLKE': {
         'TEXT',
@@ -207,13 +207,13 @@ SCHEMA = {
     'CLRS': DATA,
     'IMGL': DATA,
     'SQDB': {
-        'WRAP'
+        'WRAP',
     },
     'SEQI': {
         'NAME',
         'STOF',
         'SQLC',
-        'SIZE'
+        'SIZE',
     },
     'NAME': DATA,
     'STOF': DATA,
@@ -223,9 +223,8 @@ SCHEMA = {
     'TALK': {
         'HSHD',
         'SDAT',
-        'SBNG'
+        'SBNG',
     },
-
     # HE0
     'DIRI': DATA,
     'DIRR': DATA,
@@ -240,25 +239,22 @@ SCHEMA = {
     'SVER': DATA,
     'AARY': DATA,
     'INIB': {
-        'NOTE'
+        'NOTE',
     },
     'NOTE': DATA,
-
     # HE2
     'TLKB': {
         'SBNG',
-        'TALK'
+        'TALK',
     },
-
     # HE4
     'SONG': {
         'SGHD',
         'SGEN',
-        'DIGI'
+        'DIGI',
     },
     'SGHD': DATA,
     'SGEN': DATA,
-
     # LA0
     'ANAM': DATA,
 }
