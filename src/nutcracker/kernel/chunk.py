@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import IO, Iterator, NamedTuple, Protocol, Sequence, Union, overload
 
+import deal
+
 from .buffer import BufferLike, Splicer, splice
 from .structured import Structured
 
@@ -87,7 +89,7 @@ class StructuredChunk(ChunkFactory, _StructuredChunkHeader):
         )
 
     def mktag(self, tag: str, data: bytes) -> bytes:
-        return self.pack(ChunkHeader(tag.encode('ascii'), len(data))) + data
+        return self.pack(ChunkHeader(tag.encode('ascii'), len(data) + self.size)) + data
 
 
 @dataclass(frozen=True)

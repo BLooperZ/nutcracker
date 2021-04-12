@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass, field
+from operator import attrgetter
 from struct import Struct
 from typing import Mapping, Optional, Set
 
@@ -31,11 +32,15 @@ class _ChunkSetting(ChunkFactory):
 
     def untag(self, buffer: BufferLike, offset: int = 0) -> Chunk:
         """Read chunk from given buffer."""
-        return self.chunk.untag(buffer, offset=offset)
+        chunk = self.chunk.untag(buffer, offset=offset)
+        assert self.chunk.mktag(chunk.tag, chunk.data) == bytes(chunk)
+        return chunk
 
     def mktag(self, tag: str, data: bytes) -> bytes:
         """Create chunk bytes from given tag and data."""
-        return self.chunk.mktag(tag, data)
+        buffer = self.chunk.mktag(tag, data)
+        assert attrgetter('tag', 'data')(self.chunk.untag(buffer)) == (tag, data)
+        return buffer
 
 
 @dataclass(frozen=True)
