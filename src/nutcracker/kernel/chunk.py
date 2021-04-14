@@ -3,8 +3,6 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import IO, Iterator, NamedTuple, Protocol, Sequence, Union, overload
 
-import deal
-
 from .buffer import BufferLike, Splicer, splice
 from .structured import Structured
 
