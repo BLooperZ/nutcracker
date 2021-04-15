@@ -4,8 +4,9 @@ import io
 import os
 import struct
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Mapping
+from typing import Any, Callable, Dict, Mapping, Optional, Set
 
+from nutcracker.sputm2.schema import SCHEMA
 from nutcracker.utils.fileio import read_file
 
 from .index import (
@@ -45,6 +46,9 @@ class GameResource:
     def root(self):
         return read_game_resources(self.game, self.config, self.idgens)
 
+    def read_resources(self, **kwargs):
+        return read_game_resources(self.game, self.config, self.idgens, **kwargs)
+
 
 def save_tree(cfg, element, basedir='.'):
     if not element:
@@ -59,7 +63,7 @@ def save_tree(cfg, element, basedir='.'):
             f.write(cfg.mktag(element.tag, element.data))
 
 
-def read_game_resources(game: Game, config: GameResourceConfig, idgens):
+def read_game_resources(game: Game, config: GameResourceConfig, idgens, **kwargs):
     _, *disks = game.disks
 
     for didx, disk in enumerate(disks):
@@ -128,9 +132,7 @@ def read_game_resources(game: Game, config: GameResourceConfig, idgens):
             res = {'path': path, 'gid': gid}
             return res
 
-        yield from sputm(max_depth=config.max_depth).map_chunks(
-            resource, extra=update_element_path
-        )
+        yield from sputm(**kwargs).map_chunks(resource, extra=update_element_path)
 
 
 def create_config(game: Game) -> GameResourceConfig:
@@ -172,12 +174,27 @@ def open_game_resource(filename: str) -> GameResource:
     return GameResource(game, config, rooms, idgens)
 
 
-def dump_resources(gameres: GameResource, basename: str):
+def dump_resources(
+    gameres: GameResource, basename: str, schema: Optional[Mapping[str, Set]] = None
+):
+    schema = schema or narrow_schema(
+        SCHEMA,
+        {'LECF', 'LFLF', 'RMDA', 'ROOM'},
+    )
     os.makedirs(basename, exist_ok=True)
+    root = gameres.read_resources(schema=schema)
     with open(os.path.join(basename, 'rpdump.xml'), 'w') as f:
-        for disk in gameres.root:
+        for disk in root:
             sputm.render(disk, stream=f)
             save_tree(sputm, disk, basedir=basename)
+
+
+def narrow_schema(schema, trail):
+    new_schema = dict(schema)
+    for container in schema:
+        if container not in trail:
+            new_schema[container] = set()
+    return new_schema
 
 
 if __name__ == '__main__':

@@ -1,5 +1,5 @@
 from collections import Counter
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Dict, Iterable, Iterator, Optional, Sequence, Union
 
 from .chunk import Chunk
@@ -22,13 +22,21 @@ class Element(object):
     attribs: Dict[str, Any]
     children: Sequence['Element']
 
+    _data: Optional[bytes] = field(default=None, repr=False, init=False)
+
     @property
     def tag(self) -> str:
         return self.chunk.tag
 
     @property
     def data(self) -> bytes:
-        return self.chunk.data
+        if self._data is None:
+            return self.chunk.data
+        return self._data
+
+    @data.setter
+    def data(self, value: bytes) -> None:
+        self._data = value
 
     def __iter__(self) -> Iterator['Element']:
         return iter(self.children)
