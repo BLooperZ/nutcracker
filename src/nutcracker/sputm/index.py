@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 
 import io
-import itertools
 import operator
-import os
 import pprint
 from functools import partial
 from itertools import takewhile
 
 from nutcracker.chiper import xor
-from nutcracker.utils.fileio import read_file
 
 from .preset import sputm
 
@@ -130,14 +127,17 @@ def read_dlfl(data):
         return enumerate(offs)
 
 
-# def read_directory(data):
-#     with io.BytesIO(data) as s:
-#         num = int.from_bytes(s.read(2), byteorder='little', signed=False)
-#         merged = [(
-#             int.from_bytes(s.read(1), byteorder='little', signed=False),
-#             int.from_bytes(s.read(4), byteorder='little', signed=False)
-#         ) for i in range(num)]
-#         print(enumerate(merged))
+def read_directory(data):
+    with io.BytesIO(data) as s:
+        num = int.from_bytes(s.read(1), byteorder='little', signed=False)
+        merged = [
+            (
+                int.from_bytes(s.read(1), byteorder='little', signed=False),
+                int.from_bytes(s.read(4), byteorder='little', signed=False),
+            )
+            for i in range(num)
+        ]
+        return merged
 
 
 def read_inner_uint16le_v7(pid, data, off):
@@ -383,106 +383,3 @@ def read_index_he(root):
         'TALK': compare_pid_off(dsou),
         'TLKE': compare_pid_off(dtlk),
     }
-
-
-def save_tree(cfg, element, basedir='.'):
-    if not element:
-        return
-    path = os.path.join(basedir, element.attribs['path'])
-    if element.children:
-        os.makedirs(path, exist_ok=True)
-        for c in element.children:
-            save_tree(cfg, c, basedir=basedir)
-    else:
-        with open(path, 'wb') as f:
-            f.write(cfg.mktag(element.tag, element.data))
-
-
-if __name__ == '__main__':
-    import argparse
-    from typing import Dict
-
-    from .types import Chunk
-
-    parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('filename', help='filename to read from')
-    args = parser.parse_args()
-
-    basedir = os.path.basename(args.filename)
-
-    # Configuration for HE games
-    index_suffix = '.HE0'
-    resource_suffix = '.HE1'
-    # resource_suffix = '.(a)'
-    read_index = read_index_he
-    chiper_key = 0x69
-    max_depth = 4
-
-    # # Configuration for SCUMM v5-v6 games
-    # index_suffix = '.000'
-    # resource_suffix = '.001'
-    # read_index = read_index_v5tov7
-    # chiper_key = 0x69
-    # max_depth = 4
-
-    # # Configuration for SCUMM v7 games
-    # index_suffix = '.LA0'
-    # resource_suffix = '.LA1'
-    # read_index = read_index_v5tov7
-    # chiper_key = 0x00
-    # max_depth = 3
-
-    index = read_file(args.filename + index_suffix, key=chiper_key)
-
-    s = sputm.generate_schema(index)
-    pprint.pprint(s)
-
-    root = sputm(schema=s).map_chunks(index)
-
-    # root = list(root)
-    # os.makedirs(basedir, exist_ok=True)
-    # with open(os.path.join(basedir, 'index.xml'), 'w') as f:
-    #     for t in root:
-    #         sputm.render(t, stream=f)
-    #         print(t, t.data)
-
-    idgens = read_index(root)
-
-    resource = read_file(args.filename + resource_suffix, key=chiper_key)
-
-    # # commented out, use pre-calculated index instead, as calculating is time-consuming
-    # s = sputm.generate_schema(resource)
-    # pprint.pprint(s)
-    # root = sputm.map_chunks(resource, idgen=idgens, schema=s)
-
-    paths: Dict[str, Chunk] = {}
-
-    def update_element_path(parent, chunk, offset):
-        get_gid = idgens.get(chunk.tag)
-        gid = get_gid and get_gid(parent and parent.attribs['gid'], chunk.data, offset)
-
-        base = chunk.tag + (
-            f'_{gid:04d}'
-            if gid is not None
-            else ''
-            if not get_gid
-            else f'_o_{offset:04X}'
-        )
-
-        dirname = parent.attribs['path'] if parent else ''
-        path = os.path.join(dirname, base)
-
-        if path in paths:
-            path += 'd'
-        assert path not in paths, path
-        paths[path] = chunk
-
-        res = {'path': path, 'gid': gid}
-        return res
-
-    root = sputm(max_depth=max_depth).map_chunks(resource, extra=update_element_path)
-    os.makedirs(basedir, exist_ok=True)
-    with open(os.path.join(basedir, 'rpdump.xml'), 'w') as f:
-        for t in root:
-            sputm.render(t, stream=f)
-            save_tree(sputm, t, basedir=basedir)

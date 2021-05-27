@@ -4,6 +4,9 @@ from collections import deque
 from string import printable
 from typing import Optional
 
+from nutcracker.sputm.index2 import narrow_schema
+from nutcracker.sputm.schema import SCHEMA
+
 from .script.bytecode import get_scripts, refresh_offsets, script_map, to_bytes
 from .script.opcodes import ByteValue, RefOffset, WordValue
 from .script.opcodes_v5 import PARAM_1, PARAM_2, OPCODES_v5, Variable, value
@@ -1043,7 +1046,15 @@ if __name__ == '__main__':
     with suppress_stdout():
         rnam, idgens = game.read_index(index_root)
 
-    root = read_game_resources(game, idgens, disks, max_depth=5)
+    root = read_game_resources(
+        game,
+        idgens,
+        disks,
+        max_depth=5,
+        schema=narrow_schema(
+            SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}
+        ),
+    )
 
     print(rnam)
 
@@ -1057,10 +1068,25 @@ if __name__ == '__main__':
                 rnam[room.attribs['gid']],
             )
             fname = f"scripts/{room.attribs['gid']:04d}_{rnam[room.attribs['gid']]}.scu"
+
+            def parse_verb_meta(meta):
+                with io.BytesIO(meta) as stream:
+                    while True:
+                        key = stream.read(1)
+                        if key in {b'\0'}:  # , b'\xFF'}:
+                            break
+                        entry = int.from_bytes(
+                            stream.read(2), byteorder='little', signed=False
+                        )
+                        yield key, entry - len(meta)
+
             with open(fname, 'w') as f:
                 for elem in get_scripts(room):
                     print('//', elem.tag, elem.attribs['path'], file=f)
-                    _, script_data = script_map[elem.tag](elem.data)
+                    pref, script_data = script_map[elem.tag](elem.data)
+                    if elem.tag == 'VERB':
+                        pref = parse_verb_meta(pref)
+                    print('//', 'meta:', list(pref), file=f)
                     bytecode = descumm_v5(script_data, OPCODES_v5)
                     # print_bytecode(bytecode)
                     for off, stat in bytecode.items():

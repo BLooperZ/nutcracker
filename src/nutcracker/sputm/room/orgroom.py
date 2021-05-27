@@ -3,10 +3,9 @@
 import io
 import os
 
-import numpy as np
+from nutcracker.utils.fileio import write_file
 
-from nutcracker.utils.fileio import read_file, write_file
-
+from ..preset import sputm
 from .encode_image import encode_block_v8
 from .pproom import get_rooms, read_room_settings
 from .proom import read_imhd, read_imhd_v7, read_imhd_v8
@@ -121,36 +120,28 @@ def make_wrap(images):
 
 if __name__ == '__main__':
     import argparse
-    import pprint
-    from typing import Dict
 
-    from .index import compare_pid_off, read_rnam
-    from .index2 import read_directory, read_game_resources
-    from .preset import sputm
-    from .resource import detect_resource
-    from .types import Chunk
+    from ..tree import open_game_resource, narrow_schema
+    from ..schema import SCHEMA
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('dirname', help='directory to read from')
     parser.add_argument('--ref', required=True, help='filename to read from')
     args = parser.parse_args()
 
-    game = detect_resource(args.ref)
-    index_file, *disks = game.resources
+    gameres = open_game_resource(args.ref)
+    basename = os.path.basename(os.path.normpath(args.dirname))
 
-    index = read_file(index_file, key=game.chiper_key)
+    root = gameres.read_resources(
+        # schema=narrow_schema(
+        #     SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'PALS'}
+        # )
+    )
 
-    s = sputm.generate_schema(index)
-    pprint.pprint(s)
+    rnam = gameres.rooms
+    version = gameres.game.version
 
-    index_root = sputm(schema=s).map_chunks(index)
-    index_root = list(index_root)
-
-    rnam, idgens = game.read_index(index_root)
-
-    root = read_game_resources(game, idgens, disks, max_depth=None)
-
-    base = os.path.join(args.dirname, 'IMAGES')
+    base = os.path.join(basename, 'IMAGES')
 
     for t in root:
         for lflf in get_rooms(t):
@@ -172,18 +163,18 @@ if __name__ == '__main__':
 
                 if os.path.exists(im_path):
                     res_path = os.path.join(args.dirname, imxx.attribs['path'])
-                    encoded = encode_block_v8(im_path, imxx.tag)
+                    encoded = encode_block_v8(im_path, imxx.tag, version=version)
                     if encoded:
                         if image.tag == 'SMAP':
-                            zpln = sputm.find('ZPLN', image)
-                            assert (
-                                sputm.mktag('BSTR', sputm.find('BSTR', image).data)
-                                + sputm.mktag('ZPLN', zpln.data)
-                                == imxx.data
-                            )
-                            assert zpln
-                            encoded += sputm.mktag('ZPLN', zpln.data)
-
+                            if version >= 8:
+                                zpln = sputm.find('ZPLN', image)
+                                assert (
+                                    sputm.mktag('BSTR', sputm.find('BSTR', image).data)
+                                    + sputm.mktag('ZPLN', zpln.data)
+                                    == imxx.data
+                                )
+                                assert zpln
+                                encoded += sputm.mktag('ZPLN', zpln.data)
                         os.makedirs(os.path.dirname(res_path), exist_ok=True)
                         write_file(res_path, sputm.mktag(imxx.tag, encoded))
                     print((im_path, res_path, imxx.tag))

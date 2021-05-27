@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 import io
+import os
 import struct
 from functools import partial
 from itertools import chain
-from typing import NamedTuple, Set
+from typing import Iterable, Iterator, NamedTuple, Sequence, Set
 
 import numpy as np
 from PIL import Image
 
 from nutcracker.codex.bpp_codec import decode_bpp_char
 from nutcracker.codex.rle import decode_lined_rle
-from nutcracker.graphics import image
+from nutcracker.graphics import grid, image
+
+from ..preset import sputm
+from ..types import Element
+
+CHAR_HEADER = struct.Struct('<2B2b')
 
 
 class DataFrame(NamedTuple):
@@ -20,16 +26,13 @@ class DataFrame(NamedTuple):
     yoff: int
     data: Image.Image
 
-    def tolist(self):
+    def tolist(self) -> Sequence[Sequence[int]]:
         return np.asarray(self.data).tolist()
 
 
-char_header = struct.Struct('<4b')
-
-
-def char_from_bytes(data, decoder):
-    width, cheight, xoff, yoff = char_header.unpack(data[: char_header.size])
-    data = decoder(data[char_header.size :], width, cheight)
+def char_from_bytes(data: bytes, decoder: callable) -> DataFrame:
+    width, cheight, xoff, yoff = CHAR_HEADER.unpack(data[: CHAR_HEADER.size])
+    data = decoder(data[CHAR_HEADER.size :], width, cheight)
     return DataFrame(
         width=width,
         height=cheight,
@@ -108,36 +111,28 @@ def handle_char(data):
         return nchars, frames
 
 
-if __name__ == '__main__':
-    import argparse
-    import glob
-    import os
+CHAR_PALETTE = [((59 + x) ** 2 * 83 // 67) % 256 for x in range(256 * 3)]
 
-    from nutcracker.graphics import grid
-    from nutcracker.utils.funcutils import flatten
 
-    from .preset import sputm
+def get_chars(root: Iterable[Element]) -> Iterator[Element]:
+    for elem in root:
+        if elem.tag in {'LECF', 'LFLF', 'CHAR'}:
+            if elem.tag in {'CHAR'}:
+                yield elem
+            else:
+                yield from get_chars(elem.children)
 
-    parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('files', nargs='+', help='files to read from')
-    args = parser.parse_args()
 
-    files = set(flatten(glob.iglob(r) for r in args.files))
-    print(files)
-    for filename in files:
+def decode_font(char: Element) -> image.TImage:
+    data = sputm.assert_tag('CHAR', char)
 
-        print('==============', filename)
-        basename = os.path.basename(filename)
-        with open(filename, 'rb') as res:
-            data = sputm.assert_tag('CHAR', sputm.untag(res))
-            assert res.read() == b''
+    nchars, chars = handle_char(data)
+    chars = [(idx, (char.xoff, char.yoff, char.data)) for idx, char in chars]
+    bim = grid.create_char_grid(nchars, chars)
+    bim.putpalette(CHAR_PALETTE)
+    return bim
 
-            nchars, chars = handle_char(data)
-            palette = [((59 + x) ** 2 * 83 // 67) % 256 for x in range(256 * 3)]
 
-            chars = [(idx, (char.xoff, char.yoff, char.data)) for idx, char in chars]
-
-            bim = grid.create_char_grid(nchars, chars)
-            bim.putpalette(palette)
-            bim.save(f'{basename}.png')
-            print(f'saved {basename}.png')
+def decode_all_fonts(root: Iterable[Element]):
+    for char in get_chars(root):
+        yield os.path.basename(char.attribs['path']), decode_font(char)

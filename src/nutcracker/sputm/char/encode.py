@@ -8,7 +8,10 @@ import numpy as np
 from nutcracker.codex.bpp_codec import encode_bpp_char
 from nutcracker.codex.rle import encode_lined_rle
 from nutcracker.graphics import grid
+from nutcracker.kernel.element import Element
 from nutcracker.utils.funcutils import flatten
+
+from ..preset import sputm
 
 
 def calc_bpp(x: int):
@@ -49,35 +52,21 @@ def encode_frames(frames, encoder):
             yield struct.pack('<2B2b', width, cheight, xoff, yoff) + encoder(img)
 
 
-if __name__ == '__main__':
-    import argparse
+def encode_char(ref: Element, filename: str) -> bytes:
+    data = sputm.assert_tag('CHAR', ref)
+    with io.BytesIO(data) as stream:
+        stream.seek(0, io.SEEK_END)
+        dataend_real = stream.tell() - 4
+        stream.seek(0, io.SEEK_SET)
+        dataend = int.from_bytes(stream.read(4), byteorder='little', signed=False)
+        dataend_diff = dataend_real - dataend
+        version = ord(stream.read(1))
+        color_map = stream.read(16)
+        bpp = ord(stream.read(1))
+        height = ord(stream.read(1))
+        print(dataend_diff, version, color_map, bpp, height)
 
-    from .preset import sputm
-
-    parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('filename', help='filename to read from')
-    parser.add_argument(
-        '--ref', '-r', action='store', type=str, help='reference CHAR file'
-    )
-    parser.add_argument('--target', '-t', help='target file', default='CHAR_OUT')
-    args = parser.parse_args()
-
-    with open(args.ref, 'rb') as ref:
-        data = sputm.assert_tag('CHAR', sputm.untag(ref))
-        assert ref.read() == b''
-        with io.BytesIO(data) as stream:
-            stream.seek(0, io.SEEK_END)
-            dataend_real = stream.tell() - 4
-            stream.seek(0, io.SEEK_SET)
-            dataend = int.from_bytes(stream.read(4), byteorder='little', signed=False)
-            dataend_diff = dataend_real - dataend
-            version = ord(stream.read(1))
-            color_map = stream.read(16)
-            bpp = ord(stream.read(1))
-            height = ord(stream.read(1))
-            print(dataend_diff, version, color_map, bpp, height)
-
-    frames = grid.read_image_grid(args.filename)
+    frames = grid.read_image_grid(filename)
     frames = list(filter_empty_frames(frames))
     while not frames[-1]:
         frames = frames[:-1]
@@ -113,5 +102,4 @@ if __name__ == '__main__':
         out = (len(out_data) - dataend_diff).to_bytes(
             4, byteorder='little', signed=False
         ) + out_data
-    with open(args.target, 'wb') as outfile:
-        outfile.write(sputm.mktag('CHAR', out))
+        return out

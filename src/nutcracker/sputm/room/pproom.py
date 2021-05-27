@@ -7,14 +7,12 @@ from PIL import Image
 
 from nutcracker.graphics import image
 
-from .index import read_file
-from .preset import sputm
+from ..preset import sputm
 from .proom import (
     convert_to_pil_image,
     read_imhd,
     read_imhd_v7,
     read_imhd_v8,
-    read_rmhd,
     read_rmhd_structured,
     read_room_background,
     read_room_background_v8,
@@ -179,36 +177,31 @@ EGA = np.asarray(EGA, dtype=np.uint8)
 
 if __name__ == '__main__':
     import argparse
-    import pprint
 
     from nutcracker.graphics.frame import resize_pil_image
 
-    from .index2 import read_game_resources
-    from .resource import detect_resource
+    from ..tree import open_game_resource, narrow_schema
+    from ..schema import SCHEMA
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
     parser.add_argument('--ega', action='store_true', help='output is in EGA mode')
     args = parser.parse_args()
 
-    basedir = os.path.basename(args.filename)
+    filename = args.filename
 
-    game = detect_resource(args.filename)
-    index_file, *disks = game.resources
+    gameres = open_game_resource(filename)
+    basename = gameres.basename
 
-    index = read_file(index_file, key=game.chiper_key)
+    root = gameres.read_resources(
+        # schema=narrow_schema(
+        #     SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'PALS'}
+        # )
+    )
 
-    s = sputm.generate_schema(index)
-    pprint.pprint(s)
+    rnam = gameres.rooms
 
-    index_root = sputm(schema=s).map_chunks(index)
-    index_root = list(index_root)
-
-    rnam, idgens = game.read_index(index_root)
-
-    root = read_game_resources(game, idgens, disks, max_depth=None)
-
-    base = os.path.join(os.path.basename(args.filename), 'IMAGES')
+    base = os.path.join(basename, 'IMAGES')
     os.makedirs(base, exist_ok=True)
 
     os.makedirs(os.path.join(base, 'backgrounds'), exist_ok=True)
@@ -220,15 +213,17 @@ if __name__ == '__main__':
 
         for lflf in get_rooms(t):
             header, palette, room, rmim = read_room_settings(lflf)
-            epal = np.frombuffer(sputm.find('EPAL', room).data, dtype=np.uint8)
+            epal = sputm.find('EPAL', room)
+            if epal:
+                egapal = np.frombuffer(epal.data, dtype=np.uint8)
             room_bg = None
             room_id = lflf.attribs.get('gid')
 
             for path, room_bg, zpxx in read_room(header, rmim):
-                if args.ega:
+                if args.ega and epal:
                     room_bg = np.asarray(room_bg)
-                    room_bg1 = epal[room_bg] % 16
-                    room_bg2 = epal[room_bg] // 16
+                    room_bg1 = egapal[room_bg] % 16
+                    room_bg2 = egapal[room_bg] // 16
                     room_bg3 = np.copy(room_bg1)
                     room_bg4 = np.copy(room_bg2)
                     room_bg3[::2, :] = room_bg2[::2, :]

@@ -8,9 +8,26 @@ import numpy as np
 
 from nutcracker.codex.codex import decode1
 from nutcracker.codex.smap import decode_he, decode_smap, read_uint16le, read_uint32le
+from nutcracker.graphics.image import convert_to_pil_image
 
-from .preset import sputm
-from .room import convert_to_pil_image, read_room_background_v8
+from ..preset import sputm
+
+
+def read_room_background_v8(image, width, height, zbuffers):
+    if image.tag == 'SMAP':
+        sputm.render(image)
+        bstr = sputm.findpath('BSTR/WRAP', image)
+        if not bstr:
+            return None
+        return decode_smap(height, width, bstr.data[8:])
+    elif image.tag == 'BOMP':
+        with io.BytesIO(image.data) as s:
+            width = read_uint32le(s)
+            height = read_uint32le(s)
+            im = decode1(width, height, s.read())
+        return np.asarray(im, dtype=np.uint8)
+    else:
+        raise ValueError(f'Unknown image codec: {image.tag}')
 
 
 def read_room_background(image, width, height, zbuffers):
@@ -55,7 +72,7 @@ class RoomHeader:
     transparency: Optional[int] = None
 
 
-def read_rmhd_structured(data):
+def read_rmhd_structured(data) -> RoomHeader:
     version = None
     zbuffers = None
     transparency = None
@@ -87,70 +104,6 @@ def read_rmhd_structured(data):
         zbuffers=zbuffers,
         transparency=transparency,
     )
-
-
-def read_rmhd(data):
-    print(data)
-    if len(data) == 6:
-        # 'Game Version < 7'
-        rwidth = int.from_bytes(data[:2], signed=False, byteorder='little')
-        rheight = int.from_bytes(data[2:4], signed=False, byteorder='little')
-        robjs = int.from_bytes(data[4:], signed=False, byteorder='little')
-    elif len(data) == 10:
-        # 'Game Version == 7'
-        version = int.from_bytes(data[:4], signed=False, byteorder='little')
-        rwidth = int.from_bytes(data[4:6], signed=False, byteorder='little')
-        rheight = int.from_bytes(data[6:8], signed=False, byteorder='little')
-        robjs = int.from_bytes(data[8:], signed=False, byteorder='little')
-    else:
-        # 'Game Version == 8'
-        assert len(data) == 24
-        version = int.from_bytes(data[:4], signed=False, byteorder='little')
-        rwidth = int.from_bytes(data[4:8], signed=False, byteorder='little')
-        rheight = int.from_bytes(data[8:12], signed=False, byteorder='little')
-        robjs = int.from_bytes(data[12:16], signed=False, byteorder='little')
-        zbuffers = int.from_bytes(data[16:20], signed=False, byteorder='little')
-        transparency = int.from_bytes(data[20:24], signed=False, byteorder='little')
-    return rwidth, rheight, robjs
-
-
-def read_room(lflf):
-    room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
-    rwidth, rheight, _ = read_rmhd(sputm.find('RMHD', room).data)
-    # trns = sputm.find('TRNS', room).data  # pylint: disable=unused-variable
-    palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).data
-
-    rmim = sputm.find('RMIM', room) or sputm.find('RMIM', lflf)
-    rmih = sputm.find('RMIH', rmim)
-    if rmih:
-        # 'Game Version < 7'
-        assert len(rmih.data) == 2
-        zbuffers = 1 + int.from_bytes(rmih.data, signed=False, byteorder='little')
-        assert 1 <= zbuffers <= 8
-
-        for idx, imxx in enumerate(sputm.findall('IM{:02x}', rmim)):
-            assert idx == 0, idx
-            assert imxx.tag == 'IM00', imxx.tag
-            bgim = read_room_background(imxx.children[0], rwidth, rheight, zbuffers)
-            if bgim is None:
-                continue
-            im = convert_to_pil_image(bgim)
-            zpxx = list(sputm.findall('ZP{:02x}', imxx))
-            assert len(zpxx) == zbuffers - 1
-            im.putpalette(palette)
-            yield idx, im, zpxx
-    else:
-        # TODO: check for multiple IMAG in room bg (different image state)
-        for idx, imag in enumerate(sputm.findall('IMAG', room)):
-            wrap = sputm.find('WRAP', imag)
-            assert idx == 0
-            print(rwidth, rheight)
-            bgim = read_room_background_v8(wrap.children[1], rwidth, rheight, 0)
-            if bgim is None:
-                continue
-            im = convert_to_pil_image(bgim)
-            im.putpalette(palette)
-            yield idx, im, ()
 
 
 def read_imhd(data):
@@ -249,33 +202,3 @@ def read_objects(lflf):
                 im = convert_to_pil_image(bgim)
                 im.putpalette(palette)
                 yield 0, f'{name}_STATE_{idx}', im
-
-
-if __name__ == '__main__':
-    import argparse
-    import pprint
-
-    from nutcracker.chiper import xor
-
-    parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('filename', help='filename to read from')
-    parser.add_argument('--chiper-key', default='0x00', type=str, help='xor key')
-    args = parser.parse_args()
-
-    with open(args.filename, 'rb') as res:
-        resource = xor.read(res, key=int(args.chiper_key, 16))
-
-    root = sputm.find('LECF', sputm.map_chunks(resource))
-    assert root
-    for idx, lflf in enumerate(sputm.findall('LFLF', root)):
-        for oidx, (bg_idx, room_bg, zpxx) in enumerate(read_room(lflf)):
-            room_bg.save(f'LFLF_{1 + idx:04d}_ROOM_RMIM_{bg_idx:04d}_{oidx:04d}.png')
-
-        for oidx, (obj_idx, tag, im) in enumerate(read_objects(lflf)):
-            im.save(f'LFLF_{1 + idx:04d}_ROOM_OBIM_{obj_idx:04d}_{tag}_{oidx:04d}.png')
-
-        # for lflf in sputm.findall('LFLF', t):
-        #     tree = sputm.findpath('ROOM/OBIM/IM{:02x}', lflf)
-        #     sputm.render(tree)
-
-    print('==========')

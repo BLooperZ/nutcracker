@@ -3,13 +3,16 @@
 import glob
 import io
 import os
-from typing import Iterable
+from typing import Iterable, Sequence
 
-from nutcracker.sputm.index import read_directory_leg as read_dir
-from nutcracker.sputm.index import read_directory_leg_v8 as read_dir_v8
-from nutcracker.sputm.index import read_dlfl
+from nutcracker.sputm.tree import GameResource
 from nutcracker.utils.fileio import read_file, write_file
 
+from .index import (
+    read_directory_leg as read_dir,
+    read_directory_leg_v8 as read_dir_v8,
+    read_dlfl
+)
 from .preset import sputm
 from .types import Element
 
@@ -140,7 +143,7 @@ def update_element(basedir, elements, files):
         yield elem
 
 
-def update_loff(game, disk):
+def update_loff(config, disk):
     """Update LOFF chunk if exists"""
     loff = sputm.find('LOFF', disk)
     if loff:
@@ -149,7 +152,7 @@ def update_loff(game, disk):
             stream.write(bytes([len(rooms)]))
             for room in rooms:
                 room_id = room.attribs['gid']
-                room_off = room.attribs['offset'] + 16 - game.base_fix
+                room_off = room.attribs['offset'] + 16 - config.base_fix
                 stream.write(room_id.to_bytes(1, byteorder='little', signed=False))
                 stream.write(room_off.to_bytes(4, byteorder='little', signed=False))
             loff_data = stream.getvalue()
@@ -157,9 +160,12 @@ def update_loff(game, disk):
         loff.data = loff_data
 
 
-def rebuild_resources(game, basename, index_file, disks, index_root, updated_resource):
+def rebuild_resources(
+    gameres: GameResource, basename: str, updated_resource: Sequence[Element]
+) -> None:
+    index_file, *disks = gameres.game.disks
     for t, disk in zip(updated_resource, disks):
-        update_loff(game, t)
+        update_loff(gameres.config, t)
 
         _, ext = os.path.splitext(disk)
         write_file(
@@ -167,53 +173,19 @@ def rebuild_resources(game, basename, index_file, disks, index_root, updated_res
             sputm.mktag(
                 t.tag, sputm.write_chunks(sputm.mktag(e.tag, e.data) for e in t)
             ),
-            key=game.chiper_key,
+            key=gameres.game.chiper_key,
         )
 
     _, ext = os.path.splitext(index_file)
     write_file(
         f'{basename}{ext}',
         sputm.write_chunks(
-            make_index_from_resource(updated_resource, index_root, game.base_fix)
+            make_index_from_resource(
+                updated_resource, gameres.game.index, gameres.config.base_fix
+            )
         ),
-        key=game.chiper_key,
+        key=gameres.game.chiper_key,
     )
-
-
-if __name__ == '__main__':
-    import argparse
-
-    from .index2 import read_game_resources
-    from .resource import detect_resource
-
-    parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('dirname', help='directory to read from')
-    parser.add_argument('--ref', required=True, help='filename to read from')
-    args = parser.parse_args()
-
-    game = detect_resource(args.ref)
-    index_file, *disks = game.resources
-
-    index = read_file(index_file, key=game.chiper_key)
-
-    s = sputm.generate_schema(index)
-
-    index_root = sputm(schema=s).map_chunks(index)
-    index_root = list(index_root)
-
-    basename = os.path.basename(os.path.normpath(args.dirname))
-
-    _, idgens = game.read_index(index_root)
-
-    root = read_game_resources(game, idgens, disks, max_depth=None)
-
-    files = set(glob.iglob(f'{args.dirname}/**/*', recursive=True))
-    assert None not in files
-
-    updated_resource = list(update_element(args.dirname, root, files))
-
-    rebuild_resources(game, basename, index_file, disks, index_root, updated_resource)
-
 
 # ## REFERENCE
 # <MAXS ---- path="MAXS" />

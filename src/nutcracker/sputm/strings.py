@@ -16,6 +16,10 @@ from nutcracker.sputm.script.bytecode import (
     verb_script,
 )
 from nutcracker.sputm.script.opcodes import (
+    OPCODES_he60,
+    OPCODES_he70,
+    OPCODES_he71,
+    OPCODES_he72,
     OPCODES_he80,
     OPCODES_he90,
     OPCODES_v6,
@@ -122,10 +126,10 @@ def print_to_msg(line: str, encoding: str = 'windows-1255') -> bytes:
     return (
         unescape_message(
             line
-            # .replace('\r', '')
+            .replace('\r', '')
             .replace('\n', '').encode(encoding)
         )
-        # .replace(b'\\r', b'\r')
+        .replace(b'\\x0D', b'\r')
         .replace(b'\\x09', b'\t')
         .replace(b'\\x80', b'\x80')
         .replace(b'\\xd9', b'\xd9')
@@ -133,16 +137,16 @@ def print_to_msg(line: str, encoding: str = 'windows-1255') -> bytes:
     )
 
 
-def msg_to_print(msg: bytes, encoding: str = 'windows-1255') -> str:
+def msg_to_print(msg: bytes, encoding: str = 'windows-1255', var_size=2) -> str:
     assert b'\\x80' not in msg
     assert b'\\xd9' not in msg
-    # assert b'\\r' not in msg
+    assert b'\\x0D' not in msg
     assert b'\\x09' not in msg
-    escaped = b''.join(escape_message(msg, escape=b'\xff', var_size=2))
+    escaped = b''.join(escape_message(msg, escape=b'\xff', var_size=var_size))
     assert b'\n' not in escaped
     line = (
         escaped
-        # .replace(b'\r', b'\\r')
+        .replace(b'\r', b'\\x0D')
         .replace(b'\t', b'\\x09')
         .replace(b'\x80', b'\\x80')
         .replace(b'\xd9', b'\\xd9')
@@ -153,7 +157,7 @@ def msg_to_print(msg: bytes, encoding: str = 'windows-1255') -> str:
     return line
 
 
-def get_optable(game: Game):
+def get_optable(game: Game) -> OpTable:
     if game.version >= 8:
         return OPCODES_v8
     if game.version >= 7:
@@ -162,6 +166,14 @@ def get_optable(game: Game):
         return (OPCODES_he90,)
     if game.he_version >= 80:
         return OPCODES_he80
+    if game.he_version >= 72:
+        return OPCODES_he72
+    if game.he_version >= 71:
+        return OPCODES_he71
+    if game.he_version >= 70:
+        return OPCODES_he70
+    if game.he_version >= 60:
+        return OPCODES_he60
     if game.version >= 6:
         return OPCODES_v6
     if game.version >= 5:
@@ -169,7 +181,7 @@ def get_optable(game: Game):
     raise NotImplementedError('SCUMM < 5 is not implemented')
 
 
-def get_script_map(game: Game):
+def get_script_map(game: Game) -> Mapping[str, Callable[[bytes], Tuple[bytes, bytes]]]:
     script_map = {
         'SCRP': global_script,
         'LSCR': local_script,

@@ -1,53 +1,18 @@
 #!/usr/bin/env python3
 
-import io
-import os
 import struct
 
 import numpy as np
 from PIL import Image
 
 from nutcracker.codex.codex import decode1, encode1
-from nutcracker.codex.smap import decode_smap, encode_smap, fake_encode_strip
-from nutcracker.sputm.index import read_index_he, read_index_v5tov7
+from nutcracker.codex.smap import decode_smap, encode_smap
 from nutcracker.utils.fileio import write_file
 
-from .preset import sputm
+from ..preset import sputm
 
 
-def read_room_background(image, format):
-    if image.tag == 'SMAP':
-        return encode_smap(height, width, image.data)
-    elif image.tag == 'BOMP':
-        with io.BytesIO(image.data) as s:
-            # pylint: disable=unused-variable
-            unk = read_uint16le(s)
-            width = read_uint16le(s)
-            height = read_uint16le(s)
-            # TODO: check if x,y or y,x
-            xpad, ypad = read_uint16le(s), read_uint16le(s)
-            im = decode1(width, height, s.read())
-        return np.asarray(im, dtype=np.uint8)
-    elif image.tag == 'BMAP':
-        with io.BytesIO(image.data) as s:
-            code = s.read(1)[0]
-            palen = code % 10
-            if 134 <= code <= 138:
-                res = decode_he(s, width * height, palen)
-                return np.frombuffer(res, dtype=np.uint8).reshape((height, width))
-            elif 144 <= code <= 148:
-                # TODO: handle transparency
-                # tr = TRANSPARENCY
-                res = decode_he(s, width * height, palen)
-                return np.frombuffer(res, dtype=np.uint8).reshape((height, width))
-            elif code == 150:
-                return np.full((height, width), s.read(1)[0], dtype=np.uint8)
-    else:
-        print(image.tag, image.data)
-        # raise ValueError(f'Unknown image codec: {tag}')
-
-
-def encode_block_v8(filename, blocktype):
+def encode_block_v8(filename, blocktype, version=8):
     im = Image.open(filename)
     npim = np.asarray(im, dtype=np.uint8)
 
@@ -55,7 +20,8 @@ def encode_block_v8(filename, blocktype):
         smap = encode_smap(npim)
         assert np.array_equal(npim, decode_smap(*npim.shape, smap))
         # TODO: detect version, older games should return here
-        # return sputm.mktag(blocktype, smap)
+        if version < 8:
+            return smap
 
         num_strips = im.width // 8
         offs = smap[: num_strips * 4]
@@ -84,10 +50,6 @@ def encode_block_v8(filename, blocktype):
 
 if __name__ == '__main__':
     import argparse
-    import pprint
-    from typing import Dict
-
-    from .types import Chunk, Element
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')

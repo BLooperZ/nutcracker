@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 import io
 import os
-import struct
-from functools import partial
-from typing import Iterator, NamedTuple, Sequence, Tuple
+from typing import Iterator, NamedTuple, Tuple
 
-import numpy as np
-
-from nutcracker.codex import bomb, codex, rle
+from nutcracker.codex import bomb, rle
 from nutcracker.graphics.image import convert_to_pil_image
-from nutcracker.smush.types import Element
-from nutcracker.utils.funcutils import flatten, grouper
+from nutcracker.utils.funcutils import flatten
 
+from ..preset import sputm
 
 class AkosHeader(NamedTuple):
     unk_1: int
@@ -184,8 +180,6 @@ if __name__ == '__main__':
     import os
 
     from nutcracker.utils.fileio import read_file
-
-    from .preset import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('files', nargs='+', help='files to read from')

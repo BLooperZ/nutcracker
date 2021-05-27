@@ -6,7 +6,6 @@ import struct
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Mapping, Optional, Set
 
-from nutcracker.sputm2.schema import SCHEMA
 from nutcracker.utils.fileio import read_file
 
 from .index import (
@@ -17,6 +16,7 @@ from .index import (
     read_index_v7,
     read_index_v8,
 )
+from .schema import SCHEMA
 from .preset import sputm
 from .resource import Game, load_resource
 from .types import Chunk
@@ -121,12 +121,11 @@ def read_game_resources(game: Game, config: GameResourceConfig, idgens, **kwargs
             paths[path] = chunk
 
             if chunk.tag == 'WRAP':
-                with io.BytesIO(chunk.data) as stream:
-                    offs = sputm.untag(stream)
-                    size = len(offs.data) // 4
-                    offs = dict(
-                        zip(struct.unpack(f'<{size}I', offs.data), range(1, size + 1))
-                    )
+                offs = sputm.untag(chunk.data)
+                size = len(offs.data) // 4
+                offs = dict(
+                    zip(struct.unpack(f'<{size}I', offs.data), range(1, size + 1))
+                )
                 wraps[path] = offs
 
             res = {'path': path, 'gid': gid}
@@ -195,15 +194,3 @@ def narrow_schema(schema, trail):
         if container not in trail:
             new_schema[container] = set()
     return new_schema
-
-
-if __name__ == '__main__':
-    import argparse
-
-    parser = argparse.ArgumentParser(description='read sputm game')
-    parser.add_argument('filename', help='filename to read from')
-    args = parser.parse_args()
-
-    gameres = open_game_resource(args.filename)
-
-    dump_resources(gameres, gameres.basename)
