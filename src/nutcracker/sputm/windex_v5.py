@@ -4,7 +4,7 @@ from collections import deque
 from string import printable
 from typing import Optional
 
-from nutcracker.sputm.index2 import narrow_schema
+from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
 
 from .script.bytecode import get_scripts, refresh_offsets, script_map, to_bytes
@@ -1023,39 +1023,28 @@ if __name__ == '__main__':
     from nutcracker.utils.fileio import read_file
     from nutcracker.utils.libio import suppress_stdout
 
-    from .index2 import read_game_resources
+    from .tree import open_game_resource, narrow_schema
+    from .schema import SCHEMA
     from .preset import sputm
-    from .resource import detect_resource
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
     args = parser.parse_args()
 
-    basedir = os.path.basename(args.filename)
-
-    game = detect_resource(args.filename)
-    index_file, *disks = game.resources
-
-    index = read_file(index_file, key=game.chiper_key)
-
-    s = sputm.generate_schema(index)
-
-    index_root = sputm(schema=s).map_chunks(index)
-    index_root = list(index_root)
+    filename = args.filename
 
     with suppress_stdout():
-        rnam, idgens = game.read_index(index_root)
+        gameres = open_game_resource(filename)
+        basename = gameres.basename
 
-    root = read_game_resources(
-        game,
-        idgens,
-        disks,
-        max_depth=5,
-        schema=narrow_schema(
-            SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}
-        ),
-    )
+        root = gameres.read_resources(
+            max_depth=5,
+            schema=narrow_schema(
+                SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}
+            ),
+        )
 
+    rnam = gameres.rooms
     print(rnam)
 
     os.makedirs('scripts', exist_ok=True)
