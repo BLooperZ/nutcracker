@@ -118,31 +118,7 @@ def make_wrap(images):
         )
 
 
-if __name__ == '__main__':
-    import argparse
-
-    from ..tree import open_game_resource, narrow_schema
-    from ..schema import SCHEMA
-
-    parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('dirname', help='directory to read from')
-    parser.add_argument('--ref', required=True, help='filename to read from')
-    args = parser.parse_args()
-
-    gameres = open_game_resource(args.ref)
-    basename = os.path.basename(os.path.normpath(args.dirname))
-
-    root = gameres.read_resources(
-        # schema=narrow_schema(
-        #     SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'PALS'}
-        # )
-    )
-
-    rnam = gameres.rooms
-    version = gameres.game.version
-
-    base = os.path.join(basename, 'IMAGES')
-
+def make_room_images_patch(root, basedir, rnam, version):
     for t in root:
         for lflf in get_rooms(t):
             header, palette, room, rmim = read_room_settings(lflf)
@@ -155,14 +131,14 @@ if __name__ == '__main__':
                     f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else path
                 )
                 im_path = im_path.replace(os.path.sep, '_')
-                im_path = os.path.join(base, 'backgrounds', f'{im_path}.png')
+                im_path = os.path.join(basedir, 'backgrounds', f'{im_path}.png')
 
                 chunk = sputm.mktag(imxx.tag, imxx.data)
                 s = sputm.generate_schema(chunk)
                 image = next(sputm(schema=s).map_chunks(chunk))
 
                 if os.path.exists(im_path):
-                    res_path = os.path.join(args.dirname, imxx.attribs['path'])
+                    # res_path = os.path.join(dirname, imxx.attribs['path'])
                     encoded = encode_block_v8(im_path, imxx.tag, version=version)
                     if encoded:
                         if image.tag == 'SMAP':
@@ -175,31 +151,33 @@ if __name__ == '__main__':
                                 )
                                 assert zpln
                                 encoded += sputm.mktag('ZPLN', zpln.data)
-                        os.makedirs(os.path.dirname(res_path), exist_ok=True)
-                        write_file(res_path, sputm.mktag(imxx.tag, encoded))
-                    print((im_path, res_path, imxx.tag))
+                        yield imxx.attribs['path'], sputm.mktag(imxx.tag, encoded)
+                        # os.makedirs(os.path.dirname(res_path), exist_ok=True)
+                        # write_file(res_path, sputm.mktag(imxx.tag, encoded))
+                    print((im_path, imxx.attribs['path'], imxx.tag))
 
             for path, obj_name, imag, _, _ in read_objects(room):
                 if imag.tag == 'WRAP':
                     images = list(
                         encode_images_v8(
-                            os.path.join(base, 'objects'), imag, obj_name, room_id, rnam
+                            os.path.join(basedir, 'objects'), imag, obj_name, room_id, rnam
                         )
                     )
                     if any(custome is not None for imxx, custome in images):
-                        res_path = os.path.join(args.dirname, imag.attribs['path'])
-                        os.makedirs(os.path.dirname(res_path), exist_ok=True)
-                        write_file(res_path, make_wrap(images))
+                        # res_path = os.path.join(dirname, imag.attribs['path'])
+                        yield imag.attribs['path'], make_wrap(images)
+                        # os.makedirs(os.path.dirname(res_path), exist_ok=True)
+                        # write_file(res_path, make_wrap(images))
 
                         # path = bomp.attribs['path']
                         # name = f'{obj_name}_{iidx:04d}'
 
                         # im_path = f'{room_id:04d}_{name}' if room_id in rnam else path
                         # im_path = im_path.replace(os.path.sep, '_')
-                        # im_path = os.path.join(base, 'objects', f'{im_path}.png')
+                        # im_path = os.path.join(basedir, 'objects', f'{im_path}.png')
 
                         # if os.path.exists(im_path):
-                        #     res_path = os.path.join(args.dirname, imxx.attribs['path'])
+                        #     res_path = os.path.join(dirname, imxx.attribs['path'])
                         #     encoded = encode_block(im_path, imxx.tag)
                         #     if encoded:
                         #         # TODO: fix OFFS when inside WRAP
@@ -210,3 +188,36 @@ if __name__ == '__main__':
                         #             encoded
                         #         )
                         #     print((im_path, res_path, imxx.tag))
+
+
+
+if __name__ == '__main__':
+    import argparse
+
+    from ..tree import open_game_resource, narrow_schema
+    from ..schema import SCHEMA
+
+    parser = argparse.ArgumentParser(description='read smush file')
+    parser.add_argument('dirname', help='directory to read from')
+    parser.add_argument('--ref', required=True, help='filename to read from')
+    args = parser.parse_args()
+
+    gameres = open_game_resource(args.ref)
+
+    basename = os.path.basename(os.path.normpath(args.dirname))
+
+    root = gameres.read_resources(
+        # schema=narrow_schema(
+        #     SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'PALS'}
+        # )
+    )
+
+    for path, content in make_room_images_patch(
+        root,
+        os.path.join(basename, 'IMAGES'),
+        gameres.rooms,
+        gameres.game.version
+    ):
+        res_path = os.path.join(args.dirname, path)
+        os.makedirs(os.path.dirname(res_path), exist_ok=True)
+        write_file(res_path, content)

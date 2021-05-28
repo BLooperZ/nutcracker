@@ -175,6 +175,69 @@ EGA = (
 )
 EGA = np.asarray(EGA, dtype=np.uint8)
 
+
+
+def extract_room_images(root, basedir, rnam, version, ega_mode=False):
+    for t in root:
+        paths = {}
+
+        for lflf in get_rooms(t):
+            header, palette, room, rmim = read_room_settings(lflf)
+            epal = sputm.find('EPAL', room)
+            if epal:
+                egapal = np.frombuffer(epal.data, dtype=np.uint8)
+            room_bg = None
+            room_id = lflf.attribs.get('gid')
+
+            for path, room_bg, zpxx in read_room(header, rmim):
+                if ega_mode and epal:
+                    room_bg = np.asarray(room_bg)
+                    room_bg1 = egapal[room_bg] % 16
+                    room_bg2 = egapal[room_bg] // 16
+                    room_bg3 = np.copy(room_bg1)
+                    room_bg4 = np.copy(room_bg2)
+                    room_bg3[::2, :] = room_bg2[::2, :]
+                    room_bg4[::2, :] = room_bg1[::2, :]
+                    room_bg = np.dstack([room_bg3, room_bg4]).reshape(
+                        room_bg.shape[0], room_bg.shape[1] * 2
+                    )
+                    room_bg = np.repeat(room_bg, 2, axis=0)
+                    # print(room_bg.shape)
+                    room_bg = Image.fromarray(EGA[np.asarray(room_bg)])
+                else:
+                    room_bg.putpalette(palette)
+
+                path = f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else path
+
+                path = path.replace(os.path.sep, '_')
+                # dirname = os.path.dirname(path)
+                # os.makedirs(os.path.join(basedir, dirname), exist_ok=True)
+                assert path not in paths, path
+                paths[path] = True
+                room_bg.save(os.path.join(basedir, 'backgrounds', f'{path}.png'))
+
+            for path, name, im, obj_x, obj_y in read_objects(room):
+                im.putpalette(palette)
+
+                path = f'{room_id:04d}_{name}' if room_id in rnam else path
+
+                path = path.replace(os.path.sep, '_')
+                # dirname = os.path.dirname(path)
+                # os.makedirs(os.path.join(basedir, dirname), exist_ok=True)
+                # while path in paths:
+                #     path += 'd'
+                assert not path in paths, (path, paths)
+                paths[path] = True
+                im.save(os.path.join(basedir, 'objects', f'{path}.png'))
+
+                if room_bg:
+                    im_layer = resize_pil_image(
+                        *room_bg.size, 39, im, image.ImagePosition(x1=obj_x, y1=obj_y)
+                    )
+                    im_layer.putpalette(palette)
+                    im_layer.save(os.path.join(basedir, 'objects_layers', f'{path}.png'))
+
+
 if __name__ == '__main__':
     import argparse
 
@@ -200,69 +263,13 @@ if __name__ == '__main__':
     )
 
     rnam = gameres.rooms
+    version = gameres.game.version
 
-    base = os.path.join(basename, 'IMAGES')
-    os.makedirs(base, exist_ok=True)
+    basedir = os.path.join(basename, 'IMAGES')
+    os.makedirs(basedir, exist_ok=True)
 
-    os.makedirs(os.path.join(base, 'backgrounds'), exist_ok=True)
-    os.makedirs(os.path.join(base, 'objects'), exist_ok=True)
-    os.makedirs(os.path.join(base, 'objects_layers'), exist_ok=True)
+    os.makedirs(os.path.join(basedir, 'backgrounds'), exist_ok=True)
+    os.makedirs(os.path.join(basedir, 'objects'), exist_ok=True)
+    os.makedirs(os.path.join(basedir, 'objects_layers'), exist_ok=True)
 
-    for t in root:
-        paths = {}
-
-        for lflf in get_rooms(t):
-            header, palette, room, rmim = read_room_settings(lflf)
-            epal = sputm.find('EPAL', room)
-            if epal:
-                egapal = np.frombuffer(epal.data, dtype=np.uint8)
-            room_bg = None
-            room_id = lflf.attribs.get('gid')
-
-            for path, room_bg, zpxx in read_room(header, rmim):
-                if args.ega and epal:
-                    room_bg = np.asarray(room_bg)
-                    room_bg1 = egapal[room_bg] % 16
-                    room_bg2 = egapal[room_bg] // 16
-                    room_bg3 = np.copy(room_bg1)
-                    room_bg4 = np.copy(room_bg2)
-                    room_bg3[::2, :] = room_bg2[::2, :]
-                    room_bg4[::2, :] = room_bg1[::2, :]
-                    room_bg = np.dstack([room_bg3, room_bg4]).reshape(
-                        room_bg.shape[0], room_bg.shape[1] * 2
-                    )
-                    room_bg = np.repeat(room_bg, 2, axis=0)
-                    # print(room_bg.shape)
-                    room_bg = Image.fromarray(EGA[np.asarray(room_bg)])
-                else:
-                    room_bg.putpalette(palette)
-
-                path = f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else path
-
-                path = path.replace(os.path.sep, '_')
-                # dirname = os.path.dirname(path)
-                # os.makedirs(os.path.join(base, dirname), exist_ok=True)
-                assert path not in paths, path
-                paths[path] = True
-                room_bg.save(os.path.join(base, 'backgrounds', f'{path}.png'))
-
-            for path, name, im, obj_x, obj_y in read_objects(room):
-                im.putpalette(palette)
-
-                path = f'{room_id:04d}_{name}' if room_id in rnam else path
-
-                path = path.replace(os.path.sep, '_')
-                # dirname = os.path.dirname(path)
-                # os.makedirs(os.path.join(base, dirname), exist_ok=True)
-                # while path in paths:
-                #     path += 'd'
-                assert not path in paths, (path, paths)
-                paths[path] = True
-                im.save(os.path.join(base, 'objects', f'{path}.png'))
-
-                if room_bg:
-                    im_layer = resize_pil_image(
-                        *room_bg.size, 39, im, image.ImagePosition(x1=obj_x, y1=obj_y)
-                    )
-                    im_layer.putpalette(palette)
-                    im_layer.save(os.path.join(base, 'objects_layers', f'{path}.png'))
+    extract_room_images(root, basedir, rnam, version, ega_mode=args.ega)
