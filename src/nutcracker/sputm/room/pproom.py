@@ -6,6 +6,7 @@ import numpy as np
 from PIL import Image
 
 from nutcracker.graphics import image
+from nutcracker.graphics.frame import resize_pil_image
 
 from ..preset import sputm
 from .proom import (
@@ -236,40 +237,3 @@ def extract_room_images(root, basedir, rnam, version, ega_mode=False):
                     )
                     im_layer.putpalette(palette)
                     im_layer.save(os.path.join(basedir, 'objects_layers', f'{path}.png'))
-
-
-if __name__ == '__main__':
-    import argparse
-
-    from nutcracker.graphics.frame import resize_pil_image
-
-    from ..tree import open_game_resource, narrow_schema
-    from ..schema import SCHEMA
-
-    parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('filename', help='filename to read from')
-    parser.add_argument('--ega', action='store_true', help='output is in EGA mode')
-    args = parser.parse_args()
-
-    filename = args.filename
-
-    gameres = open_game_resource(filename)
-    basename = gameres.basename
-
-    root = gameres.read_resources(
-        # schema=narrow_schema(
-        #     SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'PALS'}
-        # )
-    )
-
-    rnam = gameres.rooms
-    version = gameres.game.version
-
-    basedir = os.path.join(basename, 'IMAGES')
-    os.makedirs(basedir, exist_ok=True)
-
-    os.makedirs(os.path.join(basedir, 'backgrounds'), exist_ok=True)
-    os.makedirs(os.path.join(basedir, 'objects'), exist_ok=True)
-    os.makedirs(os.path.join(basedir, 'objects_layers'), exist_ok=True)
-
-    extract_room_images(root, basedir, rnam, version, ega_mode=args.ega)

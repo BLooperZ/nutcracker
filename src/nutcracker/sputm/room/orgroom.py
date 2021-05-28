@@ -188,36 +188,3 @@ def make_room_images_patch(root, basedir, rnam, version):
                         #             encoded
                         #         )
                         #     print((im_path, res_path, imxx.tag))
-
-
-
-if __name__ == '__main__':
-    import argparse
-
-    from ..tree import open_game_resource, narrow_schema
-    from ..schema import SCHEMA
-
-    parser = argparse.ArgumentParser(description='read smush file')
-    parser.add_argument('dirname', help='directory to read from')
-    parser.add_argument('--ref', required=True, help='filename to read from')
-    args = parser.parse_args()
-
-    gameres = open_game_resource(args.ref)
-
-    basename = os.path.basename(os.path.normpath(args.dirname))
-
-    root = gameres.read_resources(
-        # schema=narrow_schema(
-        #     SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'PALS'}
-        # )
-    )
-
-    for path, content in make_room_images_patch(
-        root,
-        os.path.join(basename, 'IMAGES'),
-        gameres.rooms,
-        gameres.game.version
-    ):
-        res_path = os.path.join(args.dirname, path)
-        os.makedirs(os.path.dirname(res_path), exist_ok=True)
-        write_file(res_path, content)

@@ -19,9 +19,10 @@ from nutcracker.sputm.strings import (
 from nutcracker.sputm.tree import dump_resources, narrow_schema, open_game_resource
 from nutcracker.utils.fileio import write_file
 from .preset import sputm
+from .room import runner as room_image
 
 app = typer.Typer()
-
+app.add_typer(room_image.app, name='room')
 
 # ## RESOURCE
 
