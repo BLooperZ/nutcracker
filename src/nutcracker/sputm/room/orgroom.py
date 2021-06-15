@@ -188,3 +188,22 @@ def make_room_images_patch(root, basedir, rnam, version):
                         #             encoded
                         #         )
                         #     print((im_path, res_path, imxx.tag))
+                else:
+                    im_path = f'{room_id:04d}_{obj_name}' if room_id in rnam else path
+
+                    im_path = im_path.replace(os.path.sep, '_')
+                    im_path = os.path.join(basedir, 'objects', f'{im_path}.png')
+
+                    chunk = sputm.mktag(imag.tag, imag.data)
+                    s = sputm.generate_schema(chunk)
+                    image = next(sputm(schema=s).map_chunks(chunk))
+
+                    # print(im_path, imag)
+                    if os.path.exists(im_path):
+                        print('exists')
+                        encoded = encode_block_v8(im_path, imag.tag, version=version)
+                        if encoded:
+                            yield imag.attribs['path'], sputm.mktag(imag.tag, encoded)
+                            # os.makedirs(os.path.dirname(res_path), exist_ok=True)
+                            # write_file(res_path, sputm.mktag(imxx.tag, encoded))
+                        print((im_path, imag.attribs['path'], imag.tag))
