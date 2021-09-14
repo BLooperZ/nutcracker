@@ -1,10 +1,12 @@
 import io
+import itertools
 from typing import Sequence
 
 import numpy as np
 
-TRANSPARENCY = 255
+from nutcracker.utils.funcutils import grouper
 
+TRANSPARENCY = 255
 
 def read_uint16le(stream):
     return int.from_bytes(stream.read(2), byteorder='little', signed=False)
@@ -64,14 +66,59 @@ def decode_complex(stream, decoded_size, palen):
                 if next(bitstream):
                     shift = collect_bits(bitstream, 3) - 4
                     if shift != 0:
+                        # print(f'SHIFT {shift}')
                         color += shift
                     else:
                         ln = collect_bits(bitstream, 8) - 1
                         out.write(to_byte(color) * ln)
+                        # print(f'LARGE GROUP {ln + 1}')
                 else:
                     color = collect_bits(bitstream, palen)
+                    # print(f'NEW COLOR {color}')
+            # else:
+            #     print('SMALL GROUP')
             out.write(to_byte(color))
+
         return out.getvalue()
+
+
+def encode_complex(data, palen):
+    bits = []
+    grouped = (list(group) for _, group in itertools.groupby(data))
+    color = None
+    while True:
+        currs = next(grouped, None)
+        if not currs:
+            break
+        curr = currs[0]
+        currs = currs[1:]
+        assert curr != color
+        if not bits:
+            bits.extend(int(x) for x in f'{curr:08b}'[::-1])
+        elif -4 <= curr - color < 4:
+            # print(f'SHIFT {curr - color}')
+            bits.extend([1, 1])
+            bits.extend(int(x) for x in f'{curr - color + 4:03b}'[::-1])
+        else:
+            # print(f'NEW COLOR {curr}')
+            bits.extend([1, 0])
+            bits.extend(int(x) for x in f'{curr:0{palen}b}'[::-1])
+        color = curr
+
+        if currs:
+            for group in grouper(currs, 255):
+                group = [x for x in group if x is not None]
+                if len(group) > 12:  # 12 in v6+ (dig, samnmax, dott (code 108)), 255 in v5? (atlantis, monkey2 (code 68))
+                    bits.extend([1, 1, 0, 0, 1])
+                    bits.extend(int(x) for x in f'{len(group):08b}'[::-1])
+                    # print(f'LARGE GROUP {len(group)}')
+                else:
+                    # for _ in range(len(group)):
+                    #     print('SMALL GROUP')
+                    bits.extend([0] * len(group)) 
+
+    gbits = grouper((str(x) for x in bits), 8, fillvalue='0')
+    return bytes(int(''.join(byte)[::-1], 2) for byte in gbits)
 
 
 def decode_raw(stream, decoded_size, width):
@@ -124,7 +171,6 @@ def get_method_info(code):
     elif 0x86 <= code <= 0x94:
         # elif 134 <= code <=148:
         method = decode_he
-    print(method)
 
     tr = None
     if 0x22 <= code <= 0x30 or 0x54 <= code <= 0x80 or code >= 0x8F:
@@ -138,21 +184,25 @@ def get_method_info(code):
 
 
 def fake_encode_strip(data, height, width):
+    print(f'==============={0xBB in data}===================')
     with io.BytesIO() as s:
-        s.write(b'\x95')
+        s.write(b'\x95' if 0xBB in data else b'\x01')
         s.write(bytes(data))
         return s.getvalue()
 
 
-def parse_strip(height, width, data):
+def parse_strip(height, width, data, transparency=None):
     print((height, width))
     with io.BytesIO(data) as s:
         code = s.read(1)[0]
-        print(code)
 
         decode_method, direction, tr, palen = get_method_info(code)
         # TODO: handle transparency
         # assert not tr
+        if tr is not None:
+            tr = transparency
+
+        print(code, decode_method, direction, tr, palen, sep=' === ')
 
         # try:
 
@@ -163,6 +213,32 @@ def parse_strip(height, width, data):
         #         print(decoded)
         #         print(data[1:])
         #         assert encode_basic(dec_stream, height, palen, 8) == data[1:]
+
+
+        if decode_method == decode_complex:
+            print('=====================')
+            encoded = encode_complex(decoded, palen)
+            print('---------------------')
+            with io.BytesIO(encoded) as e:
+                assert decode_method(e, width * height, palen) == decoded
+
+            pos = s.tell()
+            s.seek(1, 0)
+            orig = s.read()
+
+            # s.seek(1, 0)
+            # obits = list(create_bitsream(s))
+
+            # print('O', obits)
+
+            print(pos - 1, len(orig), len(encoded))
+            if orig[:len(encoded)] != encoded:
+                print('ORIG', orig)
+                print('ENCODED', encoded)
+                exit(1)
+            elif len(orig) > len(encoded):
+                assert encoded + b'\x00' == orig
+            s.seek(pos)
 
         # Verify nothing left in stream
         assert not s.read()
@@ -178,7 +254,7 @@ def parse_strip(height, width, data):
         #     return np.zeros((height, width), dtype=np.uint8)
 
 
-def decode_smap(height: int, width: int, data: bytes) -> Sequence[Sequence[int]]:
+def decode_smap(height: int, width: int, data: bytes, transparency: bytes = None) -> Sequence[Sequence[int]]:
     strip_width = 8
 
     if width == 0 or height == 0:
@@ -191,7 +267,7 @@ def decode_smap(height: int, width: int, data: bytes) -> Sequence[Sequence[int]]
     index = list(zip(offs, offs[1:] + [len(data)]))
 
     strips = (data[offset:end] for offset, end in index)
-    return np.hstack([parse_strip(height, strip_width, data) for data in strips])
+    return np.hstack([parse_strip(height, strip_width, data, transparency) for data in strips])
 
 
 def encode_smap(image: Sequence[Sequence[int]]) -> bytes:

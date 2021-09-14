@@ -6,11 +6,11 @@ import numpy as np
 from PIL import Image
 
 from nutcracker.graphics import image
+from nutcracker.graphics.image import convert_to_pil_image
 from nutcracker.graphics.frame import resize_pil_image
 
 from ..preset import sputm
 from .proom import (
-    convert_to_pil_image,
     read_imhd,
     read_imhd_v7,
     read_imhd_v8,
@@ -90,7 +90,7 @@ def read_room(header, rmim):
             yield path, im, zpxx
 
 
-def read_objects(room):
+def read_objects(header, room):
     for obim in sputm.findall('OBIM', room):
         imhd = sputm.find('IMHD', obim).data
         if len(imhd) == 16:
@@ -99,7 +99,7 @@ def read_objects(room):
             assert obj_id == obim.attribs['gid']
 
             for imxx in sputm.findall('IM{:02x}', obim):
-                bgim = read_room_background(imxx.children[0], obj_width, obj_height, 0)
+                bgim = read_room_background(imxx.children[0], obj_width, obj_height, 0, transparency=header.transparency)
                 if bgim is None:
                     continue
                 im = convert_to_pil_image(bgim)
@@ -115,7 +115,7 @@ def read_objects(room):
             # assert obj_id == obim.attribs['gid'], (obj_id, obim.attribs['gid'])  # assertion breaks on HE games
 
             for imxx in sputm.findall('IM{:02x}', obim):
-                bgim = read_room_background(imxx.children[0], obj_width, obj_height, 0)
+                bgim = read_room_background(imxx.children[0], obj_width, obj_height, 0, transparency=header.transparency)
                 if bgim is None:
                     continue
                 im = convert_to_pil_image(bgim)
@@ -138,7 +138,7 @@ def read_objects(room):
                     s = sputm.generate_schema(chunk)
                     image = next(sputm(schema=s).map_chunks(chunk))
 
-                    bgim = read_room_background_v8(image, obj_width, obj_height, 0)
+                    bgim = read_room_background_v8(image, obj_width, obj_height, 0, transparency=header.transparency)
                     im = convert_to_pil_image(bgim)
 
                     path = bomp.attribs['path']
@@ -184,6 +184,7 @@ def extract_room_images(root, basedir, rnam, version, ega_mode=False):
 
         for lflf in get_rooms(t):
             header, palette, room, rmim = read_room_settings(lflf)
+            print(header)
             epal = sputm.find('EPAL', room)
             if epal:
                 egapal = np.frombuffer(epal.data, dtype=np.uint8)
@@ -217,7 +218,7 @@ def extract_room_images(root, basedir, rnam, version, ega_mode=False):
                 paths[path] = True
                 room_bg.save(os.path.join(basedir, 'backgrounds', f'{path}.png'))
 
-            for path, name, im, obj_x, obj_y in read_objects(room):
+            for path, name, im, obj_x, obj_y in read_objects(header, room):
                 im.putpalette(palette)
 
                 path = f'{room_id:04d}_{name}' if room_id in rnam else path

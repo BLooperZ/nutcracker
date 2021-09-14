@@ -8,7 +8,6 @@ import numpy as np
 
 from nutcracker.codex.codex import decode1
 from nutcracker.codex.smap import decode_he, decode_smap, read_uint16le, read_uint32le
-from nutcracker.graphics.image import convert_to_pil_image
 
 from ..preset import sputm
 
@@ -30,9 +29,9 @@ def read_room_background_v8(image, width, height, zbuffers):
         raise ValueError(f'Unknown image codec: {image.tag}')
 
 
-def read_room_background(image, width, height, zbuffers):
+def read_room_background(image, width, height, zbuffers, transparency=None):
     if image.tag == 'SMAP':
-        return decode_smap(height, width, image.data)
+        return decode_smap(height, width, image.data, transparency)
     elif image.tag == 'BOMP':
         with io.BytesIO(image.data) as s:
             # pylint: disable=unused-variable
@@ -163,42 +162,3 @@ def read_imhd_v8(data):
             # TODO: read hotspots
             pass
         return name, obj_height, obj_width, obj_x, obj_y
-
-
-def read_objects(lflf):
-    room = sputm.find('ROOM', lflf) or sputm.find('RMDA', lflf)
-    # trns = sputm.find('TRNS', room).data  # pylint: disable=unused-variable
-    palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).data
-
-    for obim in sputm.findall('OBIM', room):
-        imhd = sputm.find('IMHD', obim).data
-        if len(imhd) == 16:
-            obj_id, obj_height, obj_width = read_imhd(imhd)
-
-            for imxx in sputm.findall('IM{:02x}', obim):
-                bgim = read_room_background(imxx.children[0], obj_width, obj_height, 0)
-                im = convert_to_pil_image(bgim)
-                im.putpalette(palette)
-                yield obj_id, imxx.tag, im
-        elif len(imhd) < 80:
-            # Game version == 7
-            obj_id, obj_height, obj_width = read_imhd_v7(imhd)
-
-            for imxx in sputm.findall('IM{:02x}', obim):
-                bgim = read_room_background(imxx.children[0], obj_width, obj_height, 0)
-                im = convert_to_pil_image(bgim)
-                im.putpalette(palette)
-                yield obj_id, imxx.tag, im
-        else:
-            # Game version == 8
-            name, obj_height, obj_width = read_imhd_v8(imhd)
-            print(name, obj_height, obj_width)
-            for idx, imag in enumerate(sputm.findall('IMAG', obim)):
-                assert idx == 0
-                iim = sputm.find('WRAP', imag)
-                bgim = read_room_background_v8(
-                    iim.children[1], obj_width, obj_height, 0
-                )
-                im = convert_to_pil_image(bgim)
-                im.putpalette(palette)
-                yield 0, f'{name}_STATE_{idx}', im
