@@ -82,14 +82,37 @@ def decode_complex(stream, decoded_size, palen):
         return out.getvalue()
 
 
+def encode_basic(data, palen):
+    bits = []
+    color = data[0]
+    sub = 1
+    for curr in data[1:]:
+        if curr == color:
+            bits.extend([0])
+        elif color - curr == sub:
+            # print(f'SHIFT {curr - color}')
+            bits.extend([1, 1, 0])
+        elif curr - color == sub:
+            # print(f'SHIFT {curr - color}')
+            bits.extend([1, 1, 1])
+            sub = -sub
+        else:
+            # print(f'NEW COLOR {curr}')
+            bits.extend([1, 0])
+            bits.extend(int(x) for x in f'{curr:0{palen}b}'[::-1])
+            sub = 1
+        color = curr
+
+    gbits = grouper((str(x) for x in bits), 8, fillvalue='0')
+    return data[:1] + bytes(int(''.join(byte)[::-1], 2) for byte in gbits)
+
+
+
 def encode_complex(data, palen):
     bits = []
     grouped = (list(group) for _, group in itertools.groupby(data))
     color = None
-    while True:
-        currs = next(grouped, None)
-        if not currs:
-            break
+    for currs in grouped:
         curr = currs[0]
         currs = currs[1:]
         assert curr != color
@@ -148,6 +171,29 @@ def decode_he(stream, decoded_size, palen):
                     color = collect_bits(bitstream, palen)
             out.write(to_byte(color))
         return out.getvalue()
+
+
+
+def encode_he(data, palen):
+    delta_color = [-4, -3, -2, -1, 1, 2, 3, 4]
+
+    bits = []
+    color = data[0]
+    for curr in data[1:]:
+        if curr == color:
+            bits.extend([0])
+        elif curr - color in delta_color:
+            # print(f'SHIFT {curr - color}')
+            bits.extend([1, 1])
+            bits.extend(int(x) for x in f'{delta_color.index(curr - color):03b}'[::-1])
+        else:
+            # print(f'NEW COLOR {curr}')
+            bits.extend([1, 0])
+            bits.extend(int(x) for x in f'{curr:0{palen}b}'[::-1])
+        color = curr
+
+    gbits = grouper((str(x) for x in bits), 8, fillvalue='0')
+    return data[:1] + bytes(int(''.join(byte)[::-1], 2) for byte in gbits)
 
 
 def get_method_info(code):
@@ -215,9 +261,18 @@ def parse_strip(height, width, data, transparency=None):
         #         assert encode_basic(dec_stream, height, palen, 8) == data[1:]
 
 
-        if decode_method == decode_complex:
+        if decode_method in {decode_complex, decode_basic, decode_he}:
+            if decode_method == decode_complex:
+                encode_method = encode_complex
+            elif decode_method == decode_basic:
+                encode_method = encode_basic
+            elif decode_method == decode_he:
+                encode_method = encode_he
+            else:
+                raise ValueError('should not have got here')
+
             print('=====================')
-            encoded = encode_complex(decoded, palen)
+            encoded = encode_method(decoded, palen)
             print('---------------------')
             with io.BytesIO(encoded) as e:
                 assert decode_method(e, width * height, palen) == decoded
