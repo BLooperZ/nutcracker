@@ -6,18 +6,30 @@ import numpy as np
 from PIL import Image
 
 from nutcracker.codex.codex import decode1, encode1
-from nutcracker.codex.smap import decode_smap, encode_smap
+from nutcracker.codex.smap import decode_smap, encode_smap, extract_smap_codes
 from nutcracker.utils.fileio import write_file
 
 from ..preset import sputm
 
 
-def encode_block_v8(filename, blocktype, version=8):
+def encode_block_v8(filename, blocktype, version=8, ref=None):
     im = Image.open(filename)
     npim = np.asarray(im, dtype=np.uint8)
 
     if blocktype == 'SMAP':
-        smap = encode_smap(npim)
+        ref_data = ref.data if ref else None
+        if version == 8 and ref_data:
+
+            chunk = sputm.mktag(blocktype, ref_data)
+            s = sputm.generate_schema(chunk)
+            image = next(sputm(schema=s).map_chunks(chunk))
+
+            bstr = sputm.findpath('BSTR/WRAP', image)
+            sputm.render(bstr)
+            ref_data = bstr.data[8:] if bstr else None
+
+        codes = extract_smap_codes(*npim.shape, ref_data) if ref_data else None
+        smap = encode_smap(npim, codes=codes)
         assert np.array_equal(npim, decode_smap(*npim.shape, smap))
         # TODO: detect version, older games should return here
         if version < 8:

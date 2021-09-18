@@ -237,6 +237,30 @@ def fake_encode_strip(data, height, width):
         return s.getvalue()
 
 
+def encode_raw(data, *args):
+    return data
+
+def encode_strip(data, height, width, code):
+    method, direction, tr, palen = get_method_info(code)
+    data = bytes(data) if direction == 'HORIZONTAL' else bytes(data.T)
+    if method == decode_complex:
+        encode_method = encode_complex
+    elif method == decode_basic:
+        encode_method = encode_basic
+    elif method == decode_he:
+        encode_method = encode_he
+    else:
+        assert code in {0x01, 0x95}
+        encode_method = encode_raw
+    with io.BytesIO() as s:
+        s.write(bytes([code]))
+        encoded = encode_method(data, palen)
+        with io.BytesIO(encoded) as vstream:
+            assert method(vstream, height * width, palen) == data
+        s.write(bytes(encoded))
+        return s.getvalue()
+
+
 def parse_strip(height, width, data, transparency=None):
     print((height, width))
     with io.BytesIO(data) as s:
@@ -325,13 +349,32 @@ def decode_smap(height: int, width: int, data: bytes, transparency: bytes = None
     return np.hstack([parse_strip(height, strip_width, data, transparency) for data in strips])
 
 
-def encode_smap(image: Sequence[Sequence[int]]) -> bytes:
+def extract_smap_codes(height: int, width: int, data: bytes) -> Sequence[int]:
+    strip_width = 8
+
+    if width == 0 or height == 0:
+        return None
+
+    num_strips = width // strip_width
+    with io.BytesIO(data) as s:
+        offs = [(read_uint32le(s) - 8) for _ in range(num_strips)]
+
+    index = list(zip(offs, offs[1:] + [len(data)]))
+    return [data[offset] for offset, _ in index]
+
+
+def encode_smap(image: Sequence[Sequence[int]], codes=None) -> bytes:
     strip_width = 8
 
     height, width = image.shape
     print(height, width)
     num_strips = width // strip_width
-    strips = [fake_encode_strip(s, *s.shape) for s in np.hsplit(image, num_strips)]
+    if codes:
+        print('CODES', codes)
+        strips = [encode_strip(s, *s.shape, code) for s, code in zip(np.hsplit(image, num_strips), codes)]
+    else:
+        print('NO CODES')
+        strips = [fake_encode_strip(s, *s.shape) for s in np.hsplit(image, num_strips)]
     with io.BytesIO() as stream:
         offset = 8 + 4 * len(strips)
         for strip in strips:

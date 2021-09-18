@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
+from dataclasses import dataclass
 import io
 import os
-
-from nutcracker.utils.fileio import write_file
 
 from ..preset import sputm
 from .encode_image import encode_block_v8
@@ -25,6 +24,14 @@ def read_room(header, rmim):
         yield from wrap.children[1:]
 
 
+@dataclass
+class ObjectHeader:
+    height: int
+    width: int
+    xoff: int
+    yoff: int
+
+
 def read_objects(room):
     for obim in sputm.findall('OBIM', room):
         imhd = sputm.find('IMHD', obim).data
@@ -37,7 +44,7 @@ def read_objects(room):
                 path = imxx.attribs['path']
                 name = f'{obj_id:04d}_{imxx.tag}'
 
-                yield path, name, imxx.children[0], obj_x, obj_y
+                yield path, name, imxx.children[0], ObjectHeader(height=obj_height, width=obj_width, xoff=obj_x, yoff=obj_y)
         elif len(imhd) < 80:
             # Game version == 7
             print(imhd)
@@ -48,14 +55,14 @@ def read_objects(room):
                 path = imxx.attribs['path']
                 name = f'{obj_id:04d}_{imxx.tag}'
 
-                yield path, name, imxx.children[0], obj_x, obj_y
+                yield path, name, imxx.children[0], ObjectHeader(height=obj_height, width=obj_width, xoff=obj_x, yoff=obj_y)
         else:
             # Game version == 8
             obj_name, obj_height, obj_width, obj_x, obj_y = read_imhd_v8(imhd)
             for idx, imag in enumerate(sputm.findall('IMAG', obim)):
                 assert idx == 0
                 wrap = sputm.find('WRAP', imag)
-                yield wrap.attribs['path'], obj_name, wrap, obj_x, obj_y
+                yield wrap.attribs['path'], obj_name, wrap, ObjectHeader(height=obj_height, width=obj_width, xoff=obj_x, yoff=obj_y)
                 # for iidx, bomp in enumerate(wrap.children[1:]):
 
                 #     path = bomp.attribs['path']
@@ -139,7 +146,7 @@ def make_room_images_patch(root, basedir, rnam, version):
 
                 if os.path.exists(im_path):
                     # res_path = os.path.join(dirname, imxx.attribs['path'])
-                    encoded = encode_block_v8(im_path, imxx.tag, version=version)
+                    encoded = encode_block_v8(im_path, imxx.tag, version=version, ref=imxx)
                     if encoded:
                         if image.tag == 'SMAP':
                             if version >= 8:
@@ -156,7 +163,7 @@ def make_room_images_patch(root, basedir, rnam, version):
                         # write_file(res_path, sputm.mktag(imxx.tag, encoded))
                     print((im_path, imxx.attribs['path'], imxx.tag))
 
-            for path, obj_name, imag, _, _ in read_objects(room):
+            for path, obj_name, imag, obj_header in read_objects(room):
                 if imag.tag == 'WRAP':
                     images = list(
                         encode_images_v8(
@@ -201,7 +208,7 @@ def make_room_images_patch(root, basedir, rnam, version):
                     # print(im_path, imag)
                     if os.path.exists(im_path):
                         print('exists')
-                        encoded = encode_block_v8(im_path, imag.tag, version=version)
+                        encoded = encode_block_v8(im_path, imag.tag, version=version, ref=imag)
                         if encoded:
                             yield imag.attribs['path'], sputm.mktag(imag.tag, encoded)
                             # os.makedirs(os.path.dirname(res_path), exist_ok=True)

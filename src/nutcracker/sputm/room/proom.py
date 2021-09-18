@@ -12,13 +12,13 @@ from nutcracker.codex.smap import decode_he, decode_smap, read_uint16le, read_ui
 from ..preset import sputm
 
 
-def read_room_background_v8(image, width, height, zbuffers):
+def read_room_background_v8(image, width, height, zbuffers, transparency=None):
     if image.tag == 'SMAP':
         sputm.render(image)
         bstr = sputm.findpath('BSTR/WRAP', image)
         if not bstr:
             return None
-        return decode_smap(height, width, bstr.data[8:])
+        return decode_smap(height, width, bstr.data[8:], transparency=transparency)
     elif image.tag == 'BOMP':
         with io.BytesIO(image.data) as s:
             width = read_uint32le(s)
