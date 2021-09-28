@@ -1,5 +1,6 @@
 import io
 import itertools
+from functools import partial
 from typing import Sequence
 
 import numpy as np
@@ -108,7 +109,7 @@ def encode_basic(data, palen):
 
 
 
-def encode_complex(data, palen):
+def encode_complex(data, palen, limit=255):
     bits = []
     grouped = (list(group) for _, group in itertools.groupby(data))
     color = None
@@ -131,7 +132,7 @@ def encode_complex(data, palen):
         if currs:
             for group in grouper(currs, 255):
                 group = [x for x in group if x is not None]
-                if len(group) > 12:  # 12 in v6+ (dig, samnmax, dott (code 108)), 255 in v5? (atlantis, monkey2 (code 68))
+                if len(group) > limit:  # 12 in v6+ (dig, samnmax, dott (code 108)), 255 in v5? (atlantis, monkey2 (code 68))
                     bits.extend([1, 1, 0, 0, 1])
                     bits.extend(int(x) for x in f'{len(group):08b}'[::-1])
                     # print(f'LARGE GROUP {len(group)}')
@@ -244,7 +245,11 @@ def encode_strip(data, height, width, code):
     method, direction, tr, palen = get_method_info(code)
     data = bytes(data) if direction == 'HORIZONTAL' else bytes(data.T)
     if method == decode_complex:
-        encode_method = encode_complex
+        if code - palen in {60, 80}:
+            encode_method = partial(encode_complex, limit=255)
+        else:
+            assert code - palen in {100, 120}, (code, palen)
+            encode_method = partial(encode_complex, limit=12)
     elif method == decode_basic:
         encode_method = encode_basic
     elif method == decode_he:
@@ -287,7 +292,11 @@ def parse_strip(height, width, data, transparency=None):
 
         if decode_method in {decode_complex, decode_basic, decode_he}:
             if decode_method == decode_complex:
-                encode_method = encode_complex
+                if code - palen in {60, 80}:
+                    encode_method = partial(encode_complex, limit=255)
+                else:
+                    assert code - palen in {100, 120}, (code, palen)
+                    encode_method = partial(encode_complex, limit=12)
             elif decode_method == decode_basic:
                 encode_method = encode_basic
             elif decode_method == decode_he:

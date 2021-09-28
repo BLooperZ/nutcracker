@@ -1,18 +1,11 @@
-import glob
 import os
 from pathlib import Path
-from typing import Iterable, List, Set
 
 import typer
 
-from nutcracker.smush import anim
-from nutcracker.smush.compress import strip_compress_san
-from nutcracker.smush.decode import decode_nut, decode_san
-from nutcracker.smush.preset import smush
 from nutcracker.sputm.room.orgroom import make_room_images_patch
 from nutcracker.sputm.room.pproom import extract_room_images
 from nutcracker.utils.fileio import write_file
-from nutcracker.utils.funcutils import flatten
 
 from ..tree import open_game_resource, narrow_schema
 from ..schema import SCHEMA

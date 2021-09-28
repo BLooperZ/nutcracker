@@ -28,7 +28,7 @@ def read_room_settings(lflf):
         assert header.transparency is None
         header.transparency = sputm.find(
             'TRNS', room
-        ).data  # pylint: disable=unused-variable
+        ).data
     palette = (sputm.find('CLUT', room) or sputm.findpath('PALS/WRAP/APAL', room)).data
 
     rmim = sputm.find('RMIM', room) or sputm.find('RMIM', lflf)
@@ -90,29 +90,18 @@ def read_room(header, rmim):
             yield path, im, zpxx
 
 
-def read_objects(header, room):
+def read_objects(header, room, version):
     for obim in sputm.findall('OBIM', room):
         imhd = sputm.find('IMHD', obim).data
-        if len(imhd) == 16:
-            obj_id, obj_height, obj_width, obj_x, obj_y = read_imhd(imhd)
+        if version < 8:
+            print('IMHD', len(imhd), imhd)
+            if version == 7:
+                assert len(imhd) < 80, len(imhd)
+                obj_id, obj_height, obj_width, obj_x, obj_y = read_imhd_v7(imhd)
+            else:
+                obj_id, obj_height, obj_width, obj_x, obj_y = read_imhd(imhd)
 
-            assert obj_id == obim.attribs['gid']
-
-            for imxx in sputm.findall('IM{:02x}', obim):
-                bgim = read_room_background(imxx.children[0], obj_width, obj_height, 0, transparency=header.transparency)
-                if bgim is None:
-                    continue
-                im = convert_to_pil_image(bgim)
-
-                path = imxx.attribs['path']
-                name = f'{obj_id:04d}_{imxx.tag}'
-
-                yield path, name, im, obj_x, obj_y
-        elif len(imhd) < 80:
-            # Game version == 7
-            print(imhd)
-            obj_id, obj_height, obj_width, obj_x, obj_y = read_imhd_v7(imhd)
-            # assert obj_id == obim.attribs['gid'], (obj_id, obim.attribs['gid'])  # assertion breaks on HE games
+            assert obj_id == obim.attribs['gid'], (obj_id, obim.attribs['gid'])
 
             for imxx in sputm.findall('IM{:02x}', obim):
                 bgim = read_room_background(imxx.children[0], obj_width, obj_height, 0, transparency=header.transparency)
@@ -121,12 +110,11 @@ def read_objects(header, room):
                 im = convert_to_pil_image(bgim)
 
                 path = imxx.attribs['path']
-                obj_id = obim.attribs['gid']
                 name = f'{obj_id:04d}_{imxx.tag}'
 
                 yield path, name, im, obj_x, obj_y
         else:
-            # Game version == 8
+            assert version == 8, version
             obj_name, obj_height, obj_width, obj_x, obj_y = read_imhd_v8(imhd)
             print(obj_name, obj_height, obj_width)
             for idx, imag in enumerate(sputm.findall('IMAG', obim)):
@@ -218,7 +206,7 @@ def extract_room_images(root, basedir, rnam, version, ega_mode=False):
                 paths[path] = True
                 room_bg.save(os.path.join(basedir, 'backgrounds', f'{path}.png'))
 
-            for path, name, im, obj_x, obj_y in read_objects(header, room):
+            for path, name, im, obj_x, obj_y in read_objects(header, room, version):
                 im.putpalette(palette)
 
                 path = f'{room_id:04d}_{name}' if room_id in rnam else path
