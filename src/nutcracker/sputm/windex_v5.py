@@ -282,11 +282,17 @@ def build_actor(args):
             if masked == 0x06:
                 yield f'stand-animation {value(next(args))}'
                 continue
+            if masked == 0x07:  # SO_ANIMATION  # text-offset, stop, turn, face????
+                yield f'text-offset {value(next(args))},{value(next(args))}'
+                continue
             if masked == 0x08:
                 yield 'default'
                 continue
             if masked == 0x09:
                 yield f'elevation {value(next(args))}'
+                continue
+            if masked == 0x0A:
+                yield 'animation default'
                 continue
             if masked == 0x0B:
                 # yield f'color {value(next(args))} is {value(next(args))}'
@@ -323,6 +329,12 @@ def build_actor(args):
                 continue
             if masked == 0x15:
                 yield 'follow-boxes'
+                continue
+            if masked == 0x16:
+                yield f'animation-speed {value(next(args))}'
+                continue
+            if masked == 0x17:  # SO_SHADOW
+                yield f'special-draw {value(next(args))}'
                 continue
         yield str(arg)
 
