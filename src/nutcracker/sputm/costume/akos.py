@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 import io
-import itertools
 import os
 from typing import Iterator, NamedTuple, Tuple
 
-from nutcracker.codex import bomb, rle, smap
+from nutcracker.codex import bomb, rle, smap, bpp_cost
 from nutcracker.graphics.image import convert_to_pil_image
 from nutcracker.utils.funcutils import flatten
 
@@ -47,49 +46,11 @@ def akof_from_bytes(data: bytes) -> Iterator[Tuple[int, int]]:
 
 
 def decode1(width, height, pal, data):
-    if len(pal.data) == 32:
-        shift = 3
-        mask = 0x07
-    elif len(pal.data) == 64:
-        shift = 2
-        mask = 0x03
-    else:
-        shift = 4
-        mask = 0x0F
-
-    _height = height
-    _width = width
-    _cur_x = 0
-    _dest_ptr = 0
-
-    out = [0 for _ in range(width) for _ in range(height)]
-
     with io.BytesIO(data) as stream:
-        while True:
-            reps = stream.read(1)[0]
-            color = reps >> shift
-            reps &= mask
-
-            if reps == 0:
-                reps = stream.read(1)[0]
-
-            if reps == 0:
-                _width -= 1
-                continue
-
-            for b in range(reps):
-                out[_dest_ptr] = color
-                _dest_ptr += width
-
-                _height -= 1
-                if _height == 0:
-                    _height = height
-                    _cur_x += 1
-                    _dest_ptr = _cur_x
-
-                    _width -= 1
-                    if _width == 0:
-                        return convert_to_pil_image(out, size=(width, height))
+        return convert_to_pil_image(
+            bpp_cost.decode1(width, height, len(pal.data), stream),
+            size=(width, height)
+        )
 
 
 def decode5(width, height, pal, data):
