@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 import io
+import itertools
 import os
 from typing import Iterator, NamedTuple, Tuple
 
-from nutcracker.codex import bomb, rle
+from nutcracker.codex import bomb, rle, smap
 from nutcracker.graphics.image import convert_to_pil_image
 from nutcracker.utils.funcutils import flatten
+
+from nutcracker.sputm.room.pproom import get_rooms, read_room_settings
+from nutcracker.sputm.tree import open_game_resource
 
 from ..preset import sputm
 
@@ -107,6 +111,12 @@ def decode32(width, height, pal, data):
     return convert_to_pil_image(out, size=(width, height))
 
 
+def decode16(width, height, pal, data):
+    with io.BytesIO(data) as stream:
+        bpp = stream.read(1)[0]
+        out = smap.decode_complex(stream, width * height, bpp)
+        return convert_to_pil_image(out, size=(width, height))
+
 def decode_frame(akhd, ci, cd, palette):
 
     width = int.from_bytes(ci[0:2], signed=False, byteorder='little')
@@ -122,26 +132,31 @@ def decode_frame(akhd, ci, cd, palette):
             return convert_to_pil_image([[0]])
     elif akhd.codec == 5:
         return decode5(width, height, palette, cd)
+    elif akhd.codec == 16:
+        return decode16(width, height, palette, cd)
     elif akhd.codec == 32:
         return decode32(width, height, palette, cd)
     else:
-        print(akhd.codec)
-        raise NotImplementedError()
+        raise NotImplementedError(akhd.codec)
 
 
-def read_akos_resource(resource):
+def read_akos_resource(akos, room_palette):
     # akos = check_tag('AKOS', next(sputm.map_chunks(resource)))
-    akos = sputm.find('AKOS', sputm.map_chunks(resource))
-    if not akos:
-        return
+    # akos = sputm.find('AKOS', sputm.map_chunks(resource))
+    # if not akos:
+    #     return
     # akos = iter(akos)
     akhd = akos_header_from_bytes(sputm.find('AKHD', akos).data)
 
     # colors
     akpl = sputm.find('AKPL', akos)
-    print(akpl)
+    print(akpl, akpl.data)
     rgbs = sputm.find('RGBS', akos)
-    print(rgbs)
+    print(rgbs, rgbs and rgbs.data)
+
+    palette = rgbs.data if rgbs and akhd.codec not in {5, 16} else room_palette
+    # if akhd.codec == 16:
+    #     palette = itertools.chain.from_iterable(room_palette[3*x:3*x+3] for x in akpl.data)
     # palette = tuple(zip(akpl, rgbs))
     # for x in akpl.data:
     #     print(x)
@@ -168,7 +183,7 @@ def read_akos_resource(resource):
         #     continue
         cd = akcd.data[cd_start:cd_end]
         decoded = decode_frame(akhd, ci, cd, akpl)
-        decoded.putpalette(rgbs.data)
+        decoded.putpalette(palette)
         yield decoded
 
     return akhd, akpl, rgbs, aksq
@@ -183,7 +198,6 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('files', nargs='+', help='files to read from')
-    parser.add_argument('--chiper-key', default='0x00', type=str, help='xor key')
     args = parser.parse_args()
 
     files = sorted(set(flatten(glob.iglob(r) for r in args.files)))
@@ -192,9 +206,28 @@ if __name__ == '__main__':
 
         print(filename)
 
-        resource = read_file(filename, key=int(args.chiper_key, 16))
+        gameres = open_game_resource(filename)
+        basename = gameres.basename
 
-        os.makedirs('AKOS_out', exist_ok=True)
+        root = gameres.read_resources(
+            # schema=narrow_schema(
+            #     SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'PALS'}
+            # )
+        )
 
-        for idx, im in enumerate(read_akos_resource(resource)):
-            im.save(f'AKOS_out/{os.path.basename(filename)}_aframe_{idx}.png')
+        os.makedirs(f'AKOS_out/{basename}', exist_ok=True)
+
+        for t in root:
+
+            for lflf in get_rooms(t):
+                print(lflf, lflf.attribs["path"])
+                _, palette, _, _ = read_room_settings(lflf)
+
+                for akos in sputm.findall('AKOS', lflf):
+                    print(akos, akos.attribs["path"])
+
+                    for idx, im in enumerate(read_akos_resource(akos, palette)):
+                        im.save(f'AKOS_out/{basename}/{os.path.basename(lflf.attribs["path"])}_{os.path.basename(akos.attribs["path"])}_aframe_{idx}.png')
+
+        # for idx, im in enumerate(read_akos_resource(resource)):
+        #     im.save(f'COST_out/{os.path.basename(filename)}_aframe_{idx}.png')
