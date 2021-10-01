@@ -48,7 +48,7 @@ def akof_from_bytes(data: bytes) -> Iterator[Tuple[int, int]]:
 def decode1(width, height, pal, data):
     with io.BytesIO(data) as stream:
         return convert_to_pil_image(
-            bpp_cost.decode1(width, height, len(pal.data), stream),
+            bpp_cost.decode1(width, height, len(pal.data), stream, strict=False),
             size=(width, height)
         )
 
@@ -86,11 +86,7 @@ def decode_frame(akhd, ci, cd, palette):
     print(akhd, width, height)
 
     if akhd.codec == 1:
-        try:
-            return decode1(width, height, palette, cd)
-        except IndexError:
-            # TODO: fix failure on COMI.LA2 at AKOS_0213
-            return convert_to_pil_image([[0]])
+        return decode1(width, height, palette, cd)
     elif akhd.codec == 5:
         return decode5(width, height, palette, cd)
     elif akhd.codec == 16:
