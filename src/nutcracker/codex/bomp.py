@@ -78,7 +78,7 @@ def compressed_group(buf):
 def raw_group(buf):
     return (2 * (len(buf) - 1), list(buf))
 
-def encode_groups(groups, buf=(), limit=4, carry=True, end_limit=1):
+def encode_groups(groups, buf=(), limit=4, carry=True, end_limit=1, seps=False):
     buf = list(buf)
     # print('GROUPS', [tuple(g) for g in groups])
     groups = iter(groups)
@@ -88,39 +88,57 @@ def encode_groups(groups, buf=(), limit=4, carry=True, end_limit=1):
             yield compressed_group(buf)
             buf = []
 
+        if seps and buf == [0]:
+            yield compressed_group(buf)
+            if len(group) <= limit:
+                yield raw_group(group)
+            else:
+                yield raw_group(group[:1])
+                yield compressed_group(group[1:])
+            buf = []
+            continue
+
+
         if len(group) < limit or len(buf) + limit > BUFFER_LIMIT:
+            if seps and set(group) == {0}:
+                if buf:
+                    yield raw_group(buf)
+                buf = group
+                continue
+
             buf += group
 
             if len(buf) > BUFFER_LIMIT:
                 yield raw_group(buf[:BUFFER_LIMIT])
                 buf = buf[BUFFER_LIMIT:]
                 if len(set(buf)) == 1:
-                    yield from encode_groups([buf, *groups], buf=(), limit=limit, carry=carry, end_limit=end_limit)
+                    yield from encode_groups([buf, *groups], buf=(), limit=limit, carry=carry, end_limit=end_limit, seps=seps)
                     buf = []
                 else:
-                    yield from encode_groups(groups, buf=buf, limit=limit, carry=carry, end_limit=end_limit)
+                    yield from encode_groups(groups, buf=buf, limit=limit, carry=carry, end_limit=end_limit, seps=seps)
 
+            continue
+
+        if buf:
+            if carry:
+                buf += group[:1]
+                group = group[1:]
+            yield raw_group(buf)
+            buf = []
+
+        if len(group) > BUFFER_LIMIT:
+            yield compressed_group(group[:BUFFER_LIMIT])
+            group = group[BUFFER_LIMIT:]
+            assert not buf
+            yield from encode_groups([group, *groups], buf=(), limit=limit, carry=carry, end_limit=end_limit, seps=seps)
         else:
-            if buf:
-                if carry:
-                    buf += group[:1]
-                    group = group[1:]
-                yield raw_group(buf)
-                buf = []
-
-            if len(group) > BUFFER_LIMIT:
-                yield compressed_group(group[:BUFFER_LIMIT])
-                group = group[BUFFER_LIMIT:]
-                assert not buf
-                yield from encode_groups([group, *groups], buf=(), limit=limit, carry=carry, end_limit=end_limit)
-            else:
+            # print('AAA 1', (2 * (len(group) - 1) + 1, group[:1]))
+            if len(group) > 1 or set(group) == {0}:
                 # print('AAA 1', (2 * (len(group) - 1) + 1, group[:1]))
-                if len(group) > 1 or set(group) == {0}:
-                    # print('AAA 1', (2 * (len(group) - 1) + 1, group[:1]))
-                    yield compressed_group(group)
-                else:
-                    # print('AAA 2', (2 * (len(group) - 1), list(group)))
-                    yield raw_group(group)
+                yield compressed_group(group)
+            else:
+                # print('AAA 2', (2 * (len(group) - 1), list(group)))
+                yield raw_group(group)
     if buf:
         if len(set(buf)) == 1 and len(buf) > end_limit:
             yield compressed_group(buf)
@@ -128,11 +146,11 @@ def encode_groups(groups, buf=(), limit=4, carry=True, end_limit=1):
             yield raw_group(buf)
 
 
-def encode_image(bmap, limit=4, carry=True, end_limit=1):
+def encode_image(bmap, limit=4, carry=True, end_limit=1, seps=False):
     buffer = bytearray()
     for line in bmap:
         grouped = [list(group) for c, group in itertools.groupby(line)]
-        eg = list(encode_groups(grouped, buf=(), limit=limit, carry=carry, end_limit=end_limit))
+        eg = list(encode_groups(grouped, buf=(), limit=limit, carry=carry, end_limit=end_limit, seps=seps))
         # print('ENCODED', eg)
         linedata = b''.join(bytes([ll, *g]) for ll, g in eg)
         buffer += base.wrap_uint16le(linedata)
