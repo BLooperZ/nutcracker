@@ -6,7 +6,7 @@ from enum import Enum
 
 import numpy as np
 
-from . import bomb
+from . import bomp
 
 # logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
@@ -317,7 +317,7 @@ def decode47(src, width, height):
         out[:, :] = _bprev1
     elif compression == 5:
         out[:, :] = np.frombuffer(
-            bomb.decode_line(gfx_data, decoded_size), dtype=np.uint8
+            bomp.decode_line(gfx_data, decoded_size), dtype=np.uint8
         ).reshape(_height, _width)
     else:
         raise ValueError(f'Unknow compression: {compression}')

@@ -4,7 +4,7 @@ from datetime import datetime
 
 import numpy as np
 
-from . import bomb
+from . import bomp
 
 # fmt: off
 motion_vectors = (
@@ -268,7 +268,7 @@ def decode37(src, width, height):
         # proc1(out, gfx_data)
     elif compression == 2:
         assert seq_nb == 0
-        decoded = bomb.decode_line(gfx_data, decoded_size)
+        decoded = bomp.decode_line(gfx_data, decoded_size)
         # print(decoded[width * height:])  # might need it to fill data between buffers
         out[:, :] = np.frombuffer(decoded[: width * height], dtype=np.uint8).reshape(
             _height, _width

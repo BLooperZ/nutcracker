@@ -4,12 +4,12 @@ import itertools
 import numpy as np
 
 
-from nutcracker.codex import base, bomb
+from nutcracker.codex import base, bomp
 
 
 
 def encode1(bmap):
-    return bomb.encode_image(bmap)
+    return bomp.encode_image(bmap)
 
 
 PARAMS = [
@@ -23,12 +23,12 @@ def decode1(width, height, f):
     BG = 39
 
     # print(mat)
-    mat = bomb.decode_image(f, width, height)
+    mat = bomp.decode_image(f, width, height)
 
 
     with io.BytesIO(f) as stream:
         lines = [base.unwrap_uint16le(stream) for _ in range(height)]
-    print([list(bomb.iter_decode(line)) for line in lines])
+    print([list(bomp.iter_decode(line)) for line in lines])
 
     g = [[
         list(group)
@@ -39,8 +39,8 @@ def decode1(width, height, f):
     encs = []
 
     for limit, carry, end_limit in PARAMS:
-        encs.append(bomb.encode_image(mat, limit=limit, carry=carry, end_limit=end_limit))
-        print(list(list(bomb.encode_groups(l, limit=limit, carry=carry, end_limit=end_limit)) for l in g))
+        encs.append(bomp.encode_image(mat, limit=limit, carry=carry, end_limit=end_limit))
+        print(list(list(bomp.encode_groups(l, limit=limit, carry=carry, end_limit=end_limit)) for l in g))
 
     assert any(x == f[:len(x)] for x in encs), (encs, f)
 

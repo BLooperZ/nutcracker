@@ -3,7 +3,7 @@ import io
 import os
 from typing import Iterator, NamedTuple, Tuple
 
-from nutcracker.codex import bomb, rle, smap, bpp_cost, base
+from nutcracker.codex import bomp, rle, smap, bpp_cost
 from nutcracker.graphics.image import convert_to_pil_image
 from nutcracker.utils.funcutils import flatten
 
@@ -54,7 +54,7 @@ def decode1(width, height, pal, data):
 
 
 def decode5(width, height, pal, data):
-    out = bomb.decode_image(data, width, height, fill_value=b'\xff')
+    out = bomp.decode_image(data, width, height, fill_value=b'\xff')
     return convert_to_pil_image(out, size=(width, height))
 
 
