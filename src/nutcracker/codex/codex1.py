@@ -1,85 +1,48 @@
 import io
 import itertools
-import struct
 
-from nutcracker.codex import bomb
-
-from .base import unwrap_uint16le
-
-UINT16LE = struct.Struct('<H')
+import numpy as np
 
 
-def read_le_uint16(f):
-    return UINT16LE.unpack(f[:2])[0]
+from nutcracker.codex import base, bomb
 
-
-def to_matrix(w, h, data):
-    return [data[i * w :][:w] for i in range(h)]
 
 
 def encode1(bmap):
-    def encode_groups(groups, buf=()):
-        BG = 39
+    return bomb.encode_image(bmap)
 
-        buf = list(buf)
-        groups = iter(groups)
-        for group in groups:
-            if set(group) == {BG}:
-                group = [0] * len(group)
-            raw = 1 + len(buf) + len(group)
-            encoded = 1 + len(buf) + 2
-            if raw < encoded or (raw == encoded and buf):
-                buf += group
 
-                if len(buf) > 128:
-                    yield (2 * (128 - 1), buf[:128])
-                    buf = buf[128:]
-                    if len(set(buf)) == 1:
-                        yield from encode_groups([buf, *groups])
-                        buf = []
-                    else:
-                        yield from encode_groups(groups, buf=buf)
-
-            else:
-                if buf:
-                    yield (2 * (len(buf) - 1), list(buf))
-                    buf = []
-
-                if len(group) > 128:
-                    yield (2 * (128 - 1) + 1, group[:1])
-                    group = group[128:]
-                    assert not buf
-                    yield from encode_groups([group, *groups])
-                else:
-                    yield (2 * (len(group) - 1) + 1, group[:1])
-        if buf:
-            yield (2 * (len(buf) - 1), list(buf))
-
-    with io.BytesIO() as stream:
-        for line in bmap:
-            grouped = [list(group) for c, group in itertools.groupby(line)]
-            eg = list(encode_groups(grouped))
-            # print('ENCODED', eg)
-            linedata = b''.join(bytes([ll, *g]) for ll, g in eg)
-            sized = (
-                len(linedata).to_bytes(2, byteorder='little', signed=False) + linedata
-            )
-            stream.write(sized)
-        return stream.getvalue()
+PARAMS = [
+    (3, False, 1),  # SAMNMAX/ROOMS-BOMP, COMI/ROOMS-BOMP, FT/ROOMS-BOMP, DIG/ROOMS-BOMP  # FT/ICONS2.NUT
+    (3, False, 0),  # FT/ROOMS-BOMP(*)
+    (4, True, 1),  # FT/ICONS.NUT, FT/BENCUT.NUT, FT/BENSGOGG.NUT
+]
 
 
 def decode1(width, height, f):
     BG = 39
-    out = [BG for _ in range(width * height)]
+
+    # print(mat)
+    mat = bomb.decode_image(f, width, height)
+
 
     with io.BytesIO(f) as stream:
-        lines = [unwrap_uint16le(stream) for _ in range(height)]
-        tail = stream.read()
-        assert tail in {b'', b'\00'}, tail
+        lines = [base.unwrap_uint16le(stream) for _ in range(height)]
+    print([list(bomb.iter_decode(line)) for line in lines])
 
-    buffer = list(b''.join(bomb.decode_line(line) for line in lines))
+    g = [[
+        list(group)
+        for c, group in itertools.groupby(line)
+    ] for line in mat]
 
-    out = [x if x else bg for bg, x in zip(out, buffer)]
-    mat = to_matrix(width, height, out)
-    # assert encode1(mat) == f or encode1(mat) + b'\00' == f, (encode1(mat), f)
+
+    encs = []
+
+    for limit, carry, end_limit in PARAMS:
+        encs.append(bomb.encode_image(mat, limit=limit, carry=carry, end_limit=end_limit))
+        print(list(list(bomb.encode_groups(l, limit=limit, carry=carry, end_limit=end_limit)) for l in g))
+
+    assert any(x == f[:len(x)] for x in encs), (encs, f)
+
+    mat = np.where(mat==0, BG, mat)
     return mat

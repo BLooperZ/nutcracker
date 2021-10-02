@@ -54,13 +54,8 @@ def decode1(width, height, pal, data):
 
 
 def decode5(width, height, pal, data):
-    with io.BytesIO(data) as stream:
-        lines = [base.unwrap_uint16le(stream) for _ in range(height)]
-        rest = stream.read()
-        assert rest in {b'', b'\0', b'\xff'}, rest
-
-    buffer = list(b''.join(bomb.decode_line(line) for line in lines))
-    return convert_to_pil_image(buffer, size=(width, height))
+    out = bomb.decode_image(data, width, height, fill_value=b'\xff')
+    return convert_to_pil_image(out, size=(width, height))
 
 
 def decode32(width, height, pal, data):
