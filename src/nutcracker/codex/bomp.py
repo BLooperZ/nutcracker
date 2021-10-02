@@ -111,11 +111,6 @@ def encode_groups(groups, buf=(), limit=4, carry=True, end_limit=1, seps=False):
             if len(buf) > BUFFER_LIMIT:
                 yield raw_group(buf[:BUFFER_LIMIT])
                 buf = buf[BUFFER_LIMIT:]
-                if len(set(buf)) == 1:
-                    yield from encode_groups([buf, *groups], buf=(), limit=limit, carry=carry, end_limit=end_limit, seps=seps)
-                    buf = []
-                else:
-                    yield from encode_groups(groups, buf=buf, limit=limit, carry=carry, end_limit=end_limit, seps=seps)
 
             continue
 
