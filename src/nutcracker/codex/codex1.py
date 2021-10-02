@@ -2,6 +2,8 @@ import io
 import itertools
 import struct
 
+from nutcracker.codex import bomb
+
 from .base import unwrap_uint16le
 
 UINT16LE = struct.Struct('<H')
@@ -75,20 +77,7 @@ def decode1(width, height, f):
         tail = stream.read()
         assert tail in {b'', b'\00'}, tail
 
-    with io.BytesIO() as outstream:
-        for line in lines:
-            with io.BytesIO(line) as stream:
-                # log = []
-                while stream.tell() < len(line):
-                    code = ord(stream.read(1))
-                    run_len = (code // 2) + 1
-                    run_line = (
-                        stream.read(1) * run_len if code & 1 else stream.read(run_len)
-                    )
-                    outstream.write(run_line)
-                #     log.append((code, run_line[:1] if code & 1 else run_line))
-                # print('I', [(code, list(run_line)) for code, run_line in log])
-        buffer = outstream.getvalue()
+    buffer = list(b''.join(bomb.decode_line(line) for line in lines))
 
     out = [x if x else bg for bg, x in zip(out, buffer)]
     mat = to_matrix(width, height, out)

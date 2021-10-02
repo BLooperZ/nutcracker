@@ -316,7 +316,7 @@ def decode47(src, width, height):
     elif compression == 4:
         out[:, :] = _bprev1
     elif compression == 5:
-        out[:, :] = np.asarray(
+        out[:, :] = np.frombuffer(
             bomb.decode_line(gfx_data, decoded_size), dtype=np.uint8
         ).reshape(_height, _width)
     else:

@@ -3,7 +3,7 @@ import io
 import os
 from typing import Iterator, NamedTuple, Tuple
 
-from nutcracker.codex import bomb, rle, smap, bpp_cost
+from nutcracker.codex import bomb, rle, smap, bpp_cost, base
 from nutcracker.graphics.image import convert_to_pil_image
 from nutcracker.utils.funcutils import flatten
 
@@ -55,16 +55,12 @@ def decode1(width, height, pal, data):
 
 def decode5(width, height, pal, data):
     with io.BytesIO(data) as stream:
-        lines = [
-            stream.read(
-                int.from_bytes(stream.read(2), signed=False, byteorder='little')
-            )
-            for _ in range(height)
-        ]
+        lines = [base.unwrap_uint16le(stream) for _ in range(height)]
+        rest = stream.read()
+        assert rest in {b'', b'\0', b'\xff'}, rest
 
-    out = [bomb.decode_line(line, width) for line in lines]
-
-    return convert_to_pil_image(out, size=(width, height))
+    buffer = list(b''.join(bomb.decode_line(line) for line in lines))
+    return convert_to_pil_image(buffer, size=(width, height))
 
 
 def decode32(width, height, pal, data):
@@ -184,6 +180,7 @@ if __name__ == '__main__':
                     print(akos, akos.attribs["path"])
 
                     for idx, im in enumerate(read_akos_resource(akos, palette)):
+                        print(akos, idx)
                         im.save(f'AKOS_out/{basename}/{os.path.basename(lflf.attribs["path"])}_{os.path.basename(akos.attribs["path"])}_aframe_{idx}.png')
 
         # for idx, im in enumerate(read_akos_resource(resource)):

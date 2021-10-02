@@ -270,7 +270,7 @@ def decode37(src, width, height):
         assert seq_nb == 0
         decoded = bomb.decode_line(gfx_data, decoded_size)
         # print(decoded[width * height:])  # might need it to fill data between buffers
-        out[:, :] = np.asarray(decoded[: width * height], dtype=np.uint8).reshape(
+        out[:, :] = np.frombuffer(decoded[: width * height], dtype=np.uint8).reshape(
             _height, _width
         )
     elif compression in (3, 4):

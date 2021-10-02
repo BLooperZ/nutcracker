@@ -1,28 +1,27 @@
 import io
+from typing import Optional
+
+from nutcracker.kernel.buffer import BufferLike, UnexpectedBufferSize
 
 
-def decode_line(src, decoded_size):
+def decode_line(src: BufferLike, decoded_size: Optional[int] = None) -> bytes:
+    buffer = bytearray()
     with io.BytesIO(src) as stream:
-        return decode_line_stream(stream, decoded_size)
+        while stream.tell() < len(src):
 
+            if decoded_size and len(buffer) >= decoded_size:
+                rest = stream.read()
+                assert rest in {b'', b'\x00'}, rest
+                break
 
-def decode_line_stream(stream, decoded_size, strict=True):
-    assert decoded_size > 0
-    with io.BytesIO() as out:
-        try:
+            code = stream.read(1)[0]
+            run_len = (code // 2) + 1
+            run_line = (
+                stream.read(1) * run_len if code & 1 else stream.read(run_len)
+            )
+            buffer += run_line
 
-            while out.tell() < decoded_size:
-                code = stream.read(1)[0]
-                run_len = (code // 2) + 1
-                line = stream.read(1) * run_len if code & 1 else stream.read(run_len)
-                out.write(line)
-            if out.tell() > decoded_size:
-                raise ValueError('out of bounds')
-            return list(out.getvalue())
+    if decoded_size and len(buffer) != decoded_size:
+        raise UnexpectedBufferSize(decoded_size, len(buffer), buffer)
 
-        except IndexError:
-            if strict:
-                raise
-            out = out.getvalue()
-            out = out + b'\0' * (decoded_size - len(out))
-            return list(out[:decoded_size])
+    return bytes(buffer)
