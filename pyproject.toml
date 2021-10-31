@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nutcracker"
-version = "0.3.1415"
+version = "0.3.14159"
 description = "Tools for editing resources in SCUMM games."
 authors = ["BLooperZ <blooperz@users.noreply.github.com>"]
 license = "GPL-3.0-or-later"
