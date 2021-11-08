@@ -135,7 +135,7 @@ def make_room_images_patch(root, basedir, rnam, version):
             for imxx in read_room(header, rmim):
 
                 im_path = (
-                    f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else path
+                    f"{room_id:04d}_{rnam.get(room_id)}" if room_id in rnam else os.path.dirname(imxx.attribs['path'])
                 )
                 im_path = im_path.replace(os.path.sep, '_')
                 im_path = os.path.join(basedir, 'backgrounds', f'{im_path}.png')
