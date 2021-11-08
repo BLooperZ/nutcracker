@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image
 
 from nutcracker.codex.codex import decode1, encode1
-from nutcracker.codex.smap import decode_smap, encode_smap, extract_smap_codes
+from nutcracker.codex.smap import decode_smap, encode_smap, extract_smap_codes, encode_he
 from nutcracker.utils.fileio import write_file
 
 from ..preset import sputm
@@ -58,6 +58,20 @@ def encode_block_v8(filename, blocktype, version=8, ref=None):
         # v8
         return struct.pack('<2I', *npim.shape[::-1]) + bomp
         return None
+
+    if blocktype == 'BMAP':
+        assert ref
+        code = ref.data[0]
+        palen = code % 10
+        if 134 <= code <= 138:
+            return bytes([code]) + encode_he(bytes(npim.ravel()), palen)
+        elif 144 <= code <= 148:
+            # TODO: handle transparency
+            # tr = TRANSPARENCY
+            return bytes([code]) + encode_he(bytes(npim.ravel()), palen)
+        elif code == 150:
+            assert len(set(npim.ravel())) == 1 
+            return bytes([code, npim[0]])
 
 
 if __name__ == '__main__':
