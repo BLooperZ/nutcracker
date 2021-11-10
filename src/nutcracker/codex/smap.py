@@ -6,6 +6,7 @@ from typing import Sequence
 import numpy as np
 
 from nutcracker.utils.funcutils import grouper
+from nutcracker.graphics.image import convert_to_pil_image
 
 TRANSPARENCY = 255
 
@@ -241,7 +242,8 @@ def fake_encode_strip(data, height, width):
 def encode_raw(data, *args):
     return data
 
-def encode_strip(data, height, width, code):
+
+def encode_strip(data, height, width, code, allow_upgrade=True):
     method, direction, tr, palen = get_method_info(code)
     data = bytes(data) if direction == 'HORIZONTAL' else bytes(data.T)
     if method == decode_complex:
@@ -257,6 +259,18 @@ def encode_strip(data, height, width, code):
     else:
         assert code in {0x01, 0x95}
         encode_method = encode_raw
+    max_color = max(data)
+    max_bits = max_color.bit_length()
+    if encode_method != encode_raw:
+        if max_bits > palen:
+            if allow_upgrade and max_bits <= 8:  # upgrade palen
+                assert allow_upgrade
+                print(f'WARNING: upgrading palette length from {palen} to {max_bits} to be able toinsert color value {max_color}')
+                code -= palen
+                palen = max_bits
+                code += palen
+            else:
+                raise ValueError(f'Too many colors: trying to fit pixel value of {max_color} in {palen} bits, max: {(2 ** palen) - 1}')
     with io.BytesIO() as s:
         s.write(bytes([code]))
         encoded = encode_method(data, palen)
