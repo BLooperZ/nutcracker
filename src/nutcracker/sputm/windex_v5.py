@@ -1226,7 +1226,7 @@ if __name__ == '__main__':
                     }
                     if elem.tag == 'VERB':
                         print(f'object', obj_id, '{', file=f)
-                        print(f'\tname is', f'"{obj_names[obj_id]}"\n', file=f)
+                        print(f'\tname is', f'"{obj_names[obj_id]}"', file=f)
                     else:
                         print(titles[elem.tag], list(pref), '{', file=f)
                     bytecode = descumm_v5(script_data, OPCODES_v5)
@@ -1238,9 +1238,9 @@ if __name__ == '__main__':
                         entries = {off: idx[0] for idx, off in pref}
                     for off, stat in bytecode.items():
                         if elem.tag == 'VERB' and off + 8 in entries:
-                            if off != 0:
-                                print('\t}\n', file=f)
-                            print('\tverb', entries[off + 8], '{', file=f)
+                            if off > min(entries.values()):
+                                print('\t}', file=f)
+                            print('\n\tverb', entries[off + 8], '{', file=f)
                             indent = 2 * '\t'
                         res = ops.get(stat.opcode & 0x1F, str)(stat) or stat
                         if off in refs:
@@ -1252,6 +1252,6 @@ if __name__ == '__main__':
                             f'{indent}{res}',
                             file=f,
                         )
-                    if elem.tag == 'VERB':
+                    if elem.tag == 'VERB' and entries:
                         print('\t}', file=f)
                     print('}\n', file=f)
