@@ -2,7 +2,8 @@ import io
 import json
 from collections import deque
 from string import printable
-from typing import Optional
+from typing import Iterable, Optional
+from nutcracker.kernel.element import Element
 
 from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
@@ -10,6 +11,15 @@ from nutcracker.sputm.schema import SCHEMA
 from .script.bytecode import get_scripts, refresh_offsets, script_map, to_bytes
 from .script.opcodes import ByteValue, RefOffset, WordValue
 from .script.opcodes_v5 import PARAM_1, PARAM_2, OPCODES_v5, Variable, value
+
+
+def get_element_by_path(path: str, root: Iterable[Element]) -> Optional[Element]:
+    for elem in root:
+        if elem.attribs['path'] == path:
+            return elem
+        if path.startswith(elem.attribs['path']):
+            return get_element_by_path(path, elem)
+    return None
 
 
 def escape_message(
@@ -82,6 +92,10 @@ def build_print(args):
             if masked == 0x04:
                 assert not arg.op[0] & 0x80
                 yield 'center'
+                continue
+            if masked == 0x06:
+                assert not arg.op[0] & 0x80
+                yield 'left'
                 continue
             if masked == 0x07:
                 assert not arg.op[0] & 0x80
@@ -157,6 +171,9 @@ def build_verb(args):
             if arg.op[0] == 0xFF:
                 break
             masked = arg.op[0] & 0x1F
+            if masked == 0x01:
+                yield f'image {value(next(args))}'
+                continue
             if masked == 0x02:
                 assert not arg.op[0] & 0x80
                 yield f'name {msg_val(next(args))}'
@@ -365,7 +382,11 @@ def build_draw(args):
                 break
             masked = arg.op[0] & 0x1F
             if masked == 0x1:
-                return f'at {value(next(args))},{value(next(args))}'
+                yield f'at {value(next(args))},{value(next(args))}'
+                continue
+            if masked == 0x2:
+                yield f'image {value(next(args))}'
+                continue
         yield str(arg)
 
 
@@ -475,6 +496,14 @@ def o5_greater_wd(op):
         return (
             f'if !({value(op.args[0])} <= {value(op.args[1])}) jump {adr(op.args[2])}'
         )
+    if op.opcode in {0x24, 0x64, 0xA4, 0xE4}:
+        # TODO: don't display optional  'walk-to x,y' part when x,y are -1,-1
+        # windex:   come-out #161 in-room #13 walk-to #202,#202 (actual value #202,#116)
+        #           come-out #1035 in-room #76
+        # SCUMM refrence: come-out-door object-name in-room room-name [walk x-coord,y-coord]
+        return (
+            f'come-out {value(op.args[0])} in-room {value(op.args[1])} walk-to {value(op.args[2])},{value(op.args[3])}'
+        )
     if op.opcode in {0x44, 0xC4}:
         assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
         return f'if !({value(op.args[0])} > {value(op.args[1])}) jump {adr(op.args[2])}'
@@ -482,12 +511,12 @@ def o5_greater_wd(op):
 
 @regop(0x05)
 def o5_draw_wd(op):
-    if op.opcode == 0x05:
+    if op.opcode in {0x05, 0x45, 0x85, 0xC5}:
         obj = op.args[0]
         # assert op.args[-1].op[0] == 0xFF
         rest_params = ' '.join(build_draw(op.args[1:]))
         return f'draw-object {value(obj)} {rest_params}'
-    if op.opcode == 0x25:
+    if op.opcode in {0x25, 0x65, 0xA5, 0xE5}:
         obj = op.args[0]
         room = op.args[1]
         return f'pick-up-object {value(obj)} in-room {value(room)}'
@@ -495,14 +524,20 @@ def o5_draw_wd(op):
 
 @regop(0x06)
 def o5_elavation_wd(op):
-    if op.opcode == 0x26:
+    if op.opcode in {0x06, 0x86}:
+        target = op.args[0]
+        actor = op.args[1]
+        return f'{value(target)} = actor-elevation {value(actor)}'
+    if op.opcode in {0x26, 0xA6}:
         target = op.args[0]
         num = op.args[1]
         assert len(op.args[2:]) == num.op[0]
         values = ' '.join(value(val) for val in op.args[2:])
-        return f'{target} = {values}'
+        return f'{value(target)} = {values}'
     if op.opcode == 0x46:
         return f'++{value(op.args[0])}'
+    if op.opcode == 0xC6:
+        return f'--{value(op.args[0])}'
 
 
 @regop(0x07)
@@ -548,7 +583,7 @@ def o5_compare_wd(op):
         return f'if !(!{value(op.args[0])}) jump {adr(op.args[1])}'
     if op.opcode == 0xA8:
         return f'if !({value(op.args[0])}) jump {adr(op.args[1])}'
-    if op.opcode == 0x68:
+    if op.opcode in {0x68, 0xE8}:
         return f'{value(op.args[0])} = script-running {value(op.args[1])}'
 
 
@@ -579,7 +614,7 @@ def o5_start_script_wd(op):
 def o5_wait_wd(op):
     if op.opcode == 0x2B:
         return f'sleep-for {value(op.args[0])} jiffies'
-    if op.opcode == 0x8B:
+    if op.opcode in {0x0B, 0x4B, 0x8B, 0xCB}:
         return (
             f'{value(op.args[0])} = valid-verb {value(op.args[1])}, {value(op.args[2])}'
         )
@@ -589,6 +624,8 @@ def o5_wait_wd(op):
             return f'save-verbs {value(op.args[1])} to {value(op.args[2])} set {value(op.args[3])}'
         if action.op[0] == 2:
             return f'restore-verbs {value(op.args[1])} to {value(op.args[2])} set {value(op.args[3])}'
+    if op.opcode in {0x6B, 0xEB}:
+        return f'debug {value(op.args[0])}'
 
 
 @regop(0x0C)
@@ -607,6 +644,14 @@ def o5_resource_wd(op):
             return f'load-costume {value(op.args[1])}'
         if masked == 0x04:
             return f'load-room {value(op.args[1])}'
+        if masked == 0x05:
+            return f'nuke-script {value(op.args[1])}'
+        if masked == 0x06:
+            return f'nuke-sound {value(op.args[1])}'
+        if masked == 0x07:
+            return f'nuke-costume {value(op.args[1])}'
+        if masked == 0x08:
+            return f'nuke-room {value(op.args[1])}'
         if masked == 0x09:
             return f'lock-script {value(op.args[1])}'
         if masked == 0x0A:
@@ -627,6 +672,9 @@ def o5_resource_wd(op):
             return 'clear-heap'
         if masked == 0x12:
             return f'load-charset {value(op.args[1])}'
+        if masked == 0x14:
+            # windex just says '???'
+            return f'load-object {value(op.args[1])} {value(op.args[2])}'
     if op.opcode == 0x2C:
         sub = op.args[0]
         masked = ord(sub.op) & 0x1F
@@ -668,6 +716,14 @@ def o5_resource_wd(op):
 
 @regop(0x0D)
 def o5_put_wd(op):
+    if op.opcode in {0x0D, 0x4D, 0x8D, 0xCD}:
+        actor = op.args[0]
+        actor2 = op.args[1]
+        rng = op.args[2]
+        # windex: walk #2 to-actor #1 with-in 40
+        # SCUMM reference: walk actor-name to actor-name within number
+        return f'walk {value(actor)} to-actor {value(actor2)} with-in {value(rng)}'
+
     if op.opcode in {0x2D, 0x6D, 0xAD, 0xED}:
         actor = op.args[0]
         room = op.args[1]
@@ -676,6 +732,10 @@ def o5_put_wd(op):
 
 @regop(0x0E)
 def o5_delay_wd(op):
+    if op.opcode in {0x0E, 0x4E, 0x8E, 0xCE}:
+        actor = op.args[0]
+        obj = op.args[1]
+        return f'put-actor {value(actor)} at-object {value(obj)}'
     if op.opcode == 0x2E:
         delay = int.from_bytes(
             op.args[2].op + op.args[1].op + op.args[0].op,
@@ -695,6 +755,14 @@ def o5_delay_wd(op):
             return 'wait-for-camera'
         if masked == 0x04:
             return 'wait-for-sentence'
+
+
+@regop(0x0F)
+def o5_state_wd(op):
+    if op.opcode in {0x0F, 0x8F}:
+        var = op.args[0]
+        obj = op.args[1]
+        return f'{value(var)} = state-of {value(obj)}'
 
 
 @regop(0x10)
@@ -718,6 +786,8 @@ def o5_owner_wd(op):
         masked = sub.op[0] & 0x1F
         if masked == 1:
             return f'set-box {value(op.args[1])} to {value(op.args[2])}'
+        if masked == 4:
+            return f'set-box-path'
 
 
 @regop(0x11)
@@ -737,6 +807,8 @@ def o5_inv_wd(op):
 
 @regop(0x12)
 def o5_camera_wd(op):
+    if op.opcode in {0x12, 0x92}:
+        return f'camera-pan-to {value(op.args[0])}'
     if op.opcode in {0x32, 0xB2}:
         return f'camera-at {value(op.args[0])}'
     if op.opcode in {0x72, 0xF2}:
@@ -755,19 +827,45 @@ def o5_room_wd(op):
     if op.opcode in {0x33, 0x73, 0xB3, 0xF3}:
         sub = op.args[0]
         masked = sub.op[0] & 0x1F
+        if masked == 0x01:
+            return f'room-scroll {value(op.args[1])} to {value(op.args[2])}'
         if masked == 0x03:
             return f'set-screen {value(op.args[1])} to {value(op.args[2])}'
         if masked == 0x04:
             return f'palette {value(op.args[1])} in-slot {value(op.args[2])}'
-        # if sub.op[0] & 0x1F == 8:
-        #     return ''  # windex displays empty string here for some reason
+        if masked == 0x05:
+            return f'shake on'
+        if masked == 0x06:
+            return f'shake off'
+        if masked == 0x08:
+            # windex displays empty string here for some reason
+            return f'palette intensity {value(op.args[1])} in-slot {value(op.args[2])} to {value(op.args[3])}'
+        if masked == 0x09:
+            # windex output: saveload-game #1 in-slot #26
+            # according to SCUMM reference, original scripts might have save-game / load-game according to first arg (1 for save 2 for load)
+            return f'saveload-game {value(op.args[1])} in-slot {value(op.args[2])}'
         if masked == 0x0A:
             # TODO: map fades value to name
             return f'fades {value(op.args[1])}'
+        if masked == 0x0B:
+            # windex displays empty string here for some reason
+            # not found in SCUMM refrence, string is made up
+            return f'palette intensity [rgb] {value(op.args[1])} {value(op.args[2])} {value(op.args[3])} in-slot {value(op.args[5])} to {value(op.args[6])}'
+        if masked == 0x0C:
+            # windex displays empty string here for some reason
+            # not found in SCUMM refrence, string is made up
+            return f'room-shadow [rgb] {value(op.args[1])} {value(op.args[2])} {value(op.args[3])} in-slot {value(op.args[5])} to {value(op.args[6])}'
         if masked == 0x0D:
             return f'save-string {value(op.args[1])} {msg_val(op.args[2])}'
         if masked == 0x0E:
             return f'load-string {value(op.args[1])} {msg_val(op.args[2])}'
+        if masked == 0x0F:
+            # windex displays empty string here for some reason
+            number = op.args[1]
+            start = op.args[3]
+            end = op.args[4]
+            time = op.args[6]
+            return f'palette transform {value(number)} {value(start)} to {value(end)} with-in {value(time)}'
 
 
 @regop(0x14)
@@ -915,6 +1013,10 @@ def o5_mult_wd(op):
         else:
             assert isinstance(left, Variable) and isinstance(right, WordValue)
         return f'{left} /= {value(right)}'
+    if op.opcode in {0x3B, 0xBB}:
+        var = op.args[0]
+        actor = op.args[1]
+        return f'{value(var)} = actor-scale {value(actor)}'
     if op.opcode in {0x7B, 0xFB}:
         var = op.args[0]
         actor = op.args[1]
@@ -964,6 +1066,24 @@ def o5_walk_wd(op):
     posx = op.args[1]
     posy = op.args[2]
     return f'walk {value(actor)} to {value(posx)},{value(posy)}'
+
+
+@regop(0x1F)
+def o5_box_wd(op):
+    if op.opcode in {
+        0x3F,  # o5_drawBox
+        0x7F,  # o5_drawBox
+        0xBF,  # o5_drawBox
+        0xFF,  # o5_drawBox
+    }:
+        x = op.args[0]
+        y = op.args[1]
+
+        _opcode = op.args[2]
+        x2 = op.args[3]
+        y2 = op.args[4]
+        color = op.args[5]
+        return f'draw-box {value(x)},{value(y)} to {value(x2)},{value(y2)} color {value(color)}'
 
 
 def descumm_v5(data: bytes, opcodes):
@@ -1028,6 +1148,9 @@ def descumm_v5(data: bytes, opcodes):
 #             # for off, stat in bytecode.items():
 #             #     print(f'{off:08d}', stat)
 
+
+obj_names = {}
+
 if __name__ == '__main__':
     import argparse
     import os
@@ -1035,9 +1158,9 @@ if __name__ == '__main__':
     from nutcracker.utils.fileio import read_file
     from nutcracker.utils.libio import suppress_stdout
 
-    from .tree import open_game_resource, narrow_schema
-    from .schema import SCHEMA
-    from .preset import sputm
+    from nutcracker.sputm.tree import open_game_resource, narrow_schema
+    from nutcracker.sputm.schema import SCHEMA
+    from nutcracker.sputm.preset import sputm
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
@@ -1057,18 +1180,20 @@ if __name__ == '__main__':
         )
 
     rnam = gameres.rooms
+    print(gameres.game)
     print(rnam)
 
     os.makedirs('scripts', exist_ok=True)
 
     for disk in root:
         for room in sputm.findall('LFLF', disk):
+            room_no = rnam.get(room.attribs['gid'], f"room_{room.attribs['gid']}")
             print(
                 '==========================',
                 room.attribs['path'],
-                rnam[room.attribs['gid']],
+                room_no,
             )
-            fname = f"scripts/{room.attribs['gid']:04d}_{rnam[room.attribs['gid']]}.scu"
+            fname = f"scripts/{room.attribs['gid']:04d}_{room_no}.scu"
 
             def parse_verb_meta(meta):
                 with io.BytesIO(meta) as stream:
@@ -1083,17 +1208,50 @@ if __name__ == '__main__':
 
             with open(fname, 'w') as f:
                 for elem in get_scripts(room):
-                    print('//', elem.tag, elem.attribs['path'], file=f)
                     pref, script_data = script_map[elem.tag](elem.data)
+                    obj_id = None
+                    indent = '\t'
                     if elem.tag == 'VERB':
-                        pref = parse_verb_meta(pref)
-                    print('//', 'meta:', list(pref), file=f)
+                        pref = list(parse_verb_meta(pref))
+                        obcd = get_element_by_path(os.path.dirname(elem.attribs['path']), room)
+                        obj_id = obcd.attribs['gid']
+                        obj_names[obj_id] = msg_to_print(sputm.find('OBNA', obcd).data.split(b'\0')[0])
+                    print(';', elem.tag, elem.attribs['path'], file=f)
+                    titles = {
+                        'LSCR': 'script',
+                        'SCRP': 'script',
+                        'ENCD': 'enter',
+                        'EXCD': 'exit',
+                        'VERB': 'verb',
+                    }
+                    if elem.tag == 'VERB':
+                        print(f'object', obj_id, '{', file=f)
+                        print(f'\tname is', f'"{obj_names[obj_id]}"\n', file=f)
+                    else:
+                        print(titles[elem.tag], list(pref), '{', file=f)
                     bytecode = descumm_v5(script_data, OPCODES_v5)
                     # print_bytecode(bytecode)
+
+                    refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]
+
+                    if elem.tag == 'VERB':
+                        entries = {off: idx[0] for idx, off in pref}
                     for off, stat in bytecode.items():
+                        if elem.tag == 'VERB' and off + 8 in entries:
+                            if off != 0:
+                                print('\t}\n', file=f)
+                            print('\tverb', entries[off + 8], '{', file=f)
+                            indent = 2 * '\t'
+                        res = ops.get(stat.opcode & 0x1F, str)(stat) or stat
+                        if off in refs:
+                            print(
+                                f'[{stat.offset + 8:08d}]:',
+                                file=f
+                            )
                         print(
-                            f'[{stat.offset + 8:08d}]',
-                            ops.get(stat.opcode & 0x1F, str)(stat) or stat,
+                            f'{indent}{res}',
                             file=f,
                         )
-                    print(file=f)
+                    if elem.tag == 'VERB':
+                        print('\t}', file=f)
+                    print('}\n', file=f)
