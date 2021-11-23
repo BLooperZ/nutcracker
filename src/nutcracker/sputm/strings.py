@@ -163,7 +163,7 @@ def get_optable(game: Game) -> OpTable:
     if game.version >= 7:
         return OPCODES_v6  # ???
     if game.he_version >= 90:
-        return (OPCODES_he90,)
+        return OPCODES_he90
     if game.he_version >= 80:
         return OPCODES_he80
     if game.he_version >= 72:
