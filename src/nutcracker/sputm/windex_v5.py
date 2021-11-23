@@ -1218,7 +1218,8 @@ if __name__ == '__main__':
     print(gameres.game)
     print(rnam)
 
-    os.makedirs('scripts', exist_ok=True)
+    script_dir = os.path.join('scripts', gameres.game.basename)
+    os.makedirs(script_dir, exist_ok=True)
 
     for disk in root:
         for room in sputm.findall('LFLF', disk):
@@ -1228,7 +1229,7 @@ if __name__ == '__main__':
                 room.attribs['path'],
                 room_no,
             )
-            fname = f"scripts/{room.attribs['gid']:04d}_{room_no}.scu"
+            fname = f"{script_dir}/{room.attribs['gid']:04d}_{room_no}.scu"
 
             def parse_verb_meta(meta):
                 with io.BytesIO(meta) as stream:
@@ -1273,7 +1274,7 @@ if __name__ == '__main__':
                         entries = {off: idx[0] for idx, off in pref}
                     for off, stat in bytecode.items():
                         if elem.tag == 'VERB' and off + 8 in entries:
-                            if off > min(entries.values()):
+                            if off + 8 > min(entries.keys()):
                                 print('\t}', file=f)
                             print('\n\tverb', entries[off + 8], '{', file=f)
                             indent = 2 * '\t'

@@ -47,6 +47,10 @@ class Variable:
         3: 's_overrideHit',
         9: 's_selectedActor',
         221: 's_debugMode',
+        211: 'g_foo',
+        # g_helogoRunning
+        # g_lastRoom
+        # g_staticCostume
     }
 
     def __init__(self, orig):
@@ -266,6 +270,21 @@ def o6_drawBox(op, stack, bytecode):
     y1 = stack.pop()
     x1 = stack.pop()
     return f'draw-box {x1},{y1} to {x2},{y2} color {color}'
+
+@regop
+def o6_setBoxFlags(op, stack, bytecode):
+    # set-box box-number [box-numer ...] to box-status
+    value = stack.pop()
+    boxes = ' '.join(str(param) for param in get_params(stack))
+    return f'set-box {boxes} to {value}'
+
+@regop
+def o6_loadRoomWithEgo(op, stack, bytecode):
+    ypos = stack.pop()
+    xpos = stack.pop()
+    room = stack.pop()
+    obj = stack.pop()
+    return f'come-out-door {obj} in-room {room} walk {xpos},{ypos}'
 
 
 @regop
@@ -671,6 +690,12 @@ def o72_talkEgo(op, stack, bytecode):
 
 
 @regop
+def o6_talkActor(op, stack, bytecode):
+    act = stack.pop()
+    return f'$ talk {act} {msg_val(op.args[0])}'
+
+
+@regop
 def o6_talkEgo(op, stack, bytecode):
     # with io.BytesIO(b'\x09\x00') as stream:
     #     stack.append(get_var(WordValue(stream)))
@@ -834,6 +859,16 @@ def o6_roomOps(op, stack, bytecode):
         h = stack.pop()
         b = stack.pop()
         return f'$ room-screens {b} {h}'
+    if cmd.num == 175:
+        slot = stack.pop()
+        blue = stack.pop()
+        green = stack.pop()
+        red = stack.pop()
+        return f'palette {red} {green} {blue} in-slot {slot}'
+    if cmd.num == 176:
+        return 'shake on'
+    if cmd.num == 177:
+        return 'shake off'
     if cmd.num == 179:
         to_slot = stack.pop()
         from_slot = stack.pop()
@@ -1010,7 +1045,8 @@ def o6_actorOps(op, stack, bytecode):
     if cmd.num == 81:
         return f'\tstand-animation {stack.pop()} \\'
     # TODO: 82 - animation - 3 pops
-    # TODO: 83 - default - no pops
+    if cmd.num == 83:
+        return '\tdefault'
     if cmd.num == 84:
         return f'\televation {to_signed(stack.pop())}'
     # TODO: 85 animation default - no pops
@@ -1021,10 +1057,13 @@ def o6_actorOps(op, stack, bytecode):
     if cmd.num == 87:
         color = stack.pop()
         return f'\ttalk-color {color} \\'
-    # TODO: 88 - name - string from script
+    if cmd.num == 88:
+        return f'\tname {msg_val(op.args[1])}'
     # TODO: 89 - init-animation - 1 pop
-    # TODO: 91 - actor-width - 1 pop
-    # TODO: 92 - scale - 1 pop
+    if cmd.num == 91:
+        return f'\twidth {stack.pop()}'
+    if cmd.num == 92:
+        return f'\tscale {stack.pop()}'
     if cmd.num == 93:
         return f'\tnever-zclip'
     if cmd.num == 94:
@@ -1037,7 +1076,10 @@ def o6_actorOps(op, stack, bytecode):
         return f'\tanimation-speed {stack.pop()} \\'
     if cmd.num == 98:
         return f'\tspecial-draw {stack.pop()}'
-    # TODO: 99 - text-offset - 2 pops
+    if cmd.num == 99:
+        ypos = stack.pop()
+        xpos = stack.pop()
+        return f'\ttext-offset {xpos},{ypos} \\'
     if cmd.num == 197:
         return f'actor {stack.pop()} \\'
     if cmd.num == 198:
@@ -1429,6 +1471,8 @@ def o6_wait(op, stack, bytecode):
         return f'wait-for-actor {stack.pop()} [ref {adr(op.args[1])}]'
     if sub.num == 169:
         return 'wait-for-message'
+    if sub.num == 170:
+        return 'wait-for-camera'
     defop(op, stack, bytecode)
 
 
@@ -1815,6 +1859,15 @@ def o6_putActorAtXY(op, stack, bytecode):
     room = '' if room == 0 else f' in room {room}'
     return f'$ put-actor {act} at {xpos},{ypos}{room}'
 
+@regop
+def o6_startScriptQuick(op, stack, bytecode):
+    params = get_params(stack)
+    param_str = ", ".join(str(param) for param in params)
+    if param_str:
+        param_str = f' ( {param_str} )'
+    scr = stack.pop()
+    return f'start-script {scr}{param_str}'
+
 
 @regop
 def o6_startScriptQuick2(op, stack, bytecode):
@@ -1824,6 +1877,13 @@ def o6_startScriptQuick2(op, stack, bytecode):
         param_str = f' ( {param_str} )'
     scr = stack.pop()
     stack.append(f'start-script rec {scr}{param_str}')
+
+
+@regop
+def o6_panCameraTo(op, stack, bytecode):
+    # TODO: v7 uses 2 pops, x y
+    xpos = stack.pop()
+    return f'camera-pan-to {xpos}'
 
 
 @regop
@@ -1907,6 +1967,11 @@ def o72_drawObject(op, stack, bytecode):
         return f'$ draw-object state {stack.pop()}'
     defop(op, stack, bytecode)
 
+@regop
+def o6_setState(op, stack, bytecode):
+    state = stack.pop()
+    obj = stack.pop()
+    return f'state-of {obj} is {state}'
 
 
 @regop
@@ -2037,7 +2102,8 @@ if __name__ == '__main__':
     print(gameres.game)
     print(rnam)
 
-    os.makedirs('scripts', exist_ok=True)
+    script_dir = os.path.join('scripts', gameres.game.basename)
+    os.makedirs(script_dir, exist_ok=True)
 
     for disk in root:
         for room in sputm.findall('LFLF', disk):
@@ -2047,7 +2113,7 @@ if __name__ == '__main__':
                 room.attribs['path'],
                 room_no,
             )
-            fname = f"scripts/{room.attribs['gid']:04d}_{room_no}.scu"
+            fname = f"{script_dir}/{room.attribs['gid']:04d}_{room_no}.scu"
 
             def parse_verb_meta(meta):
                 with io.BytesIO(meta) as stream:
@@ -2098,7 +2164,7 @@ if __name__ == '__main__':
                         entries = {off: idx[0] for idx, off in pref}
                     for off, stat in bytecode.items():
                         if elem.tag == 'VERB' and off + 8 in entries:
-                            if off > min(entries.values()):
+                            if off + 8 > min(entries.keys()):
                                 print('\t}', file=f)
                             print('\n\tverb', entries[off + 8], '{', file=f)
                             indent = 2 * '\t'
