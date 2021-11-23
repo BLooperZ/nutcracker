@@ -69,6 +69,17 @@ def adr(arg):
     return f"&[{arg.abs + 8:08d}]"
 
 
+def colored(arg):
+    colors = {
+        # 3: 'light-purple',
+        # 9: 'light-blue',
+        # 14: 'yellow',
+    }
+    if isinstance(arg, ByteValue):
+        return colors.get(arg.op[0], value(arg))
+    return value(arg)
+
+
 def build_print(args):
     args = iter(args)
     while True:
@@ -87,7 +98,11 @@ def build_print(args):
                 continue
             if masked == 0x01:
                 color = next(args)
-                yield f'color {value(color)}'
+                yield f'color {colored(color)}'
+                continue
+            if masked == 0x02:
+                clip = next(args)
+                yield f'clipped {value(clip)}'
                 continue
             if masked == 0x04:
                 assert not arg.op[0] & 0x80
@@ -181,12 +196,12 @@ def build_verb(args):
             if masked == 0x03:
                 color = next(args)
                 assert isinstance(color, Variable if arg.op[0] & 0x80 else ByteValue)
-                yield f'color {value(color)}'
+                yield f'color {colored(color)}'
                 continue
             if masked == 0x04:
                 color = next(args)
                 assert isinstance(color, Variable if arg.op[0] & 0x80 else ByteValue)
-                yield f'hicolor {value(color)}'
+                yield f'hicolor {colored(color)}'
                 continue
             if masked == 0x05:
                 posx = next(args)
@@ -209,6 +224,10 @@ def build_verb(args):
                 assert not arg.op[0] & 0x80
                 yield 'off'
                 continue
+            if masked == 0x08:
+                assert not arg.op[0] & 0x80
+                yield 'delete'
+                continue
             if masked == 0x09:
                 assert not arg.op[0] & 0x80
                 yield 'new'
@@ -216,7 +235,7 @@ def build_verb(args):
             if masked == 0x10:
                 color = next(args)
                 assert isinstance(color, Variable if arg.op[0] & 0x80 else ByteValue)
-                yield f'dimcolor {value(color)}'
+                yield f'dimcolor {colored(color)}'
                 continue
             if masked == 0x11:
                 assert not arg.op[0] & 0x80
@@ -231,6 +250,11 @@ def build_verb(args):
                 assert not arg.op[0] & 0x80
                 yield 'center'
                 continue
+            if masked == 0x14:
+                # windex displays ?????????
+                string = next(args)
+                yield f'name *{value(string)}'
+                continue
             if masked == 0x16:
                 # assert not arg.op[0] & 0x80
                 yield f'image {value(next(args))} in-room {value(next(args))}'
@@ -238,7 +262,7 @@ def build_verb(args):
             if masked == 0x17:
                 color = next(args)
                 assert isinstance(color, Variable if arg.op[0] & 0x80 else ByteValue)
-                yield f'bakcolor {value(color)}'
+                yield f'bakcolor {colored(color)}'
                 continue
         yield str(arg)
 
@@ -313,10 +337,10 @@ def build_actor(args):
                 continue
             if masked == 0x0B:
                 # yield f'color {value(next(args))} is {value(next(args))}'
-                yield f'palette {value(next(args))} in-slot {value(next(args))}'
+                yield f'palette {colored(next(args))} in-slot {colored(next(args))}'
                 continue
             if masked == 0x0C:
-                yield f'talk-color {value(next(args))}'
+                yield f'talk-color {colored(next(args))}'
                 continue
             if masked == 0x0D:
                 yield f'name {msg_val(next(args))}'
@@ -549,6 +573,11 @@ def o5_state_wd(op):
         masked = sub.op[0] & 0x1F
         if masked == 0x01:
             return f'*{value(op.args[1])} = {msg_val(op.args[2])}'
+
+        # 0x27 o5_setState { BYTE hex=0x02 dec=2 BYTE hex=0x2f dec=47 BYTE hex=0x30 dec=48 }
+        # *#47 = *#48
+        if masked == 0x02:
+            return f'*{value(op.args[1])} = *{value(op.args[2])}'
 
         # 0x27 o5_setState { BYTE hex=0x03 dec=3 BYTE hex=0x15 dec=21 BYTE hex=0x00 dec=0 VAR_9991 }
         # *#21[#0] = #7
@@ -866,6 +895,12 @@ def o5_room_wd(op):
             end = op.args[4]
             time = op.args[6]
             return f'palette transform {value(number)} {value(start)} to {value(end)} with-in {value(time)}'
+        if masked == 0x10:
+            # unverified
+            slot = op.args[1]
+            speed = op.args[2]
+            return f'palette cycle-speed {value(slot)} is {value(speed)}'
+
 
 
 @regop(0x14)
@@ -975,10 +1010,10 @@ def o5_do_sentence_wd(op):
 def o5_move_wd(op):
     if op.opcode == 0x1A:  # VAR = WORD
         # assert isinstance(op.args[1], WordValue), op.args[1]
-        return f'{op.args[0]} = {value(op.args[1])}'
+        return f'{value(op.args[0])} = {value(op.args[1])}'
     if op.opcode == 0x9A:  # VAR = VAR
         # assert isinstance(op.args[1], Variable), op.args[1]
-        return f'{op.args[0]} = {value(op.args[1])}'
+        return f'{value(op.args[0])} = {value(op.args[1])}'
     if op.opcode in {0x7A, 0xFA}:
         verb = op.args[0]
         assert isinstance(op.args[0], Variable if op.opcode & 0x80 else ByteValue)
@@ -1083,7 +1118,7 @@ def o5_box_wd(op):
         x2 = op.args[3]
         y2 = op.args[4]
         color = op.args[5]
-        return f'draw-box {value(x)},{value(y)} to {value(x2)},{value(y2)} color {value(color)}'
+        return f'draw-box {value(x)},{value(y)} to {value(x2)},{value(y2)} color {colored(color)}'
 
 
 def descumm_v5(data: bytes, opcodes):

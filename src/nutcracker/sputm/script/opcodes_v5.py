@@ -30,9 +30,70 @@ class Statement_v5:
         return b''.join([bytes([self.opcode]), *(x.to_bytes() for x in self.args)])
 
 
+def named(arg):
+    # from SCUMM reference, appendix F
+    defs = {
+        0: 'complex-temp',
+        1: 'selected-actor',
+        2: 'camera-x',
+        3: 'message-going',
+        4: 'selected-room',
+        5: 'override-hit',
+        6: 'machine-speed',
+        7: 'me',
+        8: 'number-of-actors',
+        9: 'current-lights',
+        10: 'current-disk-side',
+        11: 'jiffy1',
+        12: 'jiffy2',
+        13: 'jiffy3',
+        14: 'music-flag',
+        15: 'actor-range-min',
+        16: 'actor-range-max',
+        17: 'camera-min',
+        18: 'camera-max',
+        19: 'min-jiffies',
+        20: 'cursor-x',
+        21: 'cursor-y',
+        22: 'real-selected',
+        23: 'last-sound',
+        24: 'override-key',
+        25: 'actor-talking',
+        26: 'snap-scroll',
+        27: 'camera-script',
+        28: 'enter-room1-script',
+        29: 'enter-room2-script',
+        30: 'exit-room1-script',
+        31: 'exit-room2-script',
+        32: 'build-sentence-script',
+        33: 'sentence-script',
+        34: 'update-inven-script',
+        35: 'cut-scene1-script',
+        36: 'cut-scene2-script',
+        37: 'text-speed',
+        38: 'entered-door',
+        39: 'sputm-debug',
+        40: 'K-of-heap',
+        41: 'sputm-version',
+        42: 'restart-key',
+        43: 'pause-key',
+        44: 'screen-x',
+        45: 'screen-y',
+        46: 'frame-jiffies',
+        47: 'total-jiffies',
+        48: 'sound-mode',
+        49: 'graphics-mode',
+        50: 'save-load-key',
+        51: 'hard-disk',
+        52: 'cursor-state',
+        53: 'userput-state',
+        54: 'text-offset',
+    }
+    return defs.get(arg.num, arg)
+
 def value(arg):
     if isinstance(arg, Variable):
-        return arg
+        return named(arg)
     return f"#{int.from_bytes(arg.op, byteorder='little', signed=False)}"
 
 
