@@ -94,7 +94,8 @@ def named(arg):
 def value(arg):
     if isinstance(arg, Variable):
         return named(arg)
-    return f"#{int.from_bytes(arg.op, byteorder='little', signed=False)}"
+    # return f"#{int.from_bytes(arg.op, byteorder='little', signed=False)}"
+    return f"{int.from_bytes(arg.op, byteorder='little', signed=False)}"
 
 
 class Variable:

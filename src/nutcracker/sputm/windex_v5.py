@@ -1,10 +1,12 @@
 import io
 import json
-from collections import deque
+import itertools
+from collections import defaultdict, deque
+from dataclasses import dataclass
 from string import printable
-from typing import Iterable, Optional
-from nutcracker.kernel.element import Element
+from typing import Iterable, Optional, OrderedDict, Sequence
 
+from nutcracker.kernel.element import Element
 from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
 
@@ -71,9 +73,22 @@ def adr(arg):
 
 def colored(arg):
     colors = {
+        # 0: 'black',
+        # 1: 'blue',
+        # 2: 'green',
         # 3: 'light-purple',
+        # 4: 'red',
+        # 5: 'purple',
+        # 6: 'brown',
+        # 7: 'light-grey',
+        # 8: 'dark-grey',
         # 9: 'light-blue',
+        # 10: 'light-green',
+        # 11: 'light-cyan',
+        # 12: 'light-red',
+        # 13: 'light-magenta',
         # 14: 'yellow',
+        # 15: 'white'
     }
     if isinstance(arg, ByteValue):
         return colors.get(arg.op[0], value(arg))
@@ -439,12 +454,21 @@ def regop(mask):
     return inner
 
 
+@dataclass
+class BreakHere:
+    number: int = 1
+
+    def __str__(self) -> str:
+        num_str = f' {self.number}' if self.number > 1 else ''
+        return f'break-here{num_str}'
+
+
 @regop(0x00)
 def o5_stop_wd(op):
     if op.opcode == 0x00:
         return 'end-object'
     if op.opcode == 0x80:
-        return 'break-here'
+        return BreakHere()
     if op.opcode == 0x60:
         scr = op.args[0]
         if scr.op[0] == 0:
@@ -513,12 +537,29 @@ def o5_face_wd(op):
         return f'{value(var)} = actor-y {value(actor)}'
 
 
+@dataclass
+class ConditionalJump:
+    expr: str
+    ref: RefOffset
+
+    def __str__(self) -> str:
+        return f'if !({self.expr}) jump {adr(self.ref)}'
+
+@dataclass
+class UnconditionalJump:
+    ref: RefOffset
+
+    def __str__(self) -> str:
+        return f'jump {adr(self.ref)}'
+
+
 @regop(0x04)
 def o5_greater_wd(op):
     if op.opcode in {0x04, 0x84}:
         assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return (
-            f'if !({value(op.args[0])} <= {value(op.args[1])}) jump {adr(op.args[2])}'
+        return ConditionalJump(
+            f'{value(op.args[0])} <= {value(op.args[1])}',
+            op.args[2]
         )
     if op.opcode in {0x24, 0x64, 0xA4, 0xE4}:
         # TODO: don't display optional  'walk-to x,y' part when x,y are -1,-1
@@ -530,7 +571,10 @@ def o5_greater_wd(op):
         )
     if op.opcode in {0x44, 0xC4}:
         assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return f'if !({value(op.args[0])} > {value(op.args[1])}) jump {adr(op.args[2])}'
+        return ConditionalJump(
+            f'{value(op.args[0])} > {value(op.args[1])}',
+            op.args[2]
+        )
 
 
 @regop(0x05)
@@ -600,18 +644,28 @@ def o5_state_wd(op):
 def o5_compare_wd(op):
     if op.opcode in {0x08, 0x88}:
         assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return (
-            f'if !({value(op.args[0])} != {value(op.args[1])}) jump {adr(op.args[2])}'
+        return ConditionalJump(
+            f'{value(op.args[0])} is-not {value(op.args[1])}',
+            # f'{value(op.args[0])} != {value(op.args[1])}',
+            op.args[2]
         )
     if op.opcode in {0x48, 0xC8}:
         assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return (
-            f'if !({value(op.args[0])} == {value(op.args[1])}) jump {adr(op.args[2])}'
+        return ConditionalJump(
+            f'{value(op.args[0])} is {value(op.args[1])}',
+            # f'{value(op.args[0])} == {value(op.args[1])}',
+            op.args[2]
         )
     if op.opcode == 0x28:
-        return f'if !(!{value(op.args[0])}) jump {adr(op.args[1])}'
+        return ConditionalJump(
+            f'!{value(op.args[0])}',
+            op.args[1]
+        )
     if op.opcode == 0xA8:
-        return f'if !({value(op.args[0])}) jump {adr(op.args[1])}'
+        return ConditionalJump(
+            f'{value(op.args[0])}',
+            op.args[1]
+        )
     if op.opcode in {0x68, 0xE8}:
         return f'{value(op.args[0])} = script-running {value(op.args[1])}'
 
@@ -700,6 +754,8 @@ def o5_resource_wd(op):
         if masked == 0x11:
             return 'clear-heap'
         if masked == 0x12:
+            # for some reason, places which should have logical nuke-charset
+            # also go here (probably bug in original scripts) (should go to 0x13)
             return f'load-charset {value(op.args[1])}'
         if masked == 0x14:
             # windex just says '???'
@@ -738,7 +794,7 @@ def o5_resource_wd(op):
     if op.opcode == 0xAC:
         rpn = list(build_expr(op.args[1:]))
         infix = rpn_to_infix(rpn)
-        return f'{value(op.args[0])} = ${resolve_expr(infix)}'
+        return f'{value(op.args[0])} = {resolve_expr(infix)}'
     if op.opcode in {0x6C, 0xEC}:
         return f'{value(op.args[0])} = actor-width {value(op.args[1])}'
 
@@ -751,7 +807,7 @@ def o5_put_wd(op):
         rng = op.args[2]
         # windex: walk #2 to-actor #1 with-in 40
         # SCUMM reference: walk actor-name to actor-name within number
-        return f'walk {value(actor)} to-actor {value(actor2)} with-in {value(rng)}'
+        return f'walk {value(actor)} to-actor {value(actor2)} within {value(rng)}'
 
     if op.opcode in {0x2D, 0x6D, 0xAD, 0xED}:
         actor = op.args[0]
@@ -894,7 +950,7 @@ def o5_room_wd(op):
             start = op.args[3]
             end = op.args[4]
             time = op.args[6]
-            return f'palette transform {value(number)} {value(start)} to {value(end)} with-in {value(time)}'
+            return f'palette transform {value(number)} {value(start)} to {value(end)} within {value(time)}'
         if masked == 0x10:
             # unverified
             slot = op.args[1]
@@ -977,20 +1033,27 @@ def o5_and_wd(op):
 @regop(0x18)
 def o5_jump_wd(op):
     if op.opcode == 0x18:
-        return f'jump {adr(op.args[0])}'
+        return UnconditionalJump(op.args[0])
+        # return f'jump {adr(op.args[0])}'
     if op.opcode == 0x58:
-        if op.args[0].op != 0x00:
+        assert isinstance(op.args[0], ByteValue)
+        if op.args[0].op[0] != 0:
+            assert op.args[0].op[0] == 1, op.args[0]
             return f'override {value(op.args[0])}'
         else:
             return 'override off'
     if op.opcode in {0x38, 0xB8}:
         assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return (
-            f'if !({value(op.args[0])} >= {value(op.args[1])}) jump {adr(op.args[2])}'
+        return ConditionalJump(
+            f'{value(op.args[0])} >= {value(op.args[1])}',
+            op.args[2]
         )
     if op.opcode in {0x78, 0xF8}:
         assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return f'if !({value(op.args[0])} < {value(op.args[1])}) jump {adr(op.args[2])}'
+        return ConditionalJump(
+            f'{value(op.args[0])} < {value(op.args[1])}',
+            op.args[2]
+        )
     if op.opcode == 0xD8:
         params = ' '.join(build_print(op.args))
         return f'say-line {params}'
@@ -1002,7 +1065,7 @@ def o5_jump_wd(op):
 def o5_do_sentence_wd(op):
     var = op.args[0]
     if isinstance(var, ByteValue) and var.op[0] == 254:
-        return f'do-sentence {value(var)}'
+        return 'stop-sentence'
     return f'do-sentence {value(var)} {value(op.args[1])} with {value(op.args[2])}'
 
 
@@ -1086,7 +1149,10 @@ def o5_class_wd(op):
         obj = op.args[0]
         assert op.args[-2].op[0] == 0xFF
         classes = ' '.join(build_classes(op.args[1:-1]))
-        return f'if !(class-of {value(obj)} is {classes}) jump {adr(op.args[-1])}'
+        return ConditionalJump(
+            f'class-of {value(obj)} is {classes}',
+            op.args[-1]
+        )
     if op.opcode in {0x3D, 0x7D, 0xBD, 0xFD}:
         var = op.args[0]
         posx = op.args[1]
@@ -1157,40 +1223,290 @@ def descumm_v5(data: bytes, opcodes):
         return bytecode
 
 
-# if __name__ == '__main__':
-#     import argparse
-#     import glob
-
-#     from .preset import sputm
-#     from nutcracker.utils.fileio import read_file
-
-#     parser = argparse.ArgumentParser(description='read smush file')
-#     parser.add_argument('files', nargs='+', help='files to read from')
-#     parser.add_argument('--chiper-key', default='0x00', type=str, help='xor key')
-#     args = parser.parse_args()
-
-#     files = sorted(set(flatten(glob.iglob(r) for r in args.files)))
-#     for filename in files:
-#         print('===============', filename)
-
-#         resource = read_file(filename, key=int(args.chiper_key, 16))
-
-#         for elem in get_scripts(sputm.map_chunks(resource)):
-#             print('===============', elem)
-#             _, script_data = script_map[elem.tag](elem.data)
-#             bytecode = descumm_v5(script_data, OPCODES_v5)
-#             # print_bytecode(bytecode)
-#             # for off, stat in bytecode.items():
-#             #     print(f'{off:08d}', stat)
-
 
 obj_names = {}
+
+def flush(indent, sts, file):
+    for st in sts:
+        print(
+            f'{indent}{st}',
+            file=file,
+        )
+    sts.clear()
+
+
+@dataclass
+class CodeBlock:
+    indent: int
+    seq: Sequence[str]
+
+    def __str__(self) -> str:
+        return '\n'.join(f'{self.indent}\t{st}' for st in self.seq) + f'\n{self.indent}}}'
+
+def collapse_break_here(asts):
+    def is_break(stat):
+        return isinstance(stat, BreakHere)
+
+    # Collapse break-here
+    for _, seq in asts.items():
+        grouped = itertools.groupby(list(seq), key=is_break)
+        seq.clear()
+        for breaker, group in grouped:
+            if not breaker:
+                seq.extend(group)
+            else:
+                seq.append(BreakHere(len(list(group))))
+
+    return asts
+
+
+def inline_complex_temp(asts):
+    # Inline complex-temp
+    complex_temp = Variable(0)
+    complex_value = None
+    for _, seq in asts.items():
+        stats = list(seq)
+        seq.clear()
+        for st in stats:
+            if str(st).startswith(f'{value(complex_temp)} = '):
+                complex_value = str(st).replace(f'{value(complex_temp)} = ', '')
+            elif f'{value(complex_temp)} = ' in str(st):
+                complex_value = None
+                seq.append(str(st).replace(f'{value(complex_temp)} = ', ''))
+            elif f'{value(complex_temp)}' in str(st):
+                assert complex_value is not None
+                if isinstance(st, ConditionalJump):
+                    seq.append(ConditionalJump(st.expr.replace(f'{value(complex_temp)}', complex_value), st.ref))
+                else:
+                    seq.append(str(st).replace(f'{value(complex_temp)}', complex_value))
+            else:
+                seq.append(st)
+    return asts
+
+
+def collapse_override(asts):
+    for _, seq in asts.items():
+        stats = iter(list(seq))
+        seq.clear()
+        for st in stats:
+            if str(st) == 'override 1':
+                jmp = next(stats)
+                seq.append(f'override {adr(jmp.ref)}')
+            elif str(st) == 'override 0':
+                seq.append('override off')
+            else:
+                seq.append(st)
+    return asts
+
+
+def transform_asts(indent, asts, file):
+    # Collapse break-here
+    asts = collapse_break_here(asts)
+
+    # Inline complex-temp
+    asts = inline_complex_temp(asts)
+
+    asts = collapse_override(asts)
+
+    # Flow structure blocks
+    deps = OrderedDict()
+
+    blocks = list(asts.items())
+    if blocks:
+        deps['_entry'] = [blocks[0][0]]
+    for idx, (label, seq) in enumerate(blocks):
+        deps[label] = []
+        for st in seq:
+            if isinstance(st, ConditionalJump):
+                deps[label].append(st)
+        if isinstance(st, UnconditionalJump):
+            deps[label].append(st)
+        elif isinstance(st, str) and st.startswith('override &'):
+            deps[label].append(st)
+        if str(st) not in {'end-object', 'end-script'}:
+            deps[label].append(blocks[idx+1][0])
+        assert len(deps[label]) <= 2, len(deps[label])
+
+    # Find for loops:
+    last_label = None
+    changed = True
+    while changed:
+        deleted = set()
+        deref = set()
+        changed = False
+        for idx, (label, exits) in enumerate(deps.items()):
+            if label in deleted:
+                continue
+
+            if len(exits) == 1:
+                ex, = exits
+                if isinstance(ex, str) and ex.startswith('_') and label != '_entry':
+                    asts[label].extend(asts[ex])
+                    del asts[ex]
+                    deps[label] = deps[ex]
+                    deleted |= {ex}
+                    changed = True
+                    break
+
+            # for loops
+            if len(exits) == 2:
+                ex, fall = exits
+                if isinstance(ex, ConditionalJump):
+                    if adr(ex.ref) == f'&{label}':
+                        cond = asts[label][-1]
+                        if isinstance(cond, ConditionalJump):
+                            end = None
+                            adv = str(asts[label][-2])
+                            step, var = adv[:2], adv[2:]
+                            if step == '++' and f'{var} > ' in cond.expr:
+                                asts[label].pop()  # cond
+                                asts[label].pop()  # adv
+                                end = cond.expr.replace(f'{var} > ', '')
+                            elif step == '--' and f'{var} < ' in cond.expr:
+                                asts[label].pop()  # cond
+                                asts[label].pop()  # adv
+                                end = cond.expr.replace(f'{var} < ', '')
+                            if end and last_label is not None and asts[last_label]:
+                                assert last_label == list(deps)[idx - 1]
+                                init = str(asts[last_label].pop())
+                                if f'{var} = ' in init:
+                                    ext, fall = exits
+                                    assert ext == ex
+                                    asts[last_label].append(f'for {init} to {end} {step} {{')
+                                    asts[last_label].extend(f'\t{st}' for st in asts[label])
+                                    asts[last_label].append('}')
+                                    del asts[label]
+                                    deleted |= {label}
+                                    deps[last_label] = [fall]
+
+                                    if fall.startswith('_'):
+                                        asts[last_label].extend(asts[fall])
+                                        deps[last_label] = deps[fall]
+                                        del asts[fall]
+                                        deleted |= {fall}
+
+                                    changed = True
+                                    break
+                                else:
+                                    asts[last_label].append(init)
+
+            # do loops
+            if 1 <= len(exits) <= 2:
+                ex, *falls = exits
+                if isinstance(ex, (UnconditionalJump, ConditionalJump)):
+                    if adr(ex.ref) == f'&{label}':
+                        ext = asts[label].pop()
+                        assert ext == ex
+                        if [str(st) for st in asts[label]] == ['break-here'] and isinstance(ex, ConditionalJump):
+                            asts[label].clear()
+                            asts[label].append(f'break-until ({ex.expr})')
+                        else:
+                            stats = [f'\t{st}' for st in asts[label]]
+                            asts[label].clear()
+                            asts[label].append('do {')
+                            asts[label].extend(stats)
+                            if isinstance(ex, UnconditionalJump):
+                                asts[label].append('}')
+                            elif isinstance(ex, ConditionalJump):
+                                asts[label].append(f'}} until ({ex.expr})')
+                                
+                            else:
+                                raise ValueError()
+                        deps[label] = list(falls)
+                        changed = True
+                        deref |= {label}
+                        break
+
+            # # case statement
+            # if len(exits) == 2:
+            #     ex, fall = exits
+            #     if isinstance(ex, UnconditionalJump) and adr(ex.ref) == f'&{fall}':
+            #         conds = []
+            #         cases = []
+            #         var = None
+            #         for dep in deps:
+            #             if len(deps[dep]) >= 1 and isinstance(deps[dep][0], UnconditionalJump):
+            #                 if adr(deps[dep][0].ref) == adr(ex.ref):
+            #                     cases.append(dep)
+            #         for dep in reversed(deps):
+            #             if len(deps[dep]) == 2 and isinstance(deps[dep][1], str):
+            #                 if isinstance(deps[dep][0], ConditionalJump) and deps[dep][1] in cases:
+            #                     if ' is ' in deps[dep][0].expr:
+            #                         varc, val = deps[dep][0].expr.split(' is ')
+            #                         if var is None:
+            #                             var = varc
+            #                         if varc == var:
+            #                             conds.insert(0, dep)
+            #         if conds:
+            #             label = conds[0]
+            #             asts[label].pop() # conditional jump
+            #             asts[label].append(f'case {var} {{')
+            #             for cond in conds:
+            #                 ext, *falls = deps[cond]
+            #                 caseval = ext.expr.replace(f'{var} is ', 'of ')
+            #                 asts[label].append(f'\t{caseval} {{')
+            #                 asts[label].extend(f'\t\t{st}' for st in asts[deps[cond][1]])
+            #                 asts[deps[cond][1]].clear()
+            #                 del asts[deps[cond][1]]
+            #                 asts[label].append('\t}')
+            #                 if cond != label:
+            #                     asts[cond].clear()
+            #                     del asts[cond]
+            #             asts[label].append('}')
+            #             deps[label] = [adr(ex.ref)[1:]]
+            #             # asts[label].extend(asts[adr(ex.ref)[1:]])
+            #             # asts[adr(ex.ref)[1:]].clear()
+            #             # del asts[adr(ex.ref)[1:]]
+            #             deleted |= set(conds[1:] + cases)  # + [adr(ex.ref)[1:]])
+            #             deref |= {adr(ex.ref)[1:]}
+            #             changed = True
+            #             break
+
+            last_label = label
+
+        for label in deleted:
+            if label in deps:
+                del deps[label]
+
+        for label in deref:
+            if label in deps:
+                keys = set(deps) - deref
+                skip_deref = False
+                for lb in keys:
+                    if lb in deleted:
+                        continue
+                    for ex in deps[lb]:
+                        if isinstance(ex, (ConditionalJump, UnconditionalJump)):
+                            if adr(ex.ref) == f'&{label}':
+                                skip_deref = True
+                                break
+                    if skip_deref:
+                        break
+
+                if not skip_deref:
+                    for lb in keys:
+                        deps[lb] = [f'_{label}' if str(ex) == label else ex for ex in deps[lb]]
+                    asts = {f'_{label}' if label == lbl else lbl: block for lbl, block in asts.items()}
+                    deps = {f'_{label}' if label == lbl else lbl: block for lbl, block in deps.items()}
+
+    # for label, exits in deps.items():
+    #     print('\t\t\t\t', label, '->', tuple(str(ex) for ex in exits), file=file)
+
+    return asts
+
+
+def print_asts(indent, asts, file):
+    for label, seq in asts.items():
+        if not label.startswith('_'):  # or True:
+            print(f'{label}:', file=file)
+        for st in seq:
+            print(f'{st}' if isinstance(st, CodeBlock) else f'{indent}{st}', file=file)
+
 
 if __name__ == '__main__':
     import argparse
     import os
 
-    from nutcracker.utils.fileio import read_file
     from nutcracker.utils.libio import suppress_stdout
 
     from nutcracker.sputm.tree import open_game_resource, narrow_schema
@@ -1241,6 +1557,7 @@ if __name__ == '__main__':
                             stream.read(2), byteorder='little', signed=False
                         )
                         yield key, entry - len(meta)
+                    assert stream.read() == b''
 
             with open(fname, 'w') as f:
                 for elem in get_scripts(room):
@@ -1269,25 +1586,30 @@ if __name__ == '__main__':
                     # print_bytecode(bytecode)
 
                     refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]
-
+                    curref = f'_[{0 + 8:08d}]'
+                    sts = deque()
+                    asts = defaultdict(deque)
                     if elem.tag == 'VERB':
                         entries = {off: idx[0] for idx, off in pref}
+                    res = None
                     for off, stat in bytecode.items():
                         if elem.tag == 'VERB' and off + 8 in entries:
+                            if off + 8 in entries:
+                                print_asts(indent, transform_asts(indent, asts, file=f), file=f)
+                                curref = f'_[{off + 8:08d}]'
+                                asts = defaultdict(deque)
                             if off + 8 > min(entries.keys()):
                                 print('\t}', file=f)
                             print('\n\tverb', entries[off + 8], '{', file=f)
                             indent = 2 * '\t'
-                        res = ops.get(stat.opcode & 0x1F, str)(stat) or stat
+                        if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
+                            curref = f'_[{off + 8:08d}]'
                         if off in refs:
-                            print(
-                                f'[{stat.offset + 8:08d}]:',
-                                file=f
-                            )
-                        print(
-                            f'{indent}{res}',
-                            file=f,
-                        )
+                            curref = f'[{off + 8:08d}]'
+                        res = ops.get(stat.opcode & 0x1F, str)(stat) or stat
+                        sts.append(res)
+                        asts[curref].append(res)
+                    print_asts(indent, transform_asts(indent, asts, file=f), file=f)
                     if elem.tag == 'VERB' and entries:
                         print('\t}', file=f)
                     print('}\n', file=f)
