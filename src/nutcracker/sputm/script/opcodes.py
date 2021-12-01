@@ -322,9 +322,9 @@ OPCODES_v6: OpTable = realize({
     0xD6: makeop('o6_band'),  # bitwise and
     0xD7: makeop('o6_bor'),  # bitwise or
     0xD8: makeop('o6_isRoomScriptRunning'),
-    # TODO: 0xdd: makeop('o6_findAllObjects'),
+    0xDD: makeop('o6_findAllObjects'),
     0xE1: makeop('o6_getPixel'),
-    # TODO: 0xe3: makeop('o6_pickVarRandom'),
+    0xE3: makeop('o6_pickVarRandom', extended_w_op),
     # TODO: 0xe4: makeop('o6_setBoxSet'),
     0xEC: makeop('o6_getActorLayer'),
     0xED: makeop('o6_getObjectNewDir'),
@@ -348,7 +348,7 @@ OPCODES_he60 = realize({
     # TODO: 0xdc: makeop('o60_writeFile'),
     # TODO: 0xde: makeop('o60_deleteFile'),
     # TODO: 0xdf: makeop('o60_rename'),
-    # TODO: 0xe0: makeop('o60_soundOps'),
+    0xe0: makeop('o60_soundOps', extended_b_op),
     0xE2: makeop('o60_localizeArrayToScript'),
     0xE9: makeop('o60_seekFilePos'),
     # TODO: 0xea: makeop('o60_redimArray'),

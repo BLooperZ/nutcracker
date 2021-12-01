@@ -129,7 +129,7 @@ script_map = {
 def get_scripts(root: Iterable[Element]) -> Iterator[Element]:
     for elem in root:
         if elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
-            if elem.tag in script_map:
+            if elem.tag in {*script_map, 'OBCD'}:
                 yield elem
             else:
                 yield from get_scripts(elem.children)

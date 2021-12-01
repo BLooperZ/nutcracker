@@ -296,6 +296,19 @@ def build_sound(args):
         yield str(arg)
 
 
+def build_charset_color(args):
+    args = iter(args)
+    while True:
+        arg = next(args)
+        if isinstance(arg, ByteValue):
+            if arg.op[0] == 0xFF:
+                break
+            masked = arg.op[0] & 0x1F
+            if masked == 0x01:
+                yield str(value(next(args)))
+                continue
+        yield str(arg)
+
 def build_script(args):
     args = iter(args)
     while True:
@@ -677,9 +690,13 @@ def o5_put_owner_wd(op):
         actor = op.args[1]
         return f'owner-of {value(obj)} is {value(actor)}'
     if op.opcode in {0x09, 0x49, 0x89, 0xC9}:
+        # windex shows actor {} face-towards {}
+        # SCUMM reference shows: do-animation actor-name face-towards actor-name
+        # NOTE: obj value might be actually actor, as seen in: ... face-towards selected-actor
         actor = op.args[0]
         obj = op.args[1]
-        return f'actor {value(actor)} face-towards {value(obj)}'
+        return f'do-animation {value(actor)} face-towards {value(obj)}'
+        # return f'actor {value(actor)} face-towards {value(obj)}'
 
 
 @regop(0x0A)
@@ -759,7 +776,7 @@ def o5_resource_wd(op):
             return f'load-charset {value(op.args[1])}'
         if masked == 0x14:
             # windex just says '???'
-            return f'load-object {value(op.args[1])} {value(op.args[2])}'
+            return f'load-object {value(op.args[1])} in-room {value(op.args[2])}'
     if op.opcode == 0x2C:
         sub = op.args[0]
         masked = ord(sub.op) & 0x1F
@@ -783,7 +800,9 @@ def o5_resource_wd(op):
             return f'charset {value(op.args[1])}'
         if masked == 0x0E:
             # windex just says '???'
-            return f'??? {op.args[1:]}'
+            assert op.args[-1].op[0] == 0xFF
+            colors = ', '.join(build_charset_color(op.args[1:]))
+            return f'charset color {colors}'
     if op.opcode == 0x4C:
         params = ' '.join(build_sound(op.args))
         return f'sound-kludge {params}'
@@ -1561,12 +1580,14 @@ if __name__ == '__main__':
 
             with open(fname, 'w') as f:
                 for elem in get_scripts(room):
+                    if elem.tag == 'OBCD':
+                        obcd = elem
+                        elem = sputm.find('VERB', obcd)
                     pref, script_data = script_map[elem.tag](elem.data)
                     obj_id = None
                     indent = '\t'
                     if elem.tag == 'VERB':
                         pref = list(parse_verb_meta(pref))
-                        obcd = get_element_by_path(os.path.dirname(elem.attribs['path']), room)
                         obj_id = obcd.attribs['gid']
                         obj_names[obj_id] = msg_to_print(sputm.find('OBNA', obcd).data.split(b'\0')[0])
                     print(';', elem.tag, elem.attribs['path'], file=f)
