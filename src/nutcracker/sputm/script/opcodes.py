@@ -157,6 +157,10 @@ def msg_op(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (CString(stream),)
 
 
+def dmsg_op(stream: IO[bytes]) -> Iterable[ScriptArg]:
+    return (CString(stream), CString(stream))
+
+
 def msg_op_v8(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (CString(stream, var_size=4),)
 
@@ -325,7 +329,7 @@ OPCODES_v6: OpTable = realize({
     0xDD: makeop('o6_findAllObjects'),
     0xE1: makeop('o6_getPixel'),
     0xE3: makeop('o6_pickVarRandom', extended_w_op),
-    # TODO: 0xe4: makeop('o6_setBoxSet'),
+    0xE4: makeop('o6_setBoxSet', extended_b_op),
     0xEC: makeop('o6_getActorLayer'),
     0xED: makeop('o6_getObjectNewDir'),
 })
@@ -343,11 +347,11 @@ OPCODES_he60 = realize({
     0xC8: makeop('o60_kernelGetFunctions'),
     0xC9: makeop('o60_kernelSetFunctions'),
     0xD9: makeop('o60_closeFile'),
-    # TODO: 0xda: makeop('o60_openFile'),
-    # TODO: 0xdb: makeop('o60_readFile'),
-    # TODO: 0xdc: makeop('o60_writeFile'),
-    # TODO: 0xde: makeop('o60_deleteFile'),
-    # TODO: 0xdf: makeop('o60_rename'),
+    0xDA: makeop('o60_openFile', msg_op),
+    0xDB: makeop('o60_readFile'),
+    0xDC: makeop('o60_writeFile'),
+    0xDE: makeop('o60_deleteFile', msg_op),
+    0xDF: makeop('o60_rename', dmsg_op),
     0xe0: makeop('o60_soundOps', extended_b_op),
     0xE2: makeop('o60_localizeArrayToScript'),
     0xE9: makeop('o60_seekFilePos'),
