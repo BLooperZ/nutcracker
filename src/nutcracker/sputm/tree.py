@@ -148,7 +148,7 @@ def create_config(game: Game) -> GameResourceConfig:
         base_fix = 0
         return GameResourceConfig(read_index, max_depth, base_fix)
 
-    if game.he_version > 0:
+    if game.he_version >= 70:
         read_index = read_index_he
         max_depth = 4
         base_fix = 0

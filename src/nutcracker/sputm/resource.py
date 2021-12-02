@@ -76,6 +76,8 @@ def load_resource(index_file: str):
     if sputm.find('INIB', index_root):
         assert he_version >= 90
         he_version = max(98, he_version)
+    if 0 < he_version < 72 and sputm.find('DROO', index_root):
+        he_version = 60
 
     room_pattern = '{room:03d}.LFL'  # noqa: F841
 
