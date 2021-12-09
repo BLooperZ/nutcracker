@@ -1,5 +1,5 @@
 import io
-import json
+import operator
 from collections import defaultdict, deque
 from string import printable
 from typing import Iterable, Optional
@@ -21,13 +21,14 @@ class Value:
         DWordValue: 'D',
     }
 
-    def __init__(self, orig, signed=False, cast=None):
+    def __init__(self, orig, signed=True, cast=None):
         self.orig = orig
         self.num = int.from_bytes(orig.op, byteorder='little', signed=signed)
         self.cast = cast
 
     def __repr__(self):
         if self.cast == 'char':
+            assert isinstance(self.orig, ByteValue)
             return f"'{chr(self.num)}'"
         suffix = self.suffix[type(self.orig)]
         return f'{self.num}'
@@ -85,10 +86,13 @@ class Variable:
             assert self.num & 0x4000, self.num
             pref = 'L'  # Local Variable
         num = self.num & 0xFFF
+        if pref == 'L':
+            l_vars.add(self)
         return f'{pref}.{num}'  # [{self.cast}]'
 
 
 g_vars = {}
+l_vars = set()
 def get_var(orig):
     while isinstance(orig, Dup):
         orig = orig.orig
@@ -224,7 +228,7 @@ def msg_val(arg):
     # "\\xFF\\x06\\x07\\x00" -> "%o7%"
     # "\\xFF\\x04\\xC2\\x01" -> "%n450%"
     # "\\xFF\\x05\\x6B\\x00 \\xFF\\x06\\x6C\\x00 \\xFF\\x05\\x6E\\x00 \\xFF\\x06\\x6D\\x00" -> "%v107% %o108% %v110% %o109%"
-    return json.dumps(msg_to_print(arg.msg))
+    return f'"{msg_to_print(arg.msg)}"'
 
 
 def push_str(stack, msg):
@@ -232,7 +236,8 @@ def push_str(stack, msg):
 
 
 def pop_str(stack):
-    return ops['_strings'].pop() if (arr := stack.pop()).num == (2 ** 16) - 1 else arr
+    arr = stack.pop()
+    return ops['_strings'].pop() if Value(arr.orig, signed=True).num == -1 else arr
 
 
 def adr(arg):
@@ -323,7 +328,7 @@ def o6_loadRoomWithEgo(op, stack, bytecode):
     xpos = stack.pop()
     room = stack.pop()
     obj = stack.pop()
-    return f'come-out-door {obj} in-room {room} walk {to_signed(xpos)},{to_signed(ypos)}'
+    return f'come-out-door {obj} in-room {room} walk {xpos},{ypos}'
 
 
 @regop
@@ -579,7 +584,7 @@ def o6_stopScript(op, stack, bytecode):
 
 @regop
 def o6_arrayOps(op, stack, bytecode):
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     arr = get_var(op.args[1])
     if sub.num == 205:
         base = stack.pop()
@@ -596,12 +601,12 @@ def o6_arrayOps(op, stack, bytecode):
         param_str = f'{", ".join(str(param) for param in params)}'
         base = stack.pop()
         return f'{arr}[{base}][{col}] = {param_str}' 
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
 def o72_arrayOps(op, stack, bytecode):
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     arr = get_var(op.args[1])
     if sub.num == 7:
         string = pop_str(stack)
@@ -622,7 +627,7 @@ def o72_arrayOps(op, stack, bytecode):
         base = stack.pop()
         param_str = f'[{", ".join(str(param) for param in params)}]'
         return f'$ {arr}[{base}] = {param_str}' 
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -644,7 +649,7 @@ def o72_isAnyOf(op, stack, bytecode):
     if cast:
         for param in params:
             param.cast = cast
-    stack.append(f'$ {var} in [ {", ".join(str(param) for param in params)} ]')
+    stack.append(f'{var} in [ {", ".join(str(param) for param in params)} ]')
 
 
 @regop
@@ -660,7 +665,7 @@ def o72_getScriptString(op, stack, bytecode):
 
 @regop
 def o72_readINI(op, stack, bytecode):
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     string = pop_str(stack)
     if sub.num == 6:
         stack.append(Caster(f'read-ini number {string}', cast='number'))
@@ -671,7 +676,7 @@ def o72_readINI(op, stack, bytecode):
 
 @regop
 def o72_writeINI(op, stack, bytecode):
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     if sub.num == 6:
         value = stack.pop()
         option = pop_str(stack)
@@ -680,7 +685,7 @@ def o72_writeINI(op, stack, bytecode):
         value = pop_str(stack)
         option = pop_str(stack)
         return f'write-ini {option} {value}'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -710,7 +715,7 @@ def o72_traceStatus(op, stack, bytecode):
 
 
 def printer(action, op, stack):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 65:
         ypos = stack.pop()
         xpos = stack.pop()
@@ -735,6 +740,9 @@ def printer(action, op, stack):
         num_params = stack.pop().num + 1
         params = [stack.pop() for _ in range(num_params)]
         return f'\t{msg_val(string)} {" ".join(str(param) for param in params)}\n'
+    if cmd.num == 225:
+        res = stack.pop()
+        return f'\ttalkie {res}'
     if cmd.num == 249:
         return f'\tcolors {get_params(stack)} \\'
     if cmd.num == 254:
@@ -837,7 +845,7 @@ def o72_deleteFile(op, stack, bytecode):
 
 @regop
 def o6_dimArray(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     types = {
         199: 'int',
         200: 'bit',
@@ -858,7 +866,7 @@ def o6_dummy(op, stack, byecode):
 
 @regop
 def o6_dim2dimArray(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     types = {
         199: 'int',
         200: 'bit',
@@ -870,9 +878,10 @@ def o6_dim2dimArray(op, stack, bytecode):
     dim2, dim1 =  stack.pop(), stack.pop()
     return f'dim {types[cmd.num]} array {arr}[{dim1}][{dim2}]'
 
+
 @regop
 def o72_dimArray(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     types = {
         2: 'bit',
         3: 'nibble',
@@ -888,6 +897,27 @@ def o72_dimArray(op, stack, bytecode):
 
 
 @regop
+def o90_dim2dim2Array(op, stack, bytecode):
+    cmd = Value(op.args[0], signed=False)
+    types = {
+        2: 'bit',
+        3: 'nibble',
+        4: 'byte',
+        5: 'int',
+        6: 'dword',
+        7: 'string',
+    }
+    arr = get_var(op.args[1])
+    order = stack.pop()  # row / column?
+
+    dim1end = stack.pop()
+    dim1start = stack.pop()
+    dim2end = stack.pop()
+    dim2start = stack.pop()
+    return f'$ dim {types[cmd.num]} array {arr}[{dim1start}..{dim1end}][{dim2start}..{dim2end}] order {order}'
+
+
+@regop
 def o70_isResourceLoaded(op, stack, bytecode):
     types = {
         18: 'image',
@@ -896,7 +926,7 @@ def o70_isResourceLoaded(op, stack, bytecode):
         228: 'sound',
         229: 'script'
     }
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     stack.append(f'$ {types[sub.num]}-loaded {stack.pop()}')
 
 @regop
@@ -929,7 +959,7 @@ def o6_endCutscene(op, stack, bytecode):
 
 @regop
 def o6_startSound(op, stack, bytecode):
-    if True:  # >he60
+    if False:  # >he60
         offset = stack.pop()
         return f'start-sound {stack.pop()} offset {offset}'
     return f'start-sound {stack.pop()}'
@@ -937,7 +967,7 @@ def o6_startSound(op, stack, bytecode):
 
 @regop
 def o60_soundOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     arg = stack.pop()
     if cmd.num == 222:
         # windex shows empty string
@@ -947,12 +977,12 @@ def o60_soundOps(op, stack, bytecode):
     if cmd.num == 224:
         # windex shows empty string
         return f'$ set-frequency {arg}'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
 def o70_soundOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 9:
         return f'$ sfx soft-on'
     if cmd.num == 232:
@@ -965,7 +995,7 @@ def o70_soundOps(op, stack, bytecode):
         return f'$ loop-sfx'
     if cmd.num == 255:
         return f'$ stop-sfx'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -995,19 +1025,20 @@ def o60_kernelGetFunctions(op, stack, bytecode):
 @regop
 def o71_kernelSetFunctions(op, stack, bytecode):
     params = get_params(stack)
-    if params[0].num == 1:
-        return f'$ restore-background {" ".join(params[1:])}'
-    if params[0].num == 21:
-        return f'$ skip-draw on'
-    if params[0].num == 22:
-        return f'$ skip-draw off'
-    if params[0].num == 23:
-        return f'$ clear-charset-mask'
-    if params[0].num == 24:
-        return f'$ redraw-all-actors-skip'
-    if params[0].num == 25:
-        return f'$ redraw-all-actors-no-skip'
-    raise ValueError(params)
+    return f'kludge {params[0]} {params[1:]}'
+    # if params[0].num == 1:
+    #     return f'$ restore-background {" ".join(params[1:])}'
+    # if params[0].num == 21:
+    #     return f'$ skip-draw on'
+    # if params[0].num == 22:
+    #     return f'$ skip-draw off'
+    # if params[0].num == 23:
+    #     return f'$ clear-charset-mask'
+    # if params[0].num == 24:
+    #     return f'$ redraw-all-actors-skip'
+    # if params[0].num == 25:
+    #     return f'$ redraw-all-actors-no-skip'
+    # raise ValueError(params)
 
 @regop
 def o6_getActorFromXY(op, stack, bytecode):
@@ -1037,7 +1068,7 @@ def o6_getVerbFromXY(op, stack, bytecode):
 
 @regop
 def o6_stopSound(op, stack, bytecode):
-    return f'stop-sound {to_signed(stack.pop())}'
+    return f'stop-sound {stack.pop()}'
 
 
 @regop
@@ -1047,7 +1078,7 @@ def o6_endOverride(op, stack, bytecode):
 
 @regop
 def o6_isSoundRunning(op, stack, bytecode):
-    stack.append(f'sound-running {to_signed(stack.pop())}')
+    stack.append(f'sound-running {stack.pop()}')
 
 @regop
 def o6_isScriptRunning(op, stack, bytecode):
@@ -1061,7 +1092,7 @@ def o6_isRoomScriptRunning(op, stack, bytecode):
 
 @regop
 def o6_roomOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 172:
         x2 = stack.pop()
         x1 = stack.pop()
@@ -1090,7 +1121,7 @@ def o6_roomOps(op, stack, bytecode):
         flags = stack.pop()
         return f'saveload-game {flags} {slot}'
     if cmd.num == 181:
-        return f'fades {to_signed(stack.pop())}'
+        return f'fades {stack.pop()}'
     if cmd.num == 182:
         to_slot = stack.pop()
         from_slot = stack.pop()
@@ -1105,12 +1136,12 @@ def o6_roomOps(op, stack, bytecode):
     if cmd.num == 213:
         # windex show empty string here
         return f'$ room-color is {stack.pop()}'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
 def o60_roomOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 221:
         return f'save-game {stack.pop()} name {msg_val(op.args[1])}'
     return o6_roomOps(op, stack, bytecode)
@@ -1118,7 +1149,7 @@ def o60_roomOps(op, stack, bytecode):
 
 @regop
 def o72_roomOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 172:
         x2 = stack.pop()
         x1 = stack.pop()
@@ -1139,7 +1170,7 @@ def o72_roomOps(op, stack, bytecode):
         value = stack.pop()
         return f'palette intensity {value} in-slot {from_slot} to {to_slot}'
     if cmd.num == 181:
-        return f'fades {to_signed(stack.pop())}'
+        return f'fades {stack.pop()}'
     if cmd.num == 213:
         return f'$ room-color is {stack.pop()}'
     if cmd.num == 220:
@@ -1153,12 +1184,12 @@ def o72_roomOps(op, stack, bytecode):
         a = stack.pop()
         b = stack.pop()
         return f'$ palette {b} in-slot {a}'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
 def o6_verbOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 196:
         verb = stack.pop()
         return f'verb {verb} \\'
@@ -1200,12 +1231,12 @@ def o6_verbOps(op, stack, bytecode):
         return f'\tbakcolor {color} \\'
     if cmd.num == 255:
         return '\t(end-verb)'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
 def o72_verbOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     return o6_verbOps(op, stack, bytecode)
 
 
@@ -1271,7 +1302,7 @@ def o72_printWizImage(op, stack, bytecode):
 
 @regop
 def o6_cursorCommand(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 0x90:
         return 'cursor on'
     elif cmd.num == 0x91:
@@ -1307,12 +1338,12 @@ def o6_cursorCommand(op, stack, bytecode):
         # This command sets transparent colors in the cursor.
         # It can be called multiple times for multiple transparent colors.
         return f'cursor transparent {stack.pop()}'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
 def o80_cursorCommand(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num in {0x13, 0x14}:
         return f'$ cursor-wiz-image {stack.pop()}'
     elif cmd.num == 0x90:
@@ -1343,12 +1374,12 @@ def o80_cursorCommand(op, stack, bytecode):
         params = get_params(stack)
         param_str = ', '.join(str(param) for param in params)
         return f'charset color {param_str}'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
 def o6_actorOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 76:
         return f'\tcostume {stack.pop()} \\'
     if cmd.num == 77:
@@ -1369,7 +1400,7 @@ def o6_actorOps(op, stack, bytecode):
     if cmd.num == 83:
         return '\tdefault'
     if cmd.num == 84:
-        return f'\televation {to_signed(stack.pop())}'
+        return f'\televation {stack.pop()}'
     if cmd.num == 85:
         return '\tanimation default \\'
     if cmd.num == 86:
@@ -1402,7 +1433,7 @@ def o6_actorOps(op, stack, bytecode):
     if cmd.num == 99:
         ypos = stack.pop()
         xpos = stack.pop()
-        return f'\ttext-offset {to_signed(xpos)},{to_signed(ypos)} \\'
+        return f'\ttext-offset {xpos},{ypos} \\'
     if cmd.num == 197:
         return f'actor {stack.pop()} \\'
     if cmd.num == 198:
@@ -1423,12 +1454,12 @@ def o6_actorOps(op, stack, bytecode):
     # TODO: 233 - stop-walk - no pops
     # TODO: 234 - resume-walk - no pops
     # TODO: 235 - talk-script - 1 pop
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
 def o60_actorOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 218:
         return f'\tbackground-on \\'
     if cmd.num == 219:
@@ -1438,7 +1469,7 @@ def o60_actorOps(op, stack, bytecode):
 
 @regop
 def o72_actorOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 21:
         return f'\tcondition {get_params(stack)}'
     if cmd.num == 24:
@@ -1468,7 +1499,7 @@ def o72_resetCutscene(op, stack, bytecode):
 
 @regop
 def o90_setSpriteInfo(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 37:
         return f'\tgroup {stack.pop()}'
     if cmd.num == 43:
@@ -1476,7 +1507,7 @@ def o90_setSpriteInfo(op, stack, bytecode):
     if cmd.num == 44:
         ypos = stack.pop()
         xpos = stack.pop()
-        return f'\tmove {to_signed(xpos)},{to_signed(ypos)}'
+        return f'\tmove {xpos},{ypos}'
     if cmd.num == 52:
         return f'$ state {stack.pop()} \\'
     if cmd.num == 57:
@@ -1506,16 +1537,16 @@ def o90_setSpriteInfo(op, stack, bytecode):
         return f'\treset \\'
     if cmd.num == 217:
         return f'\tnew \\'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
 def o90_setSpriteGroupInfo(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 44:
         dy = stack.pop()
         dx = stack.pop()
-        return f'\tmove {to_signed(dx)},{to_signed(dy)}'
+        return f'\tmove {dx},{dy}'
     if cmd.num == 57:
         return f'$ sprite-group {stack.pop()} \\'
     if cmd.num == 67:
@@ -1524,12 +1555,12 @@ def o90_setSpriteGroupInfo(op, stack, bytecode):
         top = stack.pop()
         left = stack.pop()
         return f'\tbox {left},{top} to {right},{bottom}'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
 def o90_getSpriteInfo(op, stack, bytecode):
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     if sub.num == 30:
         sprite = stack.pop()
         stack.append(f'$ sprite-x {sprite}')
@@ -1554,6 +1585,14 @@ def o90_getSpriteInfo(op, stack, bytecode):
         sprite = stack.pop()
         stack.append(f'$ sprite-group {sprite}')
         return
+    if sub.num == 38:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-display-x {sprite}')
+        return
+    if sub.num == 39:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-display-y {sprite}')
+        return
     if sub.num == 45:
         # TODO: extra argument for he 98 + another extra for he 99
         # flags = stack.pop()
@@ -1575,7 +1614,13 @@ def o90_getSpriteInfo(op, stack, bytecode):
         sprite = stack.pop()
         stack.append(f'$ sprite-image {sprite}')
         return
-    defop(op, stack, bytecode)
+    if sub.num == 125:
+        params = get_params(stack)
+        param_str = ' '.join(str(param) for param in params)
+        sprite = stack.pop()
+        stack.append(f'$ class-of-sprite {sprite} {params}')
+        return
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -1586,13 +1631,13 @@ def o80_drawLine(op, stack, bytecode):
     x = stack.pop()
     y1 = stack.pop()
     x1 = stack.pop()
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     return f'$ draw-line {sub} {x1},{y1} to {x},{y} {id} {step}'
 
 
 @regop
 def o90_floodFill(op, stack, bytecode):
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     if sub.num == 57:
         return f'$ flood-fill-box \\'
     if sub.num == 65:
@@ -1609,7 +1654,7 @@ def o90_floodFill(op, stack, bytecode):
         return f'$ flood-fill-box {left},{top} to {right},{bottom}'
     if sub.num == 255:
         return f'\tdraw'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -1628,14 +1673,14 @@ def o6_animateActor(op, stack, barcode):
 
 @regop
 def o80_readConfigFile(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     option = pop_str(stack)
     section = pop_str(stack)
     filename = pop_str(stack)
     if cmd.num == 6:
-        stack.append(Caster(f'read-ini [number] {filename} {section} {option}', cast='number'))
+        stack.append(Caster(f'(read-ini {filename} {section} {option})', cast='number'))
         return
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -1674,7 +1719,7 @@ def o6_stampObject(op, stack, bytecode):
 
 @regop
 def o72_redimArray(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     arr = get_var(op.args[1])
     dim2, dim1 =  stack.pop(), stack.pop()
     if cmd.num == 4:  # byte array
@@ -1687,7 +1732,7 @@ def o72_redimArray(op, stack, bytecode):
 
 @regop
 def o72_dim2dimArray(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     arr = get_var(op.args[1])
     dim2, dim1 =  stack.pop(), stack.pop()
     if isinstance(dim2, BinExpr):
@@ -1712,7 +1757,7 @@ def o72_dim2dimArray(op, stack, bytecode):
         return f'$ dim dword array {arr}[{dim1}][{dim2}]'
     if cmd.num == 7:  # int array
         return f'$ dim string array {arr}[{dim1}][{dim2}]'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -1726,7 +1771,7 @@ def o72_drawWizImage(op, stack, bytecode):
 
 @regop
 def o90_wizImageOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 48:
         return f'\tmode 1 \\'
     if cmd.num == 51:
@@ -1774,7 +1819,7 @@ def o90_wizImageOps(op, stack, bytecode):
         return f'\tpolygon {stack.pop()} \\'
     if cmd.num == 255:
         return f'\t(end-wiz)'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -1799,19 +1844,26 @@ def o6_delaySeconds(op, stack, bytecode):
 
 @regop
 def o6_wait(op, stack, bytecode):
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     if sub.num == 168:
         return f'wait-for-actor {stack.pop()} [ref {adr(op.args[1])}]'
     if sub.num == 169:
         return 'wait-for-message'
     if sub.num == 170:
         return 'wait-for-camera'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
+
+
+@regop
+def o6_pseudoRoom(op, stack, bytecode):
+    params = get_params(stack)
+    room = stack.pop()
+    return f'pseudo-room {room} is {params}'
 
 
 @regop
 def o72_setTimer(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     return f'$ start-timer {stack.pop()} {cmd}'
 
 @regop
@@ -1853,7 +1905,7 @@ def o6_breakHere(op, stack, bytecode):
 
 @regop
 def o72_getTimer(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     stack.append(f'$ get-timer {stack.pop()} {cmd}')
 
 
@@ -1871,14 +1923,14 @@ def o6_createBoxMatrix(op, stack, bytecide):
 
 @regop
 def o6_systemOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 158:
         return 'restart'
     if cmd.num == 159:
         return 'pause'
     if cmd.num == 160:
         return 'quit'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -1886,7 +1938,7 @@ def o6_saveRestoreVerbs(op, stack, bytecode):
     setval = stack.pop()
     end = stack.pop()
     start = stack.pop()
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 141:
         return f'verbs-save {start} to {end} set {setval}'
         # return f'save-verbs {start} to {end} set {setval}'
@@ -1894,12 +1946,12 @@ def o6_saveRestoreVerbs(op, stack, bytecode):
         return f'verbs-restore {start} to {end} set {setval}'
         # return f'restore-verbs {start} to {end} set {setval}'
     # TODO: 143: verbs-delete {start} to {end} set {setval}
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
 def o72_systemOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 22:
         return '$ clear-draw-queue'
     if cmd.num == 26:
@@ -1910,12 +1962,12 @@ def o72_systemOps(op, stack, bytecode):
         return '$ prompt-exit'
     if cmd.num == 244:
         return '$ quit'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
 def o72_setSystemMessage(op, stack, bytecode):
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     string = pop_str(stack)
     if sub.num == 243:
         return f'$ window-title {string}'
@@ -1924,7 +1976,7 @@ def o72_setSystemMessage(op, stack, bytecode):
 
 @regop
 def o6_resourceRoutines(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 100:
         return f'load-script {stack.pop()}'
     if cmd.num == 101:
@@ -1963,12 +2015,12 @@ def o6_resourceRoutines(op, stack, bytecode):
         room = stack.pop()
         obj = stack.pop()
         return f'load-object {obj} in-room {room}'
-    defop(op, stack, bytecode) 
+    return defop(op, stack, bytecode) 
 
 
 @regop
 def o70_resourceRoutines(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 100:
         return f'load-script {stack.pop()}'
     if cmd.num == 101:
@@ -2027,7 +2079,7 @@ def o70_resourceRoutines(op, stack, bytecode):
         return f'$ lock-object {stack.pop()}'
     if cmd.num == 235:
         return f'$ unlock-object {stack.pop()}'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -2108,11 +2160,11 @@ def o6_shuffle(op, stack, bytecode):
 @regop
 def o72_getResourceSize(op, stack, bytecode):
     res = stack.pop()
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 13:
         stack.append(f'$ size-of sfx {res}')
         return
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -2149,6 +2201,22 @@ def o6_getObjectOldDir(op, stack, bytecode):
 @regop
 def o70_getActorRoom(op, stack, bytecode):
     stack.append(f'actor-room {stack.pop()}')
+
+
+@regop
+def o6_getPixel(op, stack, bytecode):
+    ypos = stack.pop()
+    xpos = stack.pop()
+    stack.append(f'pixel {xpos}, {ypos}')
+
+
+@regop
+def o72_getPixel(op, stack, bytecode):
+    ypos = stack.pop()
+    xpos = stack.pop()
+    sources = {9: 'background', 218: 'background', 8: 'foreground', 219: 'foreground'}
+    src = Value(op.args[0], signed=False)
+    stack.append(f'pixel {xpos}, {ypos} of {sources[src.num]}')
 
 
 @regop
@@ -2199,20 +2267,20 @@ def o60_writeFile(op, stack, bytecode):
 def o72_writeFile(op, stack, bytecode):
     res = stack.pop()
     slot = stack.pop()
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     if sub.num == 8:
         return f'$ write-file {Value(op.args[1])} {slot} {res}'
 
 
 @regop
 def o72_readFile(op, stack, bytecode):
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     if sub.num == 8:
         size = stack.pop()
         slot = stack.pop()
         stack.append(f'$ read-file {Value(op.args[1])} {slot} size {size}')
         return
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -2260,6 +2328,13 @@ def o72_findAllObjects(op, stack, bytecode):
 
 
 @regop
+def o90_findAllObjectsWithClassOf(op, stack, bytecode):
+    classes = get_params(stack)
+    room = stack.pop()
+    stack.append(f'find-all-objects {room} of-class {classes}')
+
+
+@regop
 def o6_putActorAtXY(op, stack, bytecode):
     room = stack.pop()
     ypos = stack.pop()
@@ -2267,6 +2342,16 @@ def o6_putActorAtXY(op, stack, bytecode):
     act = stack.pop()
     room = '' if room == 0 else f' in-room {room}'
     return f'put-actor {act} at {xpos},{ypos}{room}'
+
+
+@regop
+def o71_getCharIndexInString(op, stack, bytecode):
+    value = stack.pop()
+    value.cast = 'char'
+    end = stack.pop()
+    pos = stack.pop()
+    arr = stack.pop()
+    stack.append(f'$ index {arr} from {pos} to {end} find {value}')
 
 
 @regop
@@ -2325,12 +2410,12 @@ def o6_stopSentence(op, stack, bytecode):
 
 @regop
 def o72_getArrayDimSize(op, stack, bytecode):
-    sub = Value(op.args[0])
+    sub = Value(op.args[0], signed=False)
     arr = get_var(op.args[1])
     if sub.num == 1:
         stack.append(f'$ array-dimension-base {arr}')
         return
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -2395,7 +2480,7 @@ def o6_freezeUnfreeze(op, stack, bytecode):
 
 @regop
 def o71_polygonOps(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 247:
         to = stack.pop()
         src = stack.pop()
@@ -2411,7 +2496,7 @@ def o71_polygonOps(op, stack, bytecode):
         vert1x = stack.pop()
         id = stack.pop()
         return f'$ draw-polygon {id} [{cmd}] {vert1x},{vert1y} {vert2x},{vert2y} {vert3x},{vert3y} {vert4x},{vert4y}'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -2431,7 +2516,7 @@ def o6_drawObjectAt(op, stack, bytecode):
 
 @regop
 def o72_drawObject(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 62:
         state = stack.pop()
         ypos = stack.pop()
@@ -2442,7 +2527,7 @@ def o72_drawObject(op, stack, bytecode):
         state = stack.pop()
         obj = stack.pop()
         return f'draw-object {obj} image {state}'
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -2485,7 +2570,7 @@ def o6_getObjectY(op, stack, bytecode):
 
 @regop
 def o90_getWizData(op, stack, bytecode):
-    cmd = Value(op.args[0])
+    cmd = Value(op.args[0], signed=False)
     if cmd.num == 30:
         state = stack.pop()
         res = stack.pop()
@@ -2520,7 +2605,7 @@ def o90_getWizData(op, stack, bytecode):
         res = stack.pop()
         stack.append(f'$ wiz-image-pixel-color {res} {state} at {x},{y}')
         return
-    defop(op, stack, bytecode)
+    return defop(op, stack, bytecode)
 
 
 @regop
@@ -2531,7 +2616,7 @@ def o6_walkActorTo(op, stack, bytecode):
     ypos = stack.pop()
     xpos = stack.pop()
     act = stack.pop()
-    return f'walk {act} to {to_signed(xpos)},{to_signed(ypos)}'
+    return f'walk {act} to {xpos},{ypos}'
 
 
 @regop
@@ -2565,8 +2650,24 @@ def get_element_by_path(path: str, root: Iterable[Element]) -> Optional[Element]
     return None
 
 
-def transform_asts(indent, asts, file):
+def collapse_override(asts):
+    for _, seq in asts.items():
+        stats = iter(list(seq))
+        seq.clear()
+        for st in stats:
+            if str(st) == 'override':
+                jmp = next(stats)
+                assert jmp.startswith('jump &'), jmp
+                seq.append(jmp.replace('jump', 'override'))
+            else:
+                seq.append(st)
     return asts
+
+
+def transform_asts(indent, asts, file):
+    asts = collapse_override(asts)
+    return asts
+
 
 def print_asts(indent, asts, file):
     for label, seq in asts.items():
@@ -2574,6 +2675,14 @@ def print_asts(indent, asts, file):
             print(f'{label}:', file=file)
         for st in seq:
             print(f'{indent}{st}', file=file)
+
+
+def print_locals(indent, file):
+    for var in sorted(l_vars, key=operator.attrgetter('num')):
+        print(f'{indent[:-1]}local variable {var}', file=file)
+    if l_vars:
+        print(file=file)
+
 
 obj_names = {}
 
@@ -2662,7 +2771,11 @@ if __name__ == '__main__':
                         print(f'object', obj_id, '{', file=f)
                         print(f'\tname is', f'"{obj_names[obj_id]}"', file=f)
                     else:
-                        print(titles[elem.tag], list(pref), '{', file=f)
+                        scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
+                        gid = elem.attribs['gid']
+                        assert scr_id is None or scr_id == gid
+                        gid_str = '' if gid is None else f' {gid}'
+                        print(f'{titles[elem.tag]}{gid_str}', '{', file=f)
                     bytecode = descumm(script_data, get_optable(gameres.game))
                     # print_bytecode(bytecode)
 
@@ -2675,14 +2788,25 @@ if __name__ == '__main__':
                     if elem.tag == 'VERB':
                         entries = {off: idx[0] for idx, off in pref}
                     res = None
+
+                    # # clear local variables:
+                    # for key in g_vars:  # NOTE: dict key is tuple, we iterates on keys only
+                    #     _, var = key
+                    #     if str(var).startswith('L.'):
+                    #         del g_vars[key]
+                    g_vars.clear()
+
                     for off, stat in bytecode.items():
                         if elem.tag == 'VERB' and off + 8 in entries:
                             if off + 8 in entries:
+                                print_locals(indent, file=f)
+                                l_vars.clear()
                                 print_asts(indent, transform_asts(indent, asts, file=f), file=f)
                                 curref = f'_[{off + 8:08d}]'
                                 asts = defaultdict(deque)
                             if off + 8 > min(entries.keys()):
                                 print('\t}', file=f)
+                                l_vars.clear()
                             print('\n\tverb', entries[off + 8], '{', file=f)
                             indent = 2 * '\t'
                             stack.clear()
@@ -2708,6 +2832,8 @@ if __name__ == '__main__':
                             #     # defop(stat, stack, bytecode),
                             #     file=f,
                             # )
+                    print_locals(indent, file=f)
+                    l_vars.clear()
                     print_asts(indent, transform_asts(indent, asts, file=f), file=f)
                     if elem.tag == 'VERB' and entries:
                         print('\t}', file=f)
