@@ -1,18 +1,35 @@
 import io
 import json
+import operator
 import itertools
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from string import printable
-from typing import Iterable, Optional, OrderedDict, Sequence
+from typing import Iterable, Iterator, Optional, OrderedDict
 
 from nutcracker.kernel.element import Element
 from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
 
-from .script.bytecode import get_scripts, refresh_offsets, script_map, to_bytes
+from .script.bytecode import refresh_offsets, script_map, to_bytes
 from .script.opcodes import ByteValue, RefOffset, WordValue
-from .script.opcodes_v5 import PARAM_1, PARAM_2, OPCODES_v5, Variable, value
+from .script.opcodes_v5 import PARAM_1, PARAM_2, OPCODES_v5, Variable, value as ovalue
+
+
+l_vars = {}
+
+def value(arg):
+    res = ovalue(arg)
+    if isinstance(res, Variable) and str(res).startswith('L.'):
+        l_vars[str(res)] = res
+    return res
+
+
+def print_locals(indent):
+    for var in sorted(l_vars.values(), key=operator.attrgetter('num')):
+        yield f'{indent[:-1]}local variable {var}'
+    if l_vars:
+        yield ''  # new line
 
 
 def get_element_by_path(path: str, root: Iterable[Element]) -> Optional[Element]:
@@ -1245,22 +1262,6 @@ def descumm_v5(data: bytes, opcodes):
 
 obj_names = {}
 
-def flush(indent, sts, file):
-    for st in sts:
-        print(
-            f'{indent}{st}',
-            file=file,
-        )
-    sts.clear()
-
-
-@dataclass
-class CodeBlock:
-    indent: int
-    seq: Sequence[str]
-
-    def __str__(self) -> str:
-        return '\n'.join(f'{self.indent}\t{st}' for st in self.seq) + f'\n{self.indent}}}'
 
 def collapse_break_here(asts):
     def is_break(stat):
@@ -1318,7 +1319,7 @@ def collapse_override(asts):
     return asts
 
 
-def transform_asts(indent, asts, file):
+def transform_asts(indent, asts):
     # Collapse break-here
     asts = collapse_break_here(asts)
 
@@ -1514,12 +1515,116 @@ def transform_asts(indent, asts, file):
     return asts
 
 
-def print_asts(indent, asts, file):
+def print_asts(indent, asts):
     for label, seq in asts.items():
         if not label.startswith('_'):  # or True:
-            print(f'{label}:', file=file)
+            yield f'{label}:'
         for st in seq:
-            print(f'{st}' if isinstance(st, CodeBlock) else f'{indent}{st}', file=file)
+            yield f'{indent}{st}'
+
+
+
+def get_global_scripts(root: Iterable[Element]) -> Iterator[Element]:
+    for elem in root:
+        if elem.tag in {'LECF', 'LFLF', 'OBCD', *script_map}:
+            if elem.tag in {*script_map}:
+                yield elem
+            else:
+                yield from get_global_scripts(elem.children)
+
+
+def get_room_scripts(root: Iterable[Element]) -> Iterator[Element]:
+    for elem in root:
+        if elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
+            if elem.tag == 'SCRP':
+                assert 'ROOM' not in elem.attribs['path'], elem
+                assert 'RMDA' not in elem.attribs['path'], elem
+                continue
+            elif elem.tag in {*script_map, 'OBCD'}:
+                yield elem
+            else:
+                yield from get_room_scripts(elem.children)
+
+
+def parse_verb_meta(meta):
+    with io.BytesIO(meta) as stream:
+        while True:
+            key = stream.read(1)
+            if key in {b'\0'}:  # , b'\xFF'}:
+                break
+            entry = int.from_bytes(
+                stream.read(2), byteorder='little', signed=False
+            )
+            yield key, entry - len(meta)
+        assert stream.read() == b''
+
+
+def decompile_script(elem):
+    if elem.tag == 'OBCD':
+        obcd = elem
+        elem = sputm.find('VERB', obcd)
+    pref, script_data = script_map[elem.tag](elem.data)
+    obj_id = None
+    indent = '\t'
+    if elem.tag == 'VERB':
+        pref = list(parse_verb_meta(pref))
+        obj_id = obcd.attribs['gid']
+        obj_names[obj_id] = msg_to_print(sputm.find('OBNA', obcd).data.split(b'\0')[0])
+    respath_comment = f'; {elem.tag} {elem.attribs["path"]}'
+    titles = {
+        'LSCR': 'script',
+        'SCRP': 'script',
+        'ENCD': 'enter',
+        'EXCD': 'exit',
+        'VERB': 'verb',
+    }
+    if elem.tag == 'VERB':
+        yield ' '.join([f'object', f'{obj_id}', '{', os.path.dirname(respath_comment)])
+        yield ' '.join([f'\tname is', f'"{obj_names[obj_id]}"'])
+    else:
+        scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
+        gid = elem.attribs['gid']
+        assert scr_id is None or scr_id == gid
+        gid_str = '' if gid is None else f' {gid}'
+        yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
+    bytecode = descumm_v5(script_data, OPCODES_v5)
+    # print_bytecode(bytecode)
+
+    refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]
+    curref = f'_[{0 + 8:08d}]'
+    sts = deque()
+    asts = defaultdict(deque)
+    if elem.tag == 'VERB':
+        entries = {off: idx[0] for idx, off in pref}
+    res = None
+    for off, stat in bytecode.items():
+        if elem.tag == 'VERB' and off + 8 in entries:
+            if off + 8 in entries:
+                yield from print_locals(indent)
+                l_vars.clear()
+                yield from print_asts(indent, transform_asts(indent, asts))
+                curref = f'_[{off + 8:08d}]'
+                asts = defaultdict(deque)
+            if off + 8 > min(entries.keys()):
+                yield '\t}'
+                l_vars.clear()
+            yield ''  # new line
+            yield f'\tverb {entries[off + 8]} {{'
+            indent = 2 * '\t'
+        if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
+            curref = f'_[{off + 8:08d}]'
+        if off in refs:
+            curref = f'[{off + 8:08d}]'
+        res = ops.get(stat.opcode & 0x1F, str)(stat) or stat
+        sts.append(res)
+        asts[curref].append(res)
+    yield from print_locals(indent)
+    l_vars.clear()
+    yield from print_asts(indent, transform_asts(indent, asts))
+    if elem.tag == 'VERB' and entries:
+        yield '\t}'
+    yield '}'
+
 
 
 if __name__ == '__main__':
@@ -1566,71 +1671,15 @@ if __name__ == '__main__':
             )
             fname = f"{script_dir}/{room.attribs['gid']:04d}_{room_no}.scu"
 
-            def parse_verb_meta(meta):
-                with io.BytesIO(meta) as stream:
-                    while True:
-                        key = stream.read(1)
-                        if key in {b'\0'}:  # , b'\xFF'}:
-                            break
-                        entry = int.from_bytes(
-                            stream.read(2), byteorder='little', signed=False
-                        )
-                        yield key, entry - len(meta)
-                    assert stream.read() == b''
-
             with open(fname, 'w') as f:
-                for elem in get_scripts(room):
-                    if elem.tag == 'OBCD':
-                        obcd = elem
-                        elem = sputm.find('VERB', obcd)
-                    pref, script_data = script_map[elem.tag](elem.data)
-                    obj_id = None
-                    indent = '\t'
-                    if elem.tag == 'VERB':
-                        pref = list(parse_verb_meta(pref))
-                        obj_id = obcd.attribs['gid']
-                        obj_names[obj_id] = msg_to_print(sputm.find('OBNA', obcd).data.split(b'\0')[0])
-                    print(';', elem.tag, elem.attribs['path'], file=f)
-                    titles = {
-                        'LSCR': 'script',
-                        'SCRP': 'script',
-                        'ENCD': 'enter',
-                        'EXCD': 'exit',
-                        'VERB': 'verb',
-                    }
-                    if elem.tag == 'VERB':
-                        print(f'object', obj_id, '{', file=f)
-                        print(f'\tname is', f'"{obj_names[obj_id]}"', file=f)
-                    else:
-                        print(titles[elem.tag], list(pref), '{', file=f)
-                    bytecode = descumm_v5(script_data, OPCODES_v5)
-                    # print_bytecode(bytecode)
-
-                    refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]
-                    curref = f'_[{0 + 8:08d}]'
-                    sts = deque()
-                    asts = defaultdict(deque)
-                    if elem.tag == 'VERB':
-                        entries = {off: idx[0] for idx, off in pref}
-                    res = None
-                    for off, stat in bytecode.items():
-                        if elem.tag == 'VERB' and off + 8 in entries:
-                            if off + 8 in entries:
-                                print_asts(indent, transform_asts(indent, asts, file=f), file=f)
-                                curref = f'_[{off + 8:08d}]'
-                                asts = defaultdict(deque)
-                            if off + 8 > min(entries.keys()):
-                                print('\t}', file=f)
-                            print('\n\tverb', entries[off + 8], '{', file=f)
-                            indent = 2 * '\t'
-                        if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
-                            curref = f'_[{off + 8:08d}]'
-                        if off in refs:
-                            curref = f'[{off + 8:08d}]'
-                        res = ops.get(stat.opcode & 0x1F, str)(stat) or stat
-                        sts.append(res)
-                        asts[curref].append(res)
-                    print_asts(indent, transform_asts(indent, asts, file=f), file=f)
-                    if elem.tag == 'VERB' and entries:
-                        print('\t}', file=f)
-                    print('}\n', file=f)
+                for elem in get_global_scripts(room):
+                    for line in decompile_script(elem):
+                        print(line, file=f)
+                    print('', file=f)  # end with new line
+                print(f'room {room_no}', '{', file =f)
+                for elem in get_room_scripts(room):
+                    print('', file=f)  # end with new line
+                    for line in decompile_script(elem):
+                        print(line if line.endswith(']:') or not line else f'\t{line}', file=f)
+                print('}', file=f)
+                print('', file=f)  # end with new line
