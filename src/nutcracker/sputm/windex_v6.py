@@ -2,14 +2,14 @@ import io
 import operator
 from collections import defaultdict, deque
 from string import printable
-from typing import Iterable, Optional
+from typing import Iterable, Iterator, Optional
 from nutcracker.kernel.element import Element
 from nutcracker.sputm.script.parser import CString, DWordValue
 
 from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
 
-from nutcracker.sputm.script.bytecode import get_scripts, script_map, descumm
+from nutcracker.sputm.script.bytecode import script_map, descumm
 from nutcracker.sputm.script.opcodes import ByteValue, RefOffset, WordValue
 
 
@@ -2664,24 +2664,140 @@ def collapse_override(asts):
     return asts
 
 
-def transform_asts(indent, asts, file):
+def transform_asts(indent, asts):
     asts = collapse_override(asts)
     return asts
 
 
-def print_asts(indent, asts, file):
+def print_asts(indent, asts):
     for label, seq in asts.items():
         if not label.startswith('_'):  # or True:
-            print(f'{label}:', file=file)
+            yield f'{label}:'
         for st in seq:
-            print(f'{indent}{st}', file=file)
+            yield f'{indent}{st}'
 
 
-def print_locals(indent, file):
+def print_locals(indent):
     for var in sorted(l_vars, key=operator.attrgetter('num')):
-        print(f'{indent[:-1]}local variable {var}', file=file)
+        yield f'{indent[:-1]}local variable {var}'
     if l_vars:
-        print(file=file)
+        yield ''  # new line
+
+
+def decompile_script(elem):
+    if elem.tag == 'OBCD':
+        obcd = elem
+        elem = sputm.find('VERB', obcd)
+    pref, script_data = script_map[elem.tag](elem.data)
+    obj_id = None
+    indent = '\t'
+    if elem.tag == 'VERB':
+        pref = list(parse_verb_meta(pref))
+        obj_id = obcd.attribs['gid']
+        obj_names[obj_id] = msg_to_print(sputm.find('OBNA', obcd).data.split(b'\0')[0])
+    respath_comment = f'; {elem.tag} {elem.attribs["path"]}'
+    titles = {
+        'LSC2': 'script',
+        'LSCR': 'script',
+        'SCRP': 'script',
+        'ENCD': 'enter',
+        'EXCD': 'exit',
+        'VERB': 'verb',
+    }
+    if elem.tag == 'VERB':
+        yield ' '.join([f'object', f'{obj_id}', '{', os.path.dirname(respath_comment)])
+        yield ' '.join([f'\tname is', f'"{obj_names[obj_id]}"'])
+    else:
+        scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
+        gid = elem.attribs['gid']
+        assert scr_id is None or scr_id == gid
+        gid_str = '' if gid is None else f' {gid}'
+        yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
+    bytecode = descumm(script_data, get_optable(gameres.game))
+    # print_bytecode(bytecode)
+
+    refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]
+    curref = f'_[{0 + 8:08d}]'
+    stack = deque(
+        # ['**ERROR**'] * 3
+    )
+    asts = defaultdict(deque)
+    if elem.tag == 'VERB':
+        entries = {off: idx[0] for idx, off in pref}
+    res = None
+
+    # # clear local variables:
+    # for key in g_vars:  # NOTE: dict key is tuple, we iterates on keys only
+    #     _, var = key
+    #     if str(var).startswith('L.'):
+    #         del g_vars[key]
+    g_vars.clear()
+
+    for off, stat in bytecode.items():
+        if elem.tag == 'VERB' and off + 8 in entries:
+            if off + 8 in entries:
+                yield from print_locals(indent)
+                l_vars.clear()
+                yield from print_asts(indent, transform_asts(indent, asts))
+                curref = f'_[{off + 8:08d}]'
+                asts = defaultdict(deque)
+            if off + 8 > min(entries.keys()):
+                yield '\t}'
+                l_vars.clear()
+            yield ''  # new line
+            yield f'\tverb {entries[off + 8]} {{'
+            indent = 2 * '\t'
+            stack.clear()
+        if args.verbose:
+            yield ' '.join([
+                f'[{stat.offset + 8:08d}]',
+                '\t\t\t\t\t\t\t\t',
+                f'{stat} <{list(stack)}>',
+            ])
+        # if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
+        #     curref = f'_[{off + 8:08d}]'
+        if off in refs:
+            curref = f'[{off + 8:08d}]'
+        res = ops.get(stat.name, defop)(stat, stack, bytecode)
+        if res:
+            asts[curref].append(res)
+            # print(
+            #     # f'[{stat.offset + 8:08d}]',
+            #     f'{indent}{res}',
+            #     # res,
+            #     # '\t\t\t\t',
+            #     # defop(stat, stack, bytecode),
+            #     file=f,
+            # )
+    yield from print_locals(indent)
+    l_vars.clear()
+    yield from print_asts(indent, transform_asts(indent, asts))
+    if elem.tag == 'VERB' and entries:
+        yield '\t}'
+    yield '}'
+
+
+
+def get_global_scripts(root: Iterable[Element]) -> Iterator[Element]:
+    for elem in root:
+        if elem.tag in {'LECF', 'LFLF', 'OBCD', *script_map}:
+            if elem.tag in {*script_map}:
+                yield elem
+            else:
+                yield from get_global_scripts(elem.children)
+
+
+def get_room_scripts(root: Iterable[Element]) -> Iterator[Element]:
+    for elem in root:
+        if elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
+            if elem.tag == 'SCRP':
+                assert 'ROOM' not in elem.attribs['path'], elem
+                assert 'RMDA' not in elem.attribs['path'], elem
+                continue
+            elif elem.tag in {*script_map, 'OBCD'}:
+                yield elem
+            else:
+                yield from get_room_scripts(elem.children)
 
 
 obj_names = {}
@@ -2745,96 +2861,14 @@ if __name__ == '__main__':
                         yield key, entry - len(meta)
 
             with open(fname, 'w') as f:
-                for elem in get_scripts(room):
-                    # if elem.attribs['path'] != 'LECF_0001\\LFLF_0001\\RMDA_0001\\LSCR_0202':
-                    #     continue
-                    if elem.tag == 'OBCD':
-                        obcd = elem
-                        elem = sputm.find('VERB', obcd)
-                    pref, script_data = script_map[elem.tag](elem.data)
-                    obj_id = None
-                    indent = '\t'
-                    if elem.tag == 'VERB':
-                        pref = list(parse_verb_meta(pref))
-                        obj_id = obcd.attribs['gid']
-                        obj_names[obj_id] = msg_to_print(sputm.find('OBNA', obcd).data.split(b'\0')[0])
-                    print(';', elem.tag, elem.attribs['path'], file=f)
-                    titles = {
-                        'LSC2': 'script',
-                        'LSCR': 'script',
-                        'SCRP': 'script',
-                        'ENCD': 'enter',
-                        'EXCD': 'exit',
-                        'VERB': 'verb',
-                    }
-                    if elem.tag == 'VERB':
-                        print(f'object', obj_id, '{', file=f)
-                        print(f'\tname is', f'"{obj_names[obj_id]}"', file=f)
-                    else:
-                        scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
-                        gid = elem.attribs['gid']
-                        assert scr_id is None or scr_id == gid
-                        gid_str = '' if gid is None else f' {gid}'
-                        print(f'{titles[elem.tag]}{gid_str}', '{', file=f)
-                    bytecode = descumm(script_data, get_optable(gameres.game))
-                    # print_bytecode(bytecode)
-
-                    refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]
-                    curref = f'_[{0 + 8:08d}]'
-                    stack = deque(
-                        # ['**ERROR**'] * 3
-                    )
-                    asts = defaultdict(deque)
-                    if elem.tag == 'VERB':
-                        entries = {off: idx[0] for idx, off in pref}
-                    res = None
-
-                    # # clear local variables:
-                    # for key in g_vars:  # NOTE: dict key is tuple, we iterates on keys only
-                    #     _, var = key
-                    #     if str(var).startswith('L.'):
-                    #         del g_vars[key]
-                    g_vars.clear()
-
-                    for off, stat in bytecode.items():
-                        if elem.tag == 'VERB' and off + 8 in entries:
-                            if off + 8 in entries:
-                                print_locals(indent, file=f)
-                                l_vars.clear()
-                                print_asts(indent, transform_asts(indent, asts, file=f), file=f)
-                                curref = f'_[{off + 8:08d}]'
-                                asts = defaultdict(deque)
-                            if off + 8 > min(entries.keys()):
-                                print('\t}', file=f)
-                                l_vars.clear()
-                            print('\n\tverb', entries[off + 8], '{', file=f)
-                            indent = 2 * '\t'
-                            stack.clear()
-                        if args.verbose:
-                            print(
-                                f'[{stat.offset + 8:08d}]',
-                                '\t\t\t\t\t\t\t\t',
-                                f'{stat} <{list(stack)}>',
-                                file=f,
-                            )
-                        # if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
-                        #     curref = f'_[{off + 8:08d}]'
-                        if off in refs:
-                            curref = f'[{off + 8:08d}]'
-                        res = ops.get(stat.name, defop)(stat, stack, bytecode)
-                        if res:
-                            asts[curref].append(res)
-                            # print(
-                            #     # f'[{stat.offset + 8:08d}]',
-                            #     f'{indent}{res}',
-                            #     # res,
-                            #     # '\t\t\t\t',
-                            #     # defop(stat, stack, bytecode),
-                            #     file=f,
-                            # )
-                    print_locals(indent, file=f)
-                    l_vars.clear()
-                    print_asts(indent, transform_asts(indent, asts, file=f), file=f)
-                    if elem.tag == 'VERB' and entries:
-                        print('\t}', file=f)
-                    print('}\n', file=f)
+                for elem in get_global_scripts(room):
+                    for line in decompile_script(elem):
+                        print(line, file=f)
+                    print('', file=f)  # end with new line
+                print(f'room {room_no}', '{', file =f)
+                for elem in get_room_scripts(room):
+                    print('', file=f)  # end with new line
+                    for line in decompile_script(elem):
+                        print(line if line.endswith(']:') or not line else f'\t{line}', file=f)
+                print('}', file=f)
+                print('', file=f)  # end with new line
