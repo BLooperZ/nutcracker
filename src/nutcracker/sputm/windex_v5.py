@@ -1437,6 +1437,61 @@ def transform_asts(indent, asts):
                         deref |= {label}
                         break
 
+
+            # if statements
+            if len(exits) == 2:
+                ex, fall = exits
+                if isinstance(ex, ConditionalJump):
+                    fexits = deps[fall]
+                    if len(fexits) == 1 and fexits[0] == adr(ex.ref)[1:]:
+                        if fall.startswith('_'):
+                            stats = [f'\t{st}' for st in asts[fall]]
+                            popped = asts[label].pop()
+                            assert popped == ex, (popped, ex)
+                            asts[fall].clear()
+                            asts[label].append(f'if ({ex.expr}) {{')
+                            asts[label].extend(stats)
+                            asts[label].append('}')
+                            deps[label] = fexits
+                            changed = True
+                            del asts[fall]
+                            deleted |= {fall}
+                            deref |= {fexits[0]}
+                            break
+                    # if len(fexits) == 2 and fexits[1] == adr(ex.ref)[1:] and isinstance(fexits[0], UnconditionalJump):
+                    #     if adr(fexits[0].ref) != adr(ex.ref):  # when True it's probably case statement
+                    #         if len(deps[deps[fall][1]]) == 2 and adr(deps[fall][0].ref)[1:] != deps[deps[fall][1]][1]:
+                    #             continue
+                    #         for lbl, nexits in deps.items():
+                    #             if lbl == label:
+                    #                 continue
+                    #             if len(nexits) == 2:
+                    #                 jmp = nexits[0]
+                    #                 if isinstance(jmp, (ConditionalJump, UnconditionalJump)) and adr(jmp.ref) == adr(ex.ref):
+                    #                     break
+                    #         else:
+                    #             if fall.startswith('_'):
+                    #                 asts[fall].pop()
+                    #                 stats = [f'\t{st}' for st in asts[fall]]
+                    #                 estats = [f'\t{st}' for st in asts[deps[fall][1]]]
+                    #                 popped = asts[label].pop()
+                    #                 assert popped == ex, (popped, ex)
+                    #                 asts[fall].clear()
+                    #                 asts[deps[fall][1]].clear()
+                    #                 asts[label].append(f'if ({ex.expr}) {{')
+                    #                 asts[label].extend(stats)
+                    #                 asts[label].append('} else {')
+                    #                 asts[label].extend(estats)
+                    #                 asts[label].append('}')
+                    #                 deps[label] = [adr(fexits[0].ref)[1:]]
+                    #                 changed = True
+                    #                 del asts[fall]
+                    #                 del asts[deps[fall][1]]
+                    #                 deleted |= {fall, deps[fall][1]}
+                    #                 deref |= {adr(fexits[0].ref)[1:]}
+                    #                 break
+
+
             # # case statement
             # if len(exits) == 2:
             #     ex, fall = exits
@@ -1509,6 +1564,9 @@ def transform_asts(indent, asts):
                     asts = {f'_{label}' if label == lbl else lbl: block for lbl, block in asts.items()}
                     deps = {f'_{label}' if label == lbl else lbl: block for lbl, block in deps.items()}
 
+        # print(asts)
+        # print(deps)
+        # print('================')
     # for label, exits in deps.items():
     #     print('\t\t\t\t', label, '->', tuple(str(ex) for ex in exits), file=file)
 

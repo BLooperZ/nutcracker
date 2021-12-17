@@ -1541,24 +1541,6 @@ def o90_setSpriteInfo(op, stack, bytecode):
 
 
 @regop
-def o90_setSpriteGroupInfo(op, stack, bytecode):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 44:
-        dy = stack.pop()
-        dx = stack.pop()
-        return f'\tmove {dx},{dy}'
-    if cmd.num == 57:
-        return f'$ sprite-group {stack.pop()} \\'
-    if cmd.num == 67:
-        bottom = stack.pop()
-        right = stack.pop()
-        top = stack.pop()
-        left = stack.pop()
-        return f'\tbox {left},{top} to {right},{bottom}'
-    return defop(op, stack, bytecode)
-
-
-@regop
 def o90_getSpriteInfo(op, stack, bytecode):
     sub = Value(op.args[0], signed=False)
     if sub.num == 30:
@@ -1593,6 +1575,10 @@ def o90_getSpriteInfo(op, stack, bytecode):
         sprite = stack.pop()
         stack.append(f'$ sprite-display-y {sprite}')
         return
+    if sub.num == 43:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-priority {sprite}')
+        return
     if sub.num == 45:
         # TODO: extra argument for he 98 + another extra for he 99
         # flags = stack.pop()
@@ -1619,6 +1605,38 @@ def o90_getSpriteInfo(op, stack, bytecode):
         param_str = ' '.join(str(param) for param in params)
         sprite = stack.pop()
         stack.append(f'$ class-of-sprite {sprite} {params}')
+        return
+    return defop(op, stack, bytecode)
+
+
+@regop
+def o90_setSpriteGroupInfo(op, stack, bytecode):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 44:
+        dy = stack.pop()
+        dx = stack.pop()
+        return f'\tmove {dx},{dy}'
+    if cmd.num == 57:
+        return f'$ sprite-group {stack.pop()} \\'
+    if cmd.num == 67:
+        bottom = stack.pop()
+        right = stack.pop()
+        top = stack.pop()
+        left = stack.pop()
+        return f'\tbox {left},{top} to {right},{bottom}'
+    return defop(op, stack, bytecode)
+
+
+@regop
+def o90_getSpriteGroupInfo(op, stack, bytecode):
+    sub = Value(op.args[0], signed=False)
+    if sub.num == 30:
+        group = stack.pop()
+        stack.append(f'$ sprite-group-x {group}')
+        return
+    if sub.num == 31:
+        group = stack.pop()
+        stack.append(f'$ sprite-group-y {group}')
         return
     return defop(op, stack, bytecode)
 
@@ -2527,6 +2545,11 @@ def o72_drawObject(op, stack, bytecode):
         state = stack.pop()
         obj = stack.pop()
         return f'draw-object {obj} image {state}'
+    if cmd.num == 65:
+        ypos = stack.pop()
+        xpos = stack.pop()
+        obj = stack.pop()
+        return f'draw-object {obj} at {xpos},{ypos}'
     return defop(op, stack, bytecode)
 
 
