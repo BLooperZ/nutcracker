@@ -774,7 +774,7 @@ def o5_resource_wd(op):
         if masked == 0x0A:
             return f'lock-sound {value(op.args[1])}'
         if masked == 0x0B:
-            return f'lock-cosume {value(op.args[1])}'
+            return f'lock-costume {value(op.args[1])}'
         if masked == 0x0C:
             return f'lock-room {value(op.args[1])}'
         if masked == 0x0D:
@@ -782,7 +782,7 @@ def o5_resource_wd(op):
         if masked == 0x0E:
             return f'unlock-sound {value(op.args[1])}'
         if masked == 0x0F:
-            return f'unlock-cosume {value(op.args[1])}'
+            return f'unlock-costume {value(op.args[1])}'
         if masked == 0x10:
             return f'unlock-room {value(op.args[1])}'
         if masked == 0x11:
@@ -1121,10 +1121,10 @@ def o5_move_wd(op):
         return f'verb {value(verb)} {rest_params}'
     if op.opcode in {0x3A, 0xBA}:
         assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return f'{op.args[0]} -= {value(op.args[1])}'
+        return f'{value(op.args[0])} -= {value(op.args[1])}'
     if op.opcode in {0x5A, 0xDA}:
         assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return f'{op.args[0]} += {value(op.args[1])}'
+        return f'{value(op.args[0])} += {value(op.args[1])}'
     else:
         return str(op)
 

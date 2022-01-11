@@ -157,6 +157,10 @@ def msg_op(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (CString(stream),)
 
 
+def sys_msg(stream: IO[bytes]) -> Iterable[ScriptArg]:
+    return (ByteValue(stream), CString(stream))
+
+
 def dmsg_op(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (CString(stream), CString(stream))
 
@@ -370,10 +374,10 @@ OPCODES_he70: OpTable = realize({
     # TODO: 0xae: makeop('o70_systemOps'),
     0xEE: makeop('o70_getStringLen'),
     0xF2: makeop('o70_isResourceLoaded', extended_b_op),
-    # TODO: 0xf3: makeop('o70_readINI'),
-    # TODO: 0xf4: makeop('o70_writeINI'),
-    # TODO: 0xf9: makeop('o70_createDirectory'),
-    # TODO: 0xfa: makeop('o70_setSystemMessage'),
+    0xF3: makeop('o70_readINI', msg_op),
+    0xF4: makeop('o70_writeINI', dmsg_op),  # TODO: problem, args depends on stack
+    0xF9: makeop('o70_createDirectory', msg_op),
+    0xFA: makeop('o70_setSystemMessage', sys_msg),
 })
 
 OPCODES_he71: OpTable = realize({

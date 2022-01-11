@@ -325,6 +325,7 @@ def get_object_id_from_name_v8(dobj):
 
 def read_index_he(root):
     dtlk = None  # prevent `referenced before assignment` error
+    dmul = None
     for t in root:
         # sputm.render(t)
         if t.tag == 'RNAM':

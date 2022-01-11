@@ -78,6 +78,7 @@ def load_resource(index_file: str):
         he_version = max(98, he_version)
     if 0 < he_version < 72 and sputm.find('DROO', index_root):
         he_version = 60
+    # TODO: can diffenetiate he80 from he72 by size of RNAM?
 
     room_pattern = '{room:03d}.LFL'  # noqa: F841
 

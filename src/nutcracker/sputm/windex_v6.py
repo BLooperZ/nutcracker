@@ -1,9 +1,13 @@
 import io
+import os
 import operator
-from collections import defaultdict, deque
+from collections import defaultdict, deque, OrderedDict
+from dataclasses import dataclass
 from string import printable
 from typing import Iterable, Iterator, Optional
 from nutcracker.kernel.element import Element
+
+from nutcracker.sputm.preset import sputm
 from nutcracker.sputm.script.parser import CString, DWordValue
 
 from nutcracker.sputm.tree import narrow_schema
@@ -11,6 +15,7 @@ from nutcracker.sputm.schema import SCHEMA
 
 from nutcracker.sputm.script.bytecode import script_map, descumm
 from nutcracker.sputm.script.opcodes import ByteValue, RefOffset, WordValue
+from nutcracker.sputm.strings import get_optable
 
 
 class Value:
@@ -86,13 +91,11 @@ class Variable:
             assert self.num & 0x4000, self.num
             pref = 'L'  # Local Variable
         num = self.num & 0xFFF
-        if pref == 'L':
-            l_vars.add(self)
         return f'{pref}.{num}'  # [{self.cast}]'
 
 
 g_vars = {}
-l_vars = set()
+l_vars = {}
 def get_var(orig):
     while isinstance(orig, Dup):
         orig = orig.orig
@@ -100,6 +103,10 @@ def get_var(orig):
     if not key in g_vars:
         g_vars[key] = Variable(orig)
     # print(g_vars)
+
+    if isinstance(g_vars[key], Variable) and str(g_vars[key]).startswith('L.'):
+        l_vars[str(g_vars[key])] = g_vars[key]
+
     return g_vars[key]
 
 
@@ -186,6 +193,22 @@ class Abs:
 
     def __repr__(self):
         return f'abs({self.op})'
+
+
+@dataclass
+class ConditionalJump:
+    expr: str
+    ref: RefOffset
+
+    def __str__(self) -> str:
+        return f'if !( {self.expr} ) jump {adr(self.ref)}'
+
+@dataclass
+class UnconditionalJump:
+    ref: RefOffset
+
+    def __str__(self) -> str:
+        return f'jump {adr(self.ref)}'
 
 
 def escape_message(
@@ -502,7 +525,7 @@ def o6_pop(op, stack, bytecode):
 def o6_ifNot(op, stack, bytecode):
     off, *rest = op.args
     assert not rest
-    return f'if !( {stack.pop()} ) jump {adr(off)}'
+    return ConditionalJump(stack.pop(), off)
 
 
 @regop
@@ -515,7 +538,7 @@ def o6_if(op, stack, bytecode):
 def o6_jump(op, stack, bytecode):
     off, *rest = op.args
     assert not rest
-    return f'jump {adr(off)}'
+    return UnconditionalJump(off)
 
 
 @regop
@@ -1984,6 +2007,15 @@ def o72_systemOps(op, stack, bytecode):
 
 
 @regop
+def o70_setSystemMessage(op, stack, bytecode):
+    sub = Value(op.args[0], signed=False)
+    string = op.args[1]
+    if sub.num == 243:
+        return f'$ window-title {string}'
+
+
+
+@regop
 def o72_setSystemMessage(op, stack, bytecode):
     sub = Value(op.args[0], signed=False)
     string = pop_str(stack)
@@ -2680,8 +2712,8 @@ def collapse_override(asts):
         for st in stats:
             if str(st) == 'override':
                 jmp = next(stats)
-                assert jmp.startswith('jump &'), jmp
-                seq.append(jmp.replace('jump', 'override'))
+                assert str(jmp).startswith('jump &'), jmp
+                seq.append(str(jmp).replace('jump', 'override'))
             else:
                 seq.append(st)
     return asts
@@ -2689,6 +2721,251 @@ def collapse_override(asts):
 
 def transform_asts(indent, asts):
     asts = collapse_override(asts)
+
+
+
+    # Flow structure blocks
+    deps = OrderedDict()
+
+    blocks = list(asts.items())
+    if blocks:
+        deps['_entry'] = [blocks[0][0]]
+    for idx, (label, seq) in enumerate(blocks):
+        deps[label] = []
+        for st in seq:
+            if isinstance(st, ConditionalJump):
+                deps[label].append(st)
+        if isinstance(st, UnconditionalJump):
+            deps[label].append(st)
+        elif isinstance(st, str) and st.startswith('override &'):
+            deps[label].append(st)
+        if str(st) not in {'end-object', 'end-script'}:
+            deps[label].append(blocks[idx+1][0])
+        assert len(deps[label]) <= 2, len(deps[label])
+
+    # Find for loops:
+    last_label = None
+    changed = True
+    while changed:
+        deleted = set()
+        deref = set()
+        changed = False
+        for idx, (label, exits) in enumerate(deps.items()):
+            if label in deleted:
+                continue
+
+            if len(exits) == 1:
+                ex, = exits
+                if isinstance(ex, str) and ex.startswith('_') and label != '_entry':
+                    asts[label].extend(asts[ex])
+                    del asts[ex]
+                    deps[label] = deps[ex]
+                    deleted |= {ex}
+                    changed = True
+                    break
+
+            # for loops
+            if len(exits) == 2:
+                ex, fall = exits
+                if isinstance(ex, ConditionalJump):
+                    if adr(ex.ref) == f'&{label}':
+                        cond = asts[label][-1]
+                        if isinstance(cond, ConditionalJump):
+                            end = None
+                            adv = str(asts[label][-2])
+                            step, var = adv[:2], adv[2:]
+                            if step == '++' and f'{var} > ' in str(cond.expr):
+                                asts[label].pop()  # cond
+                                asts[label].pop()  # adv
+                                end = str(cond.expr).replace(f'{var} > ', '')
+                            elif step == '--' and f'{var} < ' in str(cond.expr):
+                                asts[label].pop()  # cond
+                                asts[label].pop()  # adv
+                                end = str(cond.expr).replace(f'{var} < ', '')
+                            if end and last_label is not None and asts[last_label]:
+                                assert last_label == list(deps)[idx - 1]
+                                init = str(asts[last_label].pop())
+                                if f'{var} = ' in init:
+                                    ext, fall = exits
+                                    assert ext == ex
+                                    asts[last_label].append(f'for {init} to {end} {step} {{')
+                                    asts[last_label].extend(f'\t{st}' for st in asts[label])
+                                    asts[last_label].append('}')
+                                    del asts[label]
+                                    deleted |= {label}
+                                    deps[last_label] = [fall]
+
+                                    if fall.startswith('_'):
+                                        asts[last_label].extend(asts[fall])
+                                        deps[last_label] = deps[fall]
+                                        del asts[fall]
+                                        deleted |= {fall}
+
+                                    changed = True
+                                    break
+                                else:
+                                    asts[last_label].append(init)
+
+            # do loops
+            if 1 <= len(exits) <= 2:
+                ex, *falls = exits
+                if isinstance(ex, (UnconditionalJump, ConditionalJump)):
+                    if adr(ex.ref) == f'&{label}':
+                        ext = asts[label].pop()
+                        assert ext == ex
+                        if [str(st) for st in asts[label]] == ['break-here'] and isinstance(ex, ConditionalJump):
+                            asts[label].clear()
+                            asts[label].append(f'break-until ({ex.expr})')
+                        else:
+                            stats = [f'\t{st}' for st in asts[label]]
+                            asts[label].clear()
+                            asts[label].append('do {')
+                            asts[label].extend(stats)
+                            if isinstance(ex, UnconditionalJump):
+                                asts[label].append('}')
+                            elif isinstance(ex, ConditionalJump):
+                                asts[label].append(f'}} until ({ex.expr})')
+                                
+                            else:
+                                raise ValueError()
+                        deps[label] = list(falls)
+                        changed = True
+                        deref |= {label}
+                        break
+
+
+            # if statements
+            if len(exits) == 2:
+                ex, fall = exits
+                if isinstance(ex, ConditionalJump):
+                    fexits = deps[fall]
+                    if len(fexits) == 1 and fexits[0] == adr(ex.ref)[1:]:
+                        if fall.startswith('_'):
+                            stats = [f'\t{st}' for st in asts[fall]]
+                            popped = asts[label].pop()
+                            assert popped == ex, (popped, ex)
+                            asts[fall].clear()
+                            asts[label].append(f'if ( {ex.expr} ) {{')
+                            asts[label].extend(stats)
+                            asts[label].append('}')
+                            deps[label] = fexits
+                            changed = True
+                            del asts[fall]
+                            deleted |= {fall}
+                            deref |= {fexits[0]}
+                            break
+                    # if len(fexits) == 2 and fexits[1] == adr(ex.ref)[1:] and isinstance(fexits[0], UnconditionalJump):
+                    #     if adr(fexits[0].ref) != adr(ex.ref):  # when True it's probably case statement
+                    #         if len(deps[deps[fall][1]]) == 2 and adr(deps[fall][0].ref)[1:] != deps[deps[fall][1]][1]:
+                    #             continue
+                    #         for lbl, nexits in deps.items():
+                    #             if lbl == label:
+                    #                 continue
+                    #             if len(nexits) == 2:
+                    #                 jmp = nexits[0]
+                    #                 if isinstance(jmp, (ConditionalJump, UnconditionalJump)) and adr(jmp.ref) == adr(ex.ref):
+                    #                     break
+                    #         else:
+                    #             if fall.startswith('_'):
+                    #                 asts[fall].pop()
+                    #                 stats = [f'\t{st}' for st in asts[fall]]
+                    #                 estats = [f'\t{st}' for st in asts[deps[fall][1]]]
+                    #                 popped = asts[label].pop()
+                    #                 assert popped == ex, (popped, ex)
+                    #                 asts[fall].clear()
+                    #                 asts[deps[fall][1]].clear()
+                    #                 asts[label].append(f'if ({ex.expr}) {{')
+                    #                 asts[label].extend(stats)
+                    #                 asts[label].append('} else {')
+                    #                 asts[label].extend(estats)
+                    #                 asts[label].append('}')
+                    #                 deps[label] = [adr(fexits[0].ref)[1:]]
+                    #                 changed = True
+                    #                 del asts[fall]
+                    #                 del asts[deps[fall][1]]
+                    #                 deleted |= {fall, deps[fall][1]}
+                    #                 deref |= {adr(fexits[0].ref)[1:]}
+                    #                 break
+
+
+            # # case statement
+            # if len(exits) == 2:
+            #     ex, fall = exits
+            #     if isinstance(ex, UnconditionalJump) and adr(ex.ref) == f'&{fall}':
+            #         conds = []
+            #         cases = []
+            #         var = None
+            #         for dep in deps:
+            #             if len(deps[dep]) >= 1 and isinstance(deps[dep][0], UnconditionalJump):
+            #                 if adr(deps[dep][0].ref) == adr(ex.ref):
+            #                     cases.append(dep)
+            #         for dep in reversed(deps):
+            #             if len(deps[dep]) == 2 and isinstance(deps[dep][1], str):
+            #                 if isinstance(deps[dep][0], ConditionalJump) and deps[dep][1] in cases:
+            #                     if ' is ' in deps[dep][0].expr:
+            #                         varc, val = deps[dep][0].expr.split(' is ')
+            #                         if var is None:
+            #                             var = varc
+            #                         if varc == var:
+            #                             conds.insert(0, dep)
+            #         if conds:
+            #             label = conds[0]
+            #             asts[label].pop() # conditional jump
+            #             asts[label].append(f'case {var} {{')
+            #             for cond in conds:
+            #                 ext, *falls = deps[cond]
+            #                 caseval = ext.expr.replace(f'{var} is ', 'of ')
+            #                 asts[label].append(f'\t{caseval} {{')
+            #                 asts[label].extend(f'\t\t{st}' for st in asts[deps[cond][1]])
+            #                 asts[deps[cond][1]].clear()
+            #                 del asts[deps[cond][1]]
+            #                 asts[label].append('\t}')
+            #                 if cond != label:
+            #                     asts[cond].clear()
+            #                     del asts[cond]
+            #             asts[label].append('}')
+            #             deps[label] = [adr(ex.ref)[1:]]
+            #             # asts[label].extend(asts[adr(ex.ref)[1:]])
+            #             # asts[adr(ex.ref)[1:]].clear()
+            #             # del asts[adr(ex.ref)[1:]]
+            #             deleted |= set(conds[1:] + cases)  # + [adr(ex.ref)[1:]])
+            #             deref |= {adr(ex.ref)[1:]}
+            #             changed = True
+            #             break
+
+            last_label = label
+
+        for label in deleted:
+            if label in deps:
+                del deps[label]
+
+        for label in deref:
+            if label in deps:
+                keys = set(deps) - deref
+                skip_deref = False
+                for lb in keys:
+                    if lb in deleted:
+                        continue
+                    for ex in deps[lb]:
+                        if isinstance(ex, (ConditionalJump, UnconditionalJump)):
+                            if adr(ex.ref) == f'&{label}':
+                                skip_deref = True
+                                break
+                    if skip_deref:
+                        break
+
+                if not skip_deref:
+                    for lb in keys:
+                        deps[lb] = [f'_{label}' if str(ex) == label else ex for ex in deps[lb]]
+                    asts = {f'_{label}' if label == lbl else lbl: block for lbl, block in asts.items()}
+                    deps = {f'_{label}' if label == lbl else lbl: block for lbl, block in deps.items()}
+
+        # print(asts)
+        # print(deps)
+        # print('================')
+    # for label, exits in deps.items():
+    #     print('\t\t\t\t', label, '->', tuple(str(ex) for ex in exits), file=file)
+
     return asts
 
 
@@ -2701,13 +2978,25 @@ def print_asts(indent, asts):
 
 
 def print_locals(indent):
-    for var in sorted(l_vars, key=operator.attrgetter('num')):
+    for var in sorted(l_vars.values(), key=operator.attrgetter('num')):
         yield f'{indent[:-1]}local variable {var}'
     if l_vars:
         yield ''  # new line
 
 
-def decompile_script(elem):
+def parse_verb_meta(meta):
+    with io.BytesIO(meta) as stream:
+        while True:
+            key = stream.read(1)
+            if key in {b'\0'}:  # , b'\xFF'}:
+                break
+            entry = int.from_bytes(
+                stream.read(2), byteorder='little', signed=False
+            )
+            yield key, entry - len(meta)
+
+
+def decompile_script(elem, optable, verbose=False):
     if elem.tag == 'OBCD':
         obcd = elem
         elem = sputm.find('VERB', obcd)
@@ -2736,7 +3025,7 @@ def decompile_script(elem):
         assert scr_id is None or scr_id == gid
         gid_str = '' if gid is None else f' {gid}'
         yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
-    bytecode = descumm(script_data, get_optable(gameres.game))
+    bytecode = descumm(script_data, optable)
     # print_bytecode(bytecode)
 
     refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]
@@ -2771,14 +3060,14 @@ def decompile_script(elem):
             yield f'\tverb {entries[off + 8]} {{'
             indent = 2 * '\t'
             stack.clear()
-        if args.verbose:
+        if verbose:
             yield ' '.join([
                 f'[{stat.offset + 8:08d}]',
                 '\t\t\t\t\t\t\t\t',
                 f'{stat} <{list(stack)}>',
             ])
-        # if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
-        #     curref = f'_[{off + 8:08d}]'
+        if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
+            curref = f'_[{off + 8:08d}]'
         if off in refs:
             curref = f'[{off + 8:08d}]'
         res = ops.get(stat.name, defop)(stat, stack, bytecode)
@@ -2790,7 +3079,6 @@ def decompile_script(elem):
             #     # res,
             #     # '\t\t\t\t',
             #     # defop(stat, stack, bytecode),
-            #     file=f,
             # )
     yield from print_locals(indent)
     l_vars.clear()
@@ -2829,13 +3117,8 @@ if __name__ == '__main__':
     import argparse
     import os
 
-    from nutcracker.utils.fileio import read_file
-    from nutcracker.utils.libio import suppress_stdout
-
     from nutcracker.sputm.tree import open_game_resource, narrow_schema
     from nutcracker.sputm.schema import SCHEMA
-    from nutcracker.sputm.preset import sputm
-    from nutcracker.sputm.strings import get_optable
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
@@ -2844,16 +3127,15 @@ if __name__ == '__main__':
 
     filename = args.filename
 
-    with suppress_stdout():
-        gameres = open_game_resource(filename)
-        basename = gameres.basename
+    gameres = open_game_resource(filename)
+    basename = gameres.basename
 
-        root = gameres.read_resources(
-            max_depth=5,
-            schema=narrow_schema(
-                SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}
-            ),
-        )
+    root = gameres.read_resources(
+        max_depth=5,
+        schema=narrow_schema(
+            SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}
+        ),
+    )
 
     rnam = gameres.rooms
     print(gameres.game)
@@ -2872,26 +3154,16 @@ if __name__ == '__main__':
             )
             fname = f"{script_dir}/{room.attribs['gid']:04d}_{room_no}.scu"
 
-            def parse_verb_meta(meta):
-                with io.BytesIO(meta) as stream:
-                    while True:
-                        key = stream.read(1)
-                        if key in {b'\0'}:  # , b'\xFF'}:
-                            break
-                        entry = int.from_bytes(
-                            stream.read(2), byteorder='little', signed=False
-                        )
-                        yield key, entry - len(meta)
-
+            optable = get_optable(gameres.game)
             with open(fname, 'w') as f:
                 for elem in get_global_scripts(room):
-                    for line in decompile_script(elem):
+                    for line in decompile_script(elem, optable, verbose=args.verbose):
                         print(line, file=f)
                     print('', file=f)  # end with new line
                 print(f'room {room_no}', '{', file =f)
                 for elem in get_room_scripts(room):
                     print('', file=f)  # end with new line
-                    for line in decompile_script(elem):
+                    for line in decompile_script(elem, optable, verbose=args.verbose):
                         print(line if line.endswith(']:') or not line else f'\t{line}', file=f)
                 print('}', file=f)
                 print('', file=f)  # end with new line
