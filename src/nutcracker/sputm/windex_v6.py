@@ -728,7 +728,7 @@ def o72_rename(op, stack, bytecode):
 @regop
 def o72_debugInput(op, stack, bytecode):
     string = pop_str(stack)
-    return f'$ debug-input {string}'
+    stack.append(f'$ debug-input {string}')
 
 
 @regop
@@ -842,6 +842,14 @@ def o71_getStringWidth(op, stack, bytecode):
     pos = stack.pop()
     array = stack.pop()
     stack.append(f'$ string-width {array} {pos} {ln}')
+
+
+@regop
+def o71_getStringLenForWidth(op, stack, bytecode):
+    ln = stack.pop()
+    pos = stack.pop()
+    array = stack.pop()
+    stack.append(f'$ string-length-for-width {array} {pos} {ln}')
 
 
 @regop
@@ -1007,17 +1015,28 @@ def o60_soundOps(op, stack, bytecode):
 def o70_soundOps(op, stack, bytecode):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 9:
-        return f'$ sfx soft-on'
+        return f'\tsoft \\'
+    if cmd.num == 23:
+        val = stack.pop()
+        var = stack.pop()
+        res = stack.pop()
+        return f'$ sfx-set {res} variable {var} to {val}'
+    if cmd.num == 25:
+        val = stack.pop()
+        res = stack.pop()
+        return f'$ sfx-set {res} volume to {val}'
+    if cmd.num == 56:
+        return f'\tquick \\'
     if cmd.num == 232:
-        return f'$ start-sfx {stack.pop()}'
+        return f'$ sfx {stack.pop()} \\'
     if cmd.num == 230:
-        return f'$ sfx-channel {stack.pop()}'
+        return f'\tchannel {stack.pop()} \\'
     if cmd.num == 231:
-        return f'$ sfx-offset {stack.pop()}'
+        return f'\toffset {stack.pop()} \\'
     if cmd.num == 245:
-        return f'$ loop-sfx'
+        return f'\tloop \\'
     if cmd.num == 255:
-        return f'$ stop-sfx'
+        return f'\t(end-sfx)'
     return defop(op, stack, bytecode)
 
 
@@ -1811,6 +1830,16 @@ def o72_drawWizImage(op, stack, bytecode):
 
 
 @regop
+def o72_captureWizImage(op, stack, bytecode):
+    bottom = stack.pop()
+    right = stack.pop()
+    top = stack.pop()
+    left = stack.pop()
+    res = stack.pop()
+    return f'$ capture-wiz-image {res} {left},{top} to {right},{bottom}'
+
+
+@regop
 def o90_wizImageOps(op, stack, bytecode):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 48:
@@ -2476,6 +2505,20 @@ def o80_getSoundVar(op, stack, bytecode):
 
 
 @regop
+def o80_createSound(op, stack, bytecode):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 27:
+        return f'\tfrom {stack.pop()} \\'
+    if cmd.num == 217:
+        return f'\tempty \\'
+    if cmd.num == 232:
+        return f'$ create-sound {stack.pop()} \\'
+    if cmd.num == 255:
+        return f'\t(end-create-sound)'
+    return defop(op, stack, bytecode)
+
+
+@regop
 def o6_getActorCostume(op, stack, bytecode):
     act = stack.pop()
     stack.append(f'actor-costume {act}')
@@ -2521,6 +2564,11 @@ def o60_localizeArrayToScript(op, stack, bytecode):
 
 
 @regop
+def o80_localizeArrayToRoom(op, stack, bytecode):
+    return f'localize array [room] {stack.pop()}'
+
+
+@regop
 def o6_freezeUnfreeze(op, stack, bytecode):
     scr = stack.pop()
     if scr.num == 0:
@@ -2535,7 +2583,7 @@ def o71_polygonOps(op, stack, bytecode):
         to = stack.pop()
         src = stack.pop()
         return f'$ erase-polygon from {src} to {to}'
-    if cmd.num == 248:
+    if cmd.num in {246, 248}:
         vert4y = stack.pop()
         vert4x = stack.pop()
         vert3y = stack.pop()
@@ -3045,6 +3093,7 @@ def decompile_script(elem, optable, verbose=False):
     #         del g_vars[key]
     g_vars.clear()
 
+    # print('====================')
     for off, stat in bytecode.items():
         if elem.tag == 'VERB' and off + 8 in entries:
             if off + 8 in entries:
