@@ -33,7 +33,9 @@ class Value:
 
     def __repr__(self):
         if self.cast == 'char':
-            assert isinstance(self.orig, ByteValue)
+            # NOTE: in HE v71 games, they put the "/" char as a
+            # WordValue.
+            assert isinstance(self.orig, (ByteValue, WordValue))
             return f"'{chr(self.num)}'"
         suffix = self.suffix[type(self.orig)]
         return f'{self.num}'
@@ -275,13 +277,13 @@ def regop(op):
     return op
 
 
-def defop(op, stack, bytecode):
+def defop(op, stack, bytecode, game):
     raise NotImplementedError(f'{op} <{stack}>')
     return f'{op} <{stack}>'
 
 
 @regop
-def o6_startObject(op, stack, bytecode):
+def o6_startObject(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = ", ".join(str(param) for param in params)
     if param_str:
@@ -293,7 +295,7 @@ def o6_startObject(op, stack, bytecode):
 
 
 @regop
-def o72_startObject(op, stack, bytecode):
+def o72_startObject(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = ", ".join(str(param) for param in params)
     if param_str:
@@ -306,25 +308,25 @@ def o72_startObject(op, stack, bytecode):
 
 
 @regop
-def o6_pushByte(op, stack, bytecode):  # 0x00
+def o6_pushByte(op, stack, bytecode, game):  # 0x00
     assert len(op.args) == 1 and isinstance(op.args[0], ByteValue), op.args
     stack.append(Value(op.args[0])) 
 
 
 @regop
-def o6_pushWord(op, stack, bytecode):  # 0x01
+def o6_pushWord(op, stack, bytecode, game):  # 0x01
     assert len(op.args) == 1 and isinstance(op.args[0], WordValue), op.args
     stack.append(Value(op.args[0])) 
 
 
 @regop
-def o72_pushDWord(op, stack, bytecode):  # 0x02
+def o72_pushDWord(op, stack, bytecode, game):  # 0x02
     assert len(op.args) == 1 and isinstance(op.args[0], DWordValue), op.args
     stack.append(Value(op.args[0])) 
 
 
 @regop
-def o6_drawBox(op, stack, bytecode):
+def o6_drawBox(op, stack, bytecode, game):
     color = stack.pop()
     y2 = stack.pop()
     x2 = stack.pop()
@@ -333,20 +335,20 @@ def o6_drawBox(op, stack, bytecode):
     return f'draw-box {x1},{y1} to {x2},{y2} color {color}'
 
 @regop
-def o6_setBoxFlags(op, stack, bytecode):
+def o6_setBoxFlags(op, stack, bytecode, game):
     # set-box box-number [box-numer ...] to box-status
     value = stack.pop()
     boxes = ' '.join(str(param) for param in get_params(stack))
     return f'set-box {boxes} to {value}'
 
 @regop
-def o6_setBoxSet(op, stack, bytecode):
+def o6_setBoxSet(op, stack, bytecode, game):
     # set-box-set set
     setval = stack.pop()
     return f'set-box-set {setval}'
 
 @regop
-def o6_loadRoomWithEgo(op, stack, bytecode):
+def o6_loadRoomWithEgo(op, stack, bytecode, game):
     ypos = stack.pop()
     xpos = stack.pop()
     room = stack.pop()
@@ -355,19 +357,19 @@ def o6_loadRoomWithEgo(op, stack, bytecode):
 
 
 @regop
-def o6_pushByteVar(op, stack, bytecode):  # 0x02
+def o6_pushByteVar(op, stack, bytecode, game):  # 0x02
     assert len(op.args) == 1 and isinstance(op.args[0], ByteValue), op.args
     stack.append(get_var(op.args[0]))
 
 
 @regop
-def o6_pushWordVar(op, stack, bytecode):  # 0x03
+def o6_pushWordVar(op, stack, bytecode, game):  # 0x03
     assert len(op.args) == 1 and isinstance(op.args[0], WordValue), op.args
     stack.append(get_var(op.args[0]))
 
 
 @regop
-def o6_wordArrayRead(op, stack, bytecode):  # 0x07
+def o6_wordArrayRead(op, stack, bytecode, game):  # 0x07
     arr = get_var(op.args[0])
     pos = stack.pop()
     cast = None
@@ -377,7 +379,7 @@ def o6_wordArrayRead(op, stack, bytecode):  # 0x07
 
 
 @regop
-def o6_byteArrayIndexedRead(op, stack, bytecode):  # 0x0A
+def o6_byteArrayIndexedRead(op, stack, bytecode, game):  # 0x0A
     arr = get_var(op.args[0])
     idx = stack.pop()
     base = stack.pop()
@@ -388,7 +390,7 @@ def o6_byteArrayIndexedRead(op, stack, bytecode):  # 0x0A
 
 
 @regop
-def o6_wordArrayIndexedRead(op, stack, bytecode):  # 0x0B
+def o6_wordArrayIndexedRead(op, stack, bytecode, game):  # 0x0B
     arr = get_var(op.args[0])
     idx = stack.pop()
     base = stack.pop()
@@ -399,7 +401,7 @@ def o6_wordArrayIndexedRead(op, stack, bytecode):  # 0x0B
 
 
 @regop
-def o6_wordArrayIndexedWrite(op, stack, bytecode):
+def o6_wordArrayIndexedWrite(op, stack, bytecode, game):
     arr = get_var(op.args[0])
     val = stack.pop()
     idx = stack.pop()
@@ -409,7 +411,7 @@ def o6_wordArrayIndexedWrite(op, stack, bytecode):
 
 
 @regop
-def o6_dup(op, stack, bytecode):  # 0x0C
+def o6_dup(op, stack, bytecode, game):  # 0x0C
     val = stack.pop()
     if not isinstance(val, Dup):
         val = Dup(val)
@@ -418,131 +420,131 @@ def o6_dup(op, stack, bytecode):  # 0x0C
 
 
 @regop
-def o6_not(op, stack, bytecode):  # 0x0D
+def o6_not(op, stack, bytecode, game):  # 0x0D
     stack.append(Negate(stack.pop()))
 
 @regop
-def o6_abs(op, stack, bytecode):  # 0x0D
+def o6_abs(op, stack, bytecode, game):  # 0x0D
     stack.append(Abs(stack.pop()))
 
 
 @regop
-def o6_eq(op, stack, bytecode):
+def o6_eq(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('==', first, second))
 
 
 @regop
-def o6_neq(op, stack, bytecode):
+def o6_neq(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('!=', first, second))
 
 
 @regop
-def o6_gt(op, stack, bytecode):
+def o6_gt(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('>', first, second))
 
 
 @regop
-def o6_ge(op, stack, bytecode):
+def o6_ge(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('>=', first, second))
 
 
 @regop
-def o6_lt(op, stack, bytecode):
+def o6_lt(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('<', first, second))
 
 
 @regop
-def o6_le(op, stack, bytecode):
+def o6_le(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('<=', first, second))
 
 
 @regop
-def o6_land(op, stack, bytecode):
+def o6_land(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('and', first, second))
 
 
 @regop
-def o6_lor(op, stack, bytecode):
+def o6_lor(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('or', first, second))
 
 @regop
-def o6_band(op, stack, bytecode):
+def o6_band(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('&', first, second))
 
 
 @regop
-def o6_bor(op, stack, bytecode):
+def o6_bor(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('|', first, second))
 
 
 @regop
-def o6_add(op, stack, bytecode):
+def o6_add(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('+', first, second))
 
 
 @regop
-def o6_sub(op, stack, bytecode):
+def o6_sub(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('-', first, second))
 
 
 @regop
-def o6_mul(op, stack, bytecode):
+def o6_mul(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('*', first, second))
 
 
 @regop
-def o6_div(op, stack, bytecode):
+def o6_div(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('/', first, second))
 
 
 @regop
-def o90_mod(op, stack, bytecode):
+def o90_mod(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('%', first, second))
 
 @regop
-def o6_pop(op, stack, bytecode):
+def o6_pop(op, stack, bytecode, game):
     val = stack.pop()
     if isinstance(val, Dup):
         stack.append(val)
 
 
 @regop
-def o6_ifNot(op, stack, bytecode):
+def o6_ifNot(op, stack, bytecode, game):
     off, *rest = op.args
     assert not rest
     return ConditionalJump(stack.pop(), off)
 
 
 @regop
-def o6_if(op, stack, bytecode):
+def o6_if(op, stack, bytecode, game):
     off, *rest = op.args
     assert not rest
     return f'if ( {stack.pop()} ) jump {adr(off)}'
 
 @regop
-def o6_jump(op, stack, bytecode):
+def o6_jump(op, stack, bytecode, game):
     off, *rest = op.args
     assert not rest
     return UnconditionalJump(off)
 
 
 @regop
-def o6_writeWordVar(op, stack, bytecode):
+def o6_writeWordVar(op, stack, bytecode, game):
     assert len(op.args) == 1 and isinstance(op.args[0], WordValue), op.args
     value = stack.pop()
     var = get_var(op.args[0])
@@ -556,7 +558,7 @@ def get_params(stack):
 
 
 @regop
-def o6_startScript(op, stack, bytecode):
+def o6_startScript(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = ", ".join(str(param) for param in params)
     if param_str:
@@ -568,7 +570,7 @@ def o6_startScript(op, stack, bytecode):
     return f'start-script{bak}{rec} {scr}{param_str}'
 
 @regop
-def o6_jumpToScript(op, stack, bytecode):
+def o6_jumpToScript(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = ", ".join(str(param) for param in params)
     if param_str:
@@ -579,14 +581,14 @@ def o6_jumpToScript(op, stack, bytecode):
 
 
 @regop
-def o72_jumpToScript(op, stack, bytecode):
+def o72_jumpToScript(op, stack, bytecode, game):
     params = get_params(stack)
     flags = Value(op.args[0])
     return f'chain-script [{flags}] {params}'
 
 
 @regop
-def o72_startScript(op, stack, bytecode):
+def o72_startScript(op, stack, bytecode, game):
     assert len(op.args) == 1 and isinstance(op.args[0], ByteValue), op.args
     params = get_params(stack)
     param_str = ", ".join(str(param) for param in params)
@@ -596,17 +598,17 @@ def o72_startScript(op, stack, bytecode):
 
 
 @regop
-def o6_stopObjectScript(op, stack, bytecode):
+def o6_stopObjectScript(op, stack, bytecode, game):
     return f'stop-object {stack.pop()}'
 
 
 @regop
-def o6_stopScript(op, stack, bytecode):
+def o6_stopScript(op, stack, bytecode, game):
     return f'stop-script {stack.pop()}'
 
 
 @regop
-def o6_arrayOps(op, stack, bytecode):
+def o6_arrayOps(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     arr = get_var(op.args[1])
     if sub.num == 205:
@@ -624,11 +626,11 @@ def o6_arrayOps(op, stack, bytecode):
         param_str = f'{", ".join(str(param) for param in params)}'
         base = stack.pop()
         return f'{arr}[{base}][{col}] = {param_str}' 
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o72_arrayOps(op, stack, bytecode):
+def o72_arrayOps(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     arr = get_var(op.args[1])
     if sub.num == 7:
@@ -650,11 +652,11 @@ def o72_arrayOps(op, stack, bytecode):
         base = stack.pop()
         param_str = f'[{", ".join(str(param) for param in params)}]'
         return f'$ {arr}[{base}] = {param_str}' 
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_isAnyOf(op, stack, bytecode):
+def o6_isAnyOf(op, stack, bytecode, game):
     params = get_params(stack)
     var = stack.pop()
     cast = getattr(var, 'cast', None)
@@ -665,7 +667,7 @@ def o6_isAnyOf(op, stack, bytecode):
 
 
 @regop
-def o72_isAnyOf(op, stack, bytecode):
+def o72_isAnyOf(op, stack, bytecode, game):
     params = get_params(stack)
     var = stack.pop()
     cast = getattr(var, 'cast', None)
@@ -676,18 +678,27 @@ def o72_isAnyOf(op, stack, bytecode):
 
 
 @regop
-def o6_stopObjectCode(op, stack, bytecode):
+def o6_stopObjectCode(op, stack, bytecode, game):
     # TODO: this might also return the head of stack, windex: end-script / return L.{}
     return f'end-script'
 
 
 @regop
-def o72_getScriptString(op, stack, bytecode):
+def o72_getScriptString(op, stack, bytecode, game):
     push_str(stack, KeyString(op.args[0]))
 
+@regop
+def o70_readINI(op, stack, bytecode, game):
+    sub = stack.pop()
+    string = op.args[0]
+    if sub.num == 1:
+        stack.append(Caster(f'read-ini number {string}', cast='number'))
+    elif sub.num == 2:
+        stack.append(Caster(f'read-ini string {string}', cast='string'))
+    # raise NotImplementedError(op.args)
 
 @regop
-def o72_readINI(op, stack, bytecode):
+def o72_readINI(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     string = pop_str(stack)
     if sub.num == 6:
@@ -696,9 +707,21 @@ def o72_readINI(op, stack, bytecode):
         stack.append(Caster(f'read-ini string {string}', cast='string'))
     # raise NotImplementedError(op.args)
 
+@regop
+def o70_writeINI(op, stack, bytecode, game):
+    sub = stack.pop()
+    value = stack.pop()
+
+    option = op.args[0]
+    if sub.num == 1:
+        return f'write-ini {option} {value}'
+    if sub.num == 2:
+        value = op.args[1]
+        return f'write-ini {option} {value}'
+    return defop(op, stack, bytecode, game)
 
 @regop
-def o72_writeINI(op, stack, bytecode):
+def o72_writeINI(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     if sub.num == 6:
         value = stack.pop()
@@ -708,31 +731,31 @@ def o72_writeINI(op, stack, bytecode):
         value = pop_str(stack)
         option = pop_str(stack)
         return f'write-ini {option} {value}'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o60_rename(op, stack, bytecode):
+def o60_rename(op, stack, bytecode, game):
     target = op.args[1]
     source = op.args[0]
     return f'rename-file {msg_val(source)} to {msg_val(target)}'
 
 
 @regop
-def o72_rename(op, stack, bytecode):
+def o72_rename(op, stack, bytecode, game):
     target = pop_str(stack)
     source = pop_str(stack)
     return f'rename-file {source} to {target}'
 
 
 @regop
-def o72_debugInput(op, stack, bytecode):
+def o72_debugInput(op, stack, bytecode, game):
     string = pop_str(stack)
     stack.append(f'$ debug-input {string}')
 
 
 @regop
-def o72_traceStatus(op, stack, bytecode):
+def o72_traceStatus(op, stack, bytecode, game):
     string = pop_str(stack)
     return f'$ trace-status {string} {stack.pop()}'
 
@@ -776,59 +799,59 @@ def printer(action, op, stack):
 
 
 @regop
-def o6_printDebug(op, stack, bytecode):
+def o6_printDebug(op, stack, bytecode, game):
     return printer('print-debug', op, stack)
 
 @regop
-def o6_printText(op, stack, bytecode):
+def o6_printText(op, stack, bytecode, game):
     return printer('print-text', op, stack)
 
 @regop
-def o6_printLine(op, stack, bytecode):
+def o6_printLine(op, stack, bytecode, game):
     return printer('print-line', op, stack)
 
 @regop
-def o6_printSystem(op, stack, bytecode):
+def o6_printSystem(op, stack, bytecode, game):
     return printer('print-system', op, stack)
 
 @regop
-def o6_printEgo(op, stack, bytecode):
+def o6_printEgo(op, stack, bytecode, game):
     # with io.BytesIO(b'\x09\x00') as stream:
     #     stack.append(get_var(WordValue(stream)))
     return printer('say-line', op, stack)
 
 
 @regop
-def o6_printActor(op, stack, bytecode):
+def o6_printActor(op, stack, bytecode, game):
     return printer('say-line', op, stack)
 
 
 @regop
-def o72_talkActor(op, stack, bytecode):
+def o72_talkActor(op, stack, bytecode, game):
     act = stack.pop()
     return f'say-line {act} {msg_val(op.args[0])}'
 
 
 @regop
-def o72_talkEgo(op, stack, bytecode):
+def o72_talkEgo(op, stack, bytecode, game):
     return f'say-line {msg_val(op.args[0])}'
 
 
 @regop
-def o6_talkEgo(op, stack, bytecode):
+def o6_talkEgo(op, stack, bytecode, game):
     # with io.BytesIO(b'\x09\x00') as stream:
     #     stack.append(get_var(WordValue(stream)))
     return f'say-line {msg_val(op.args[0])}'
 
 
 @regop
-def o6_talkActor(op, stack, bytecode):
+def o6_talkActor(op, stack, bytecode, game):
     act = stack.pop()
     return f'say-line {act} {msg_val(op.args[0])}'
 
 
 @regop
-def o6_setBlastObjectWindow(op, stack, bytecode):
+def o6_setBlastObjectWindow(op, stack, bytecode, game):
     bottom = stack.pop()
     right = stack.pop()
     top = stack.pop()
@@ -837,7 +860,7 @@ def o6_setBlastObjectWindow(op, stack, bytecode):
 
 
 @regop
-def o71_getStringWidth(op, stack, bytecode):
+def o71_getStringWidth(op, stack, bytecode, game):
     ln = stack.pop()
     pos = stack.pop()
     array = stack.pop()
@@ -845,7 +868,7 @@ def o71_getStringWidth(op, stack, bytecode):
 
 
 @regop
-def o71_getStringLenForWidth(op, stack, bytecode):
+def o71_getStringLenForWidth(op, stack, bytecode, game):
     ln = stack.pop()
     pos = stack.pop()
     array = stack.pop()
@@ -853,29 +876,33 @@ def o71_getStringLenForWidth(op, stack, bytecode):
 
 
 @regop
-def o6_beginOverride(op, stack, bytecode):
+def o6_beginOverride(op, stack, bytecode, game):
     return f'override'
 
+@regop
+def o70_createDirectory(op, stack, bytecode, game):
+    string = op.args[0]
+    return f'$ mkdir {string}'
 
 @regop
-def o72_createDirectory(op, stack, bytecode):
+def o72_createDirectory(op, stack, bytecode, game):
     string = pop_str(stack)
     return f'$ mkdir {string}'
 
 @regop
-def o60_deleteFile(op, stack, bytecode):
+def o60_deleteFile(op, stack, bytecode, game):
     string = op.args[0]
     return f'delete-file {msg_val(string)}'
 
 
 @regop
-def o72_deleteFile(op, stack, bytecode):
+def o72_deleteFile(op, stack, bytecode, game):
     string = pop_str(stack)
     return f'delete-file {string}'
 
 
 @regop
-def o6_dimArray(op, stack, bytecode):
+def o6_dimArray(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     types = {
         199: 'int',
@@ -896,7 +923,7 @@ def o6_dummy(op, stack, byecode):
 
 
 @regop
-def o6_dim2dimArray(op, stack, bytecode):
+def o6_dim2dimArray(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     types = {
         199: 'int',
@@ -911,7 +938,7 @@ def o6_dim2dimArray(op, stack, bytecode):
 
 
 @regop
-def o72_dimArray(op, stack, bytecode):
+def o72_dimArray(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     types = {
         2: 'bit',
@@ -928,7 +955,7 @@ def o72_dimArray(op, stack, bytecode):
 
 
 @regop
-def o90_dim2dim2Array(op, stack, bytecode):
+def o90_dim2dim2Array(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     types = {
         2: 'bit',
@@ -949,7 +976,7 @@ def o90_dim2dim2Array(op, stack, bytecode):
 
 
 @regop
-def o70_isResourceLoaded(op, stack, bytecode):
+def o70_isResourceLoaded(op, stack, bytecode, game):
     types = {
         18: 'image',
         226: 'room',
@@ -961,7 +988,7 @@ def o70_isResourceLoaded(op, stack, bytecode):
     stack.append(f'$ {types[sub.num]}-loaded {stack.pop()}')
 
 @regop
-def o6_doSentence(op, stack, bytecode):
+def o6_doSentence(op, stack, bytecode, game):
     obj_b = stack.pop()
     flags = stack.pop()
     obj_a = stack.pop()
@@ -970,34 +997,34 @@ def o6_doSentence(op, stack, bytecode):
 
 
 @regop
-def o6_soundKludge(op, stack, bytecode):
+def o6_soundKludge(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = " ".join(str(param) for param in params)
     return f'sound {param_str}'
 
 
 @regop
-def o6_cutscene(op, stack, bytecode):
+def o6_cutscene(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = " ".join(str(param) for param in params)
     return f'cut-scene ({param_str})'
 
 
 @regop
-def o6_endCutscene(op, stack, bytecode):
+def o6_endCutscene(op, stack, bytecode, game):
     return 'end-cut-scene'
 
 
 @regop
-def o6_startSound(op, stack, bytecode):
-    if False:  # >he60
+def o6_startSound(op, stack, bytecode, game):
+    if game.he_version > 60:  # >he60
         offset = stack.pop()
         return f'start-sound {stack.pop()} offset {offset}'
     return f'start-sound {stack.pop()}'
 
 
 @regop
-def o60_soundOps(op, stack, bytecode):
+def o60_soundOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     arg = stack.pop()
     if cmd.num == 222:
@@ -1008,11 +1035,11 @@ def o60_soundOps(op, stack, bytecode):
     if cmd.num == 224:
         # windex shows empty string
         return f'$ set-frequency {arg}'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o70_soundOps(op, stack, bytecode):
+def o70_soundOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 9:
         return f'\tsoft \\'
@@ -1037,35 +1064,35 @@ def o70_soundOps(op, stack, bytecode):
         return f'\tloop \\'
     if cmd.num == 255:
         return f'\t(end-sfx)'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_kernelSetFunctions(op, stack, bytecode):
+def o6_kernelSetFunctions(op, stack, bytecode, game):
     params = get_params(stack)
     return f'kludge {params[0]} {params[1:]}'
 
 
 @regop
-def o6_kernelGetFunctions(op, stack, bytecode):
+def o6_kernelGetFunctions(op, stack, bytecode, game):
     params = get_params(stack)
     stack.append(f'kludge {params[0]} {params[1:]}')
 
 
 @regop
-def o60_kernelSetFunctions(op, stack, bytecode):
+def o60_kernelSetFunctions(op, stack, bytecode, game):
     params = get_params(stack)
     return f'kludge {params[0]} {params[1:]}'
 
 
 @regop
-def o60_kernelGetFunctions(op, stack, bytecode):
+def o60_kernelGetFunctions(op, stack, bytecode, game):
     params = get_params(stack)
     stack.append(f'kludge {params[0]} {params[1:]}')
 
 
 @regop
-def o71_kernelSetFunctions(op, stack, bytecode):
+def o71_kernelSetFunctions(op, stack, bytecode, game):
     params = get_params(stack)
     return f'kludge {params[0]} {params[1:]}'
     # if params[0].num == 1:
@@ -1083,57 +1110,57 @@ def o71_kernelSetFunctions(op, stack, bytecode):
     # raise ValueError(params)
 
 @regop
-def o6_getActorFromXY(op, stack, bytecode):
+def o6_getActorFromXY(op, stack, bytecode, game):
     ypos = stack.pop()
     xpos = stack.pop()
     stack.append(f'find-actor {xpos},{ypos}')
 
 
 @regop
-def o6_findObject(op, stack, bytecode):
+def o6_findObject(op, stack, bytecode, game):
     ypos = stack.pop()
     xpos = stack.pop()
     stack.append(f'find-object {xpos},{ypos}')
 
 @regop
-def o6_findInventory(op, stack, bytecode):
+def o6_findInventory(op, stack, bytecode, game):
     slot = stack.pop()
     act = stack.pop()
     stack.append(f'find-object {act},{slot}')
 
 
 @regop
-def o6_getVerbFromXY(op, stack, bytecode):
+def o6_getVerbFromXY(op, stack, bytecode, game):
     ypos = stack.pop()
     xpos = stack.pop()
     stack.append(f'find-verb {xpos},{ypos}')
 
 @regop
-def o6_stopSound(op, stack, bytecode):
+def o6_stopSound(op, stack, bytecode, game):
     return f'stop-sound {stack.pop()}'
 
 
 @regop
-def o6_endOverride(op, stack, bytecode):
+def o6_endOverride(op, stack, bytecode, game):
     return f'override off'
 
 
 @regop
-def o6_isSoundRunning(op, stack, bytecode):
+def o6_isSoundRunning(op, stack, bytecode, game):
     stack.append(f'sound-running {stack.pop()}')
 
 @regop
-def o6_isScriptRunning(op, stack, bytecode):
+def o6_isScriptRunning(op, stack, bytecode, game):
     stack.append(f'script-running {stack.pop()}')
 
 
 @regop
-def o6_isRoomScriptRunning(op, stack, bytecode):
+def o6_isRoomScriptRunning(op, stack, bytecode, game):
     stack.append(f'object-running {stack.pop()}')
 
 
 @regop
-def o6_roomOps(op, stack, bytecode):
+def o6_roomOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 172:
         x2 = stack.pop()
@@ -1171,6 +1198,12 @@ def o6_roomOps(op, stack, bytecode):
         green = stack.pop()
         red = stack.pop()
         return f'palette intensity {red},{green},{blue} in-slot {from_slot} to {to_slot}'
+    if cmd.num == 186:
+       steps = stack.pop()
+       to_slot = stack.pop()
+       from_slot = stack.pop()
+       number = stack.pop()
+       return f'palette transform {number} in-slot {from_slot} to {to_slot} steps {steps}'
     if cmd.num == 187:
         speed = stack.pop()
         slot = stack.pop()
@@ -1178,19 +1211,23 @@ def o6_roomOps(op, stack, bytecode):
     if cmd.num == 213:
         # windex show empty string here
         return f'$ room-color is {stack.pop()}'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o60_roomOps(op, stack, bytecode):
+def o60_roomOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
+    if cmd.num == 220:
+        from_slot = stack.pop()
+        to_slot = stack.pop()
+        return f'palette copy-color from {from_slot} to {to_slot}'
     if cmd.num == 221:
         return f'save-game {stack.pop()} name {msg_val(op.args[1])}'
-    return o6_roomOps(op, stack, bytecode)
+    return o6_roomOps(op, stack, bytecode, game)
 
 
 @regop
-def o72_roomOps(op, stack, bytecode):
+def o72_roomOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 172:
         x2 = stack.pop()
@@ -1226,15 +1263,18 @@ def o72_roomOps(op, stack, bytecode):
         a = stack.pop()
         b = stack.pop()
         return f'$ palette {b} in-slot {a}'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_verbOps(op, stack, bytecode):
+def o6_verbOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 196:
         verb = stack.pop()
         return f'verb {verb} \\'
+    if cmd.num == 124:
+        im = stack.pop()
+        return f'\timage {im} \\'
     if cmd.num == 125:
         return f'\tname {msg_val(op.args[1])} \\'
     if cmd.num == 126:
@@ -1273,77 +1313,77 @@ def o6_verbOps(op, stack, bytecode):
         return f'\tbakcolor {color} \\'
     if cmd.num == 255:
         return '\t(end-verb)'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o72_verbOps(op, stack, bytecode):
+def o72_verbOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
-    return o6_verbOps(op, stack, bytecode)
+    return o6_verbOps(op, stack, bytecode, game)
 
 
 @regop
-def o6_actorFollowCamera(op, stack, bytecode):
+def o6_actorFollowCamera(op, stack, bytecode, game):
     return f'camera-follow {stack.pop()}'
 
 
 @regop
-def o6_pickupObject(op, stack, bytecode):
+def o6_pickupObject(op, stack, bytecode, game):
     room = stack.pop()
     obj = stack.pop()
     return f'pick-up-object {obj} in-room {room}'
 
 
 @regop
-def o70_pickupObject(op, stack, bytecode):
+def o70_pickupObject(op, stack, bytecode, game):
     room = stack.pop()
     obj = stack.pop()
     return f'pick-up-object {obj} in {room}'
 
 
 @regop
-def o6_getActorMoving(op, stack, bytecode):
+def o6_getActorMoving(op, stack, bytecode, game):
     stack.append(f'actor-moving {stack.pop()}')
 
 
 @regop
-def o6_getInventoryCount(op, stack, bytecode):
+def o6_getInventoryCount(op, stack, bytecode, game):
     # might also be inventory-size {actor_name}
     stack.append(f'actor-inventory {stack.pop()}')
 
 
 @regop
-def o6_getOwner(op, stack, bytecode):
+def o6_getOwner(op, stack, bytecode, game):
     stack.append(f'owner-of {stack.pop()}')
 
 
 @regop
-def o6_setOwner(op, stack, bytecode):
+def o6_setOwner(op, stack, bytecode, game):
     act = stack.pop()
     obj = stack.pop()
     return f'owner-of {obj} is {act}'
 
 
 @regop
-def o6_faceActor(op, stack, bytecode):
+def o6_faceActor(op, stack, bytecode, game):
     obj = stack.pop()  # might be another actor
     act = stack.pop()
     return f'do-animation {act} face-towards {obj}'
 
 
 @regop
-def o6_setObjectName(op, stack, bytecode):
+def o6_setObjectName(op, stack, bytecode, game):
     obj = stack.pop()
     return f'new-name-of {obj} is {msg_val(op.args[0])}'
 
 
 @regop
-def o72_printWizImage(op, stack, bytecode):
+def o72_printWizImage(op, stack, bytecode, game):
     return f'$ print-wiz-image {stack.pop()}'
 
 
 @regop
-def o6_cursorCommand(op, stack, bytecode):
+def o6_cursorCommand(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 0x90:
         return 'cursor on'
@@ -1362,6 +1402,9 @@ def o6_cursorCommand(op, stack, bytecode):
     elif cmd.num == 0x97:
         return 'userput soft-off'
     elif cmd.num == 0x99:
+        if game.he_version >= 70:
+            # TODO: Figure out object?
+            return f'cursor {stack.pop()}'
         # TODO: another pop for non HE or HE < 70 games
         image = stack.pop()
         return f'cursor {stack.pop()} image {image}'
@@ -1380,11 +1423,11 @@ def o6_cursorCommand(op, stack, bytecode):
         # This command sets transparent colors in the cursor.
         # It can be called multiple times for multiple transparent colors.
         return f'cursor transparent {stack.pop()}'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o80_cursorCommand(op, stack, bytecode):
+def o80_cursorCommand(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num in {0x13, 0x14}:
         return f'$ cursor-wiz-image {stack.pop()}'
@@ -1416,11 +1459,11 @@ def o80_cursorCommand(op, stack, bytecode):
         params = get_params(stack)
         param_str = ', '.join(str(param) for param in params)
         return f'charset color {param_str}'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_actorOps(op, stack, bytecode):
+def o6_actorOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 76:
         return f'\tcostume {stack.pop()} \\'
@@ -1496,21 +1539,21 @@ def o6_actorOps(op, stack, bytecode):
     # TODO: 233 - stop-walk - no pops
     # TODO: 234 - resume-walk - no pops
     # TODO: 235 - talk-script - 1 pop
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o60_actorOps(op, stack, bytecode):
+def o60_actorOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 218:
         return f'\tbackground-on \\'
     if cmd.num == 219:
         return f'\tbackground-off \\'
-    return o6_actorOps(op, stack, bytecode)
+    return o6_actorOps(op, stack, bytecode, game)
 
 
 @regop
-def o72_actorOps(op, stack, bytecode):
+def o72_actorOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 21:
         return f'\tcondition {get_params(stack)}'
@@ -1531,16 +1574,16 @@ def o72_actorOps(op, stack, bytecode):
         string = pop_str(stack)
         slot = stack.pop()
         return f'\tsay {slot} {string}\\'
-    return o6_actorOps(op, stack, bytecode)
+    return o6_actorOps(op, stack, bytecode, game)
 
 
 @regop
-def o72_resetCutscene(op, stack, bytecode):
+def o72_resetCutscene(op, stack, bytecode, game):
     return '$ reset-cut-scene'
 
 
 @regop
-def o90_setSpriteInfo(op, stack, bytecode):
+def o90_setSpriteInfo(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 37:
         return f'\tgroup {stack.pop()}'
@@ -1579,11 +1622,11 @@ def o90_setSpriteInfo(op, stack, bytecode):
         return f'\treset \\'
     if cmd.num == 217:
         return f'\tnew \\'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o90_getSpriteInfo(op, stack, bytecode):
+def o90_getSpriteInfo(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     if sub.num == 30:
         sprite = stack.pop()
@@ -1648,11 +1691,11 @@ def o90_getSpriteInfo(op, stack, bytecode):
         sprite = stack.pop()
         stack.append(f'$ class-of-sprite {sprite} {params}')
         return
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o90_setSpriteGroupInfo(op, stack, bytecode):
+def o90_setSpriteGroupInfo(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 44:
         dy = stack.pop()
@@ -1666,11 +1709,11 @@ def o90_setSpriteGroupInfo(op, stack, bytecode):
         top = stack.pop()
         left = stack.pop()
         return f'\tbox {left},{top} to {right},{bottom}'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o90_getSpriteGroupInfo(op, stack, bytecode):
+def o90_getSpriteGroupInfo(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     if sub.num == 30:
         group = stack.pop()
@@ -1680,11 +1723,11 @@ def o90_getSpriteGroupInfo(op, stack, bytecode):
         group = stack.pop()
         stack.append(f'$ sprite-group-y {group}')
         return
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o80_drawLine(op, stack, bytecode):
+def o80_drawLine(op, stack, bytecode, game):
     step = stack.pop()
     id = stack.pop()
     y = stack.pop()
@@ -1696,7 +1739,7 @@ def o80_drawLine(op, stack, bytecode):
 
 
 @regop
-def o90_floodFill(op, stack, bytecode):
+def o90_floodFill(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     if sub.num == 57:
         return f'$ flood-fill-box \\'
@@ -1714,25 +1757,25 @@ def o90_floodFill(op, stack, bytecode):
         return f'$ flood-fill-box {left},{top} to {right},{bottom}'
     if sub.num == 255:
         return f'\tdraw'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_getAnimateVariable(op, stack, barcode):
+def o6_getAnimateVariable(op, stack, bytecode, game):
     var = stack.pop()
     act = stack.pop()
     stack.append(f'actor {act} variable {var}')
 
 
 @regop
-def o6_animateActor(op, stack, barcode):
+def o6_animateActor(op, stack, bytecode, game):
     chore = stack.pop()
     act = stack.pop()
     return f'do-animation {act} {chore}'
 
 
 @regop
-def o80_readConfigFile(op, stack, bytecode):
+def o80_readConfigFile(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     option = pop_str(stack)
     section = pop_str(stack)
@@ -1740,45 +1783,56 @@ def o80_readConfigFile(op, stack, bytecode):
     if cmd.num == 6:
         stack.append(Caster(f'(read-ini {filename} {section} {option})', cast='number'))
         return
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o72_getNumFreeArrays(op, stack, bytecode):
+def o72_getNumFreeArrays(op, stack, bytecode, game):
     stack.append('$ num-free-arrays')
 
 
 @regop
-def o72_getObjectImageX(op, stack, bytecode):
+def o72_getObjectImageX(op, stack, bytecode, game):
     stack.append(f'object-image-x {stack.pop()}')
 
 
 @regop
-def o72_getObjectImageY(op, stack, bytecode):
+def o72_getObjectImageY(op, stack, bytecode, game):
     stack.append(f'object-image-y {stack.pop()}')
 
 
 @regop
-def o6_getObjectX(op, stack, bytecode):
+def o6_getObjectX(op, stack, bytecode, game):
     stack.append(f'object-x {stack.pop()}')
 
 @regop
-def o6_getObjectY(op, stack, bytecode):
+def o6_getObjectY(op, stack, bytecode, game):
     stack.append(f'object-y {stack.pop()}')
 
 @regop
-def o6_stampObject(op, stack, bytecode):
+def o6_stampObject(op, stack, bytecode, game):
     state = stack.pop()
     ypos = stack.pop()
     xpos = stack.pop()
     obj = stack.pop()
     return f'stamp-object {obj} at {xpos},{ypos} image {state}'
 
+@regop
+def o60_redimArray(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    arr = get_var(op.args[1])
+    dim2, dim1 =  stack.pop(), stack.pop()
 
+    if dim2 == 0:
+        dim2, dim1 = dim1, dim2 # Swap the two values
 
+    if cmd.num == 199:  # int/word array
+        return f'$ redim int array {arr}[{dim1}][{dim2}]'
+    if cmd.num == 202:  # byte array
+        return f'$ redim byte array {arr}[{dim1}][{dim2}]'
 
 @regop
-def o72_redimArray(op, stack, bytecode):
+def o72_redimArray(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     arr = get_var(op.args[1])
     dim2, dim1 =  stack.pop(), stack.pop()
@@ -1791,7 +1845,7 @@ def o72_redimArray(op, stack, bytecode):
 
 
 @regop
-def o72_dim2dimArray(op, stack, bytecode):
+def o72_dim2dimArray(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     arr = get_var(op.args[1])
     dim2, dim1 =  stack.pop(), stack.pop()
@@ -1817,11 +1871,11 @@ def o72_dim2dimArray(op, stack, bytecode):
         return f'$ dim dword array {arr}[{dim1}][{dim2}]'
     if cmd.num == 7:  # int array
         return f'$ dim string array {arr}[{dim1}][{dim2}]'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o72_drawWizImage(op, stack, bytecode):
+def o72_drawWizImage(op, stack, bytecode, game):
     flags = stack.pop()
     x1 = stack.pop()
     y1 = stack.pop()
@@ -1830,7 +1884,7 @@ def o72_drawWizImage(op, stack, bytecode):
 
 
 @regop
-def o72_captureWizImage(op, stack, bytecode):
+def o72_captureWizImage(op, stack, bytecode, game):
     bottom = stack.pop()
     right = stack.pop()
     top = stack.pop()
@@ -1840,7 +1894,7 @@ def o72_captureWizImage(op, stack, bytecode):
 
 
 @regop
-def o90_wizImageOps(op, stack, bytecode):
+def o90_wizImageOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 48:
         return f'\tmode 1 \\'
@@ -1889,31 +1943,31 @@ def o90_wizImageOps(op, stack, bytecode):
         return f'\tpolygon {stack.pop()} \\'
     if cmd.num == 255:
         return f'\t(end-wiz)'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_delayFrames(op, stack, bytecode):
+def o6_delayFrames(op, stack, bytecode, game):
     return f'break-here {stack.pop()} times'
 
 
 @regop
-def o6_delayMinutes(op, stack, bytecode):
+def o6_delayMinutes(op, stack, bytecode, game):
     return f'sleep-for {stack.pop()} minutes'
 
 
 @regop
-def o6_delay(op, stack, bytecode):
+def o6_delay(op, stack, bytecode, game):
     return f'sleep-for {stack.pop()} jiffies'
 
 
 @regop
-def o6_delaySeconds(op, stack, bytecode):
+def o6_delaySeconds(op, stack, bytecode, game):
     return f'sleep-for {stack.pop()} seconds'
 
 
 @regop
-def o6_wait(op, stack, bytecode):
+def o6_wait(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     if sub.num == 168:
         return f'wait-for-actor {stack.pop()} [ref {adr(op.args[1])}]'
@@ -1921,35 +1975,35 @@ def o6_wait(op, stack, bytecode):
         return 'wait-for-message'
     if sub.num == 170:
         return 'wait-for-camera'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_pseudoRoom(op, stack, bytecode):
+def o6_pseudoRoom(op, stack, bytecode, game):
     params = get_params(stack)
     room = stack.pop()
     return f'pseudo-room {room} is {params}'
 
 
 @regop
-def o72_setTimer(op, stack, bytecode):
+def o72_setTimer(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     return f'$ start-timer {stack.pop()} {cmd}'
 
 @regop
-def o6_wordVarInc(op, stack, bytecode):
+def o6_wordVarInc(op, stack, bytecode, game):
     var = get_var(op.args[0])
     return f'++{var}'
 
 
 @regop
-def o6_wordVarDec(op, stack, bytecode):
+def o6_wordVarDec(op, stack, bytecode, game):
     var = get_var(op.args[0])
     return f'--{var}'
 
 
 @regop
-def o90_cond(op, stack, bytecode):
+def o90_cond(op, stack, bytecode, game):
     a = stack.pop()
     b = stack.pop()
     c = stack.pop()
@@ -1957,30 +2011,30 @@ def o90_cond(op, stack, bytecode):
 
 
 @regop
-def o6_wordArrayInc(op, stack, bytecode):
+def o6_wordArrayInc(op, stack, bytecode, game):
     var = get_var(op.args[0])
     return f'++{var}[{stack.pop()}]'
 
 
 @regop
-def o6_wordArrayDec(op, stack, bytecode):
+def o6_wordArrayDec(op, stack, bytecode, game):
     var = get_var(op.args[0])
     return f'--{var}[{stack.pop()}]'
 
 
 @regop
-def o6_breakHere(op, stack, bytecode):
+def o6_breakHere(op, stack, bytecode, game):
     return 'break-here'
 
 
 @regop
-def o72_getTimer(op, stack, bytecode):
+def o72_getTimer(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     stack.append(f'$ get-timer {stack.pop()} {cmd}')
 
 
 @regop
-def o6_isActorInBox(op, stack, bytecode):
+def o6_isActorInBox(op, stack, bytecode, game):
     box = stack.pop()
     actor = stack.pop()
     stack.append(f'{actor} in-box {box}')
@@ -1992,7 +2046,7 @@ def o6_createBoxMatrix(op, stack, bytecide):
 
 
 @regop
-def o6_systemOps(op, stack, bytecode):
+def o6_systemOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 158:
         return 'restart'
@@ -2000,11 +2054,11 @@ def o6_systemOps(op, stack, bytecode):
         return 'pause'
     if cmd.num == 160:
         return 'quit'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_saveRestoreVerbs(op, stack, bytecode):
+def o6_saveRestoreVerbs(op, stack, bytecode, game):
     setval = stack.pop()
     end = stack.pop()
     start = stack.pop()
@@ -2016,11 +2070,24 @@ def o6_saveRestoreVerbs(op, stack, bytecode):
         return f'verbs-restore {start} to {end} set {setval}'
         # return f'restore-verbs {start} to {end} set {setval}'
     # TODO: 143: verbs-delete {start} to {end} set {setval}
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o72_systemOps(op, stack, bytecode):
+def o70_systemOps(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 158:
+        return '$ restart'
+    if cmd.num == 160:
+        return '$ prompt-exit'
+    if cmd.num == 244:
+        return '$ quit'
+    # TODO: 150/151: Start Executable
+    # TODO: 252/253: Start Game (same as Start Executable?)
+    return defop(op, stack, bytecode, game)
+
+@regop
+def o72_systemOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 22:
         return '$ clear-draw-queue'
@@ -2032,11 +2099,11 @@ def o72_systemOps(op, stack, bytecode):
         return '$ prompt-exit'
     if cmd.num == 244:
         return '$ quit'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o70_setSystemMessage(op, stack, bytecode):
+def o70_setSystemMessage(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     string = op.args[1]
     if sub.num == 243:
@@ -2045,7 +2112,7 @@ def o70_setSystemMessage(op, stack, bytecode):
 
 
 @regop
-def o72_setSystemMessage(op, stack, bytecode):
+def o72_setSystemMessage(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     string = pop_str(stack)
     if sub.num == 243:
@@ -2054,7 +2121,7 @@ def o72_setSystemMessage(op, stack, bytecode):
 
 
 @regop
-def o6_resourceRoutines(op, stack, bytecode):
+def o6_resourceRoutines(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 100:
         return f'load-script {stack.pop()}'
@@ -2094,11 +2161,11 @@ def o6_resourceRoutines(op, stack, bytecode):
         room = stack.pop()
         obj = stack.pop()
         return f'load-object {obj} in-room {room}'
-    return defop(op, stack, bytecode) 
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o70_resourceRoutines(op, stack, bytecode):
+def o70_resourceRoutines(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 100:
         return f'load-script {stack.pop()}'
@@ -2158,37 +2225,37 @@ def o70_resourceRoutines(op, stack, bytecode):
         return f'$ lock-object {stack.pop()}'
     if cmd.num == 235:
         return f'$ unlock-object {stack.pop()}'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_loadRoom(op, stack, bytecode):
+def o6_loadRoom(op, stack, bytecode, game):
     return f'current-room {stack.pop()}'
 
 
 @regop
-def o6_getDateTime(op, stack, bytecode):
+def o6_getDateTime(op, stack, bytecode, game):
     stack.append('get-time-date')
 
 
 @regop
-def o6_getRandomNumber(op, stack, bytecode):
+def o6_getRandomNumber(op, stack, bytecode, game):
     stack.append(f'random {stack.pop()}')
 
 
 @regop
-def o6_getRandomNumberRange(op, stack, bytecode):
+def o6_getRandomNumberRange(op, stack, bytecode, game):
     upper = stack.pop()
     lower = stack.pop()
     stack.append(Caster(f'random-between {lower} to {upper}', cast='number'))
 
 
 @regop
-def o70_getStringLen(op, stack, bytecode):
+def o70_getStringLen(op, stack, bytecode, game):
     stack.append(f'$ string-length {stack.pop()}')
 
 @regop
-def o6_wordArrayWrite(op, stack, bytecode):
+def o6_wordArrayWrite(op, stack, bytecode, game):
     val = stack.pop()
     base = stack.pop()
     arr = get_var(op.args[0])
@@ -2196,7 +2263,7 @@ def o6_wordArrayWrite(op, stack, bytecode):
 
 
 @regop
-def o6_pickVarRandom(op, stack, bytecode):
+def o6_pickVarRandom(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = ', '.join(str(param) for param in params)
     value = Value(op.args[0])
@@ -2204,7 +2271,7 @@ def o6_pickVarRandom(op, stack, bytecode):
 
 
 @regop
-def o80_pickVarRandom(op, stack, bytecode):
+def o80_pickVarRandom(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = ', '.join(str(param) for param in params)
     value = Value(op.args[0])
@@ -2212,7 +2279,7 @@ def o80_pickVarRandom(op, stack, bytecode):
 
 
 @regop
-def o6_pickOneOf(op, stack, bytecode):
+def o6_pickOneOf(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = ', '.join(str(param) for param in params)
     value = stack.pop()
@@ -2220,7 +2287,7 @@ def o6_pickOneOf(op, stack, bytecode):
 
 
 @regop
-def o6_pickOneOfDefault(op, stack, bytecode):
+def o6_pickOneOfDefault(op, stack, bytecode, game):
     default = stack.pop()
     params = get_params(stack)
     param_str = ', '.join(str(param) for param in params)
@@ -2229,7 +2296,7 @@ def o6_pickOneOfDefault(op, stack, bytecode):
 
 
 @regop
-def o6_shuffle(op, stack, bytecode):
+def o6_shuffle(op, stack, bytecode, game):
     end = stack.pop()
     start = stack.pop()
     arr = get_var(op.args[0])
@@ -2237,60 +2304,60 @@ def o6_shuffle(op, stack, bytecode):
 
 
 @regop
-def o72_getResourceSize(op, stack, bytecode):
+def o72_getResourceSize(op, stack, bytecode, game):
     res = stack.pop()
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 13:
         stack.append(f'$ size-of sfx {res}')
         return
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_setClass(op, stack, bytecode):
+def o6_setClass(op, stack, bytecode, game):
     params = get_params(stack)
     obj = stack.pop()
     return f'class-of {obj} is {" ".join(str(param) for param in params)}'
 
 
 @regop
-def o6_ifClassOfIs(op, stack, bytecode):
+def o6_ifClassOfIs(op, stack, bytecode, game):
     params = get_params(stack)
     obj = stack.pop()
     stack.append(f'class-of {obj} is {" ".join(str(param) for param in params)}')
 
 
 @regop
-def o6_stopTalking(op, stack, bytecode):
+def o6_stopTalking(op, stack, bytecode, game):
     return 'stop-talking'
 
 
 @regop
-def o6_getVerbEntrypoint(op, stack, bytecode):
+def o6_getVerbEntrypoint(op, stack, bytecode, game):
     verb = stack.pop()
     obj = stack.pop()
     stack.append(f'valid-verb {obj} {verb}')
 
 
 @regop
-def o6_getObjectOldDir(op, stack, bytecode):
+def o6_getObjectOldDir(op, stack, bytecode, game):
     obj = stack.pop()
     stack.append(f'actor-facing {obj}')
 
 @regop
-def o70_getActorRoom(op, stack, bytecode):
+def o70_getActorRoom(op, stack, bytecode, game):
     stack.append(f'actor-room {stack.pop()}')
 
 
 @regop
-def o6_getPixel(op, stack, bytecode):
+def o6_getPixel(op, stack, bytecode, game):
     ypos = stack.pop()
     xpos = stack.pop()
     stack.append(f'pixel {xpos}, {ypos}')
 
 
 @regop
-def o72_getPixel(op, stack, bytecode):
+def o72_getPixel(op, stack, bytecode, game):
     ypos = stack.pop()
     xpos = stack.pop()
     sources = {9: 'background', 218: 'background', 8: 'foreground', 219: 'foreground'}
@@ -2299,19 +2366,19 @@ def o72_getPixel(op, stack, bytecode):
 
 
 @regop
-def o71_polygonHit(op, stack, bytecode):
+def o71_polygonHit(op, stack, bytecode, game):
     ypos = stack.pop()
     xpos = stack.pop()
     stack.append(f'$ polygon-hit {xpos} {ypos}')
 
 
 @regop
-def o60_closeFile(op, stack, bytecode):
+def o60_closeFile(op, stack, bytecode, game):
     return f'close-file {stack.pop()}'
 
 
 @regop
-def o60_openFile(op, stack, bytecode):
+def o60_openFile(op, stack, bytecode, game):
     modes = {
         1: 'read',
         2: 'write',
@@ -2323,7 +2390,7 @@ def o60_openFile(op, stack, bytecode):
 
 
 @regop
-def o72_openFile(op, stack, bytecode):
+def o72_openFile(op, stack, bytecode, game):
     modes = {
         1: 'read',
         2: 'write',
@@ -2335,7 +2402,7 @@ def o72_openFile(op, stack, bytecode):
 
 
 @regop
-def o60_writeFile(op, stack, bytecode):
+def o60_writeFile(op, stack, bytecode, game):
     size = stack.pop()
     res = stack.pop()
     slot = stack.pop()
@@ -2343,7 +2410,7 @@ def o60_writeFile(op, stack, bytecode):
 
 
 @regop
-def o72_writeFile(op, stack, bytecode):
+def o72_writeFile(op, stack, bytecode, game):
     res = stack.pop()
     slot = stack.pop()
     sub = Value(op.args[0], signed=False)
@@ -2352,25 +2419,25 @@ def o72_writeFile(op, stack, bytecode):
 
 
 @regop
-def o72_readFile(op, stack, bytecode):
+def o72_readFile(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     if sub.num == 8:
         size = stack.pop()
         slot = stack.pop()
         stack.append(f'$ read-file {Value(op.args[1])} {slot} size {size}')
         return
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o60_readFile(op, stack, bytecode):
+def o60_readFile(op, stack, bytecode, game):
     size = stack.pop()
     slot = stack.pop()
     stack.append(f'read-file {slot} size {size}')
 
 
 @regop
-def o60_seekFilePos(op, stack, bytecode):
+def o60_seekFilePos(op, stack, bytecode, game):
     modes = {
         1: 'start',
         2: 'current',
@@ -2383,7 +2450,13 @@ def o60_seekFilePos(op, stack, bytecode):
 
 
 @regop
-def o71_appendString(op, stack, bytecode):
+def o60_readFilePos(op, stack, bytecode, game):
+    slot = stack.pop()
+    stack.append(f'read-file {slot} position')
+
+
+@regop
+def o71_appendString(op, stack, bytecode, game):
     ln = stack.pop()
     src_offs = stack.pop()
     src = stack.pop()
@@ -2391,30 +2464,30 @@ def o71_appendString(op, stack, bytecode):
 
 
 @regop
-def o80_stringToInt(op, stack, bytecode):
+def o80_stringToInt(op, stack, bytecode, game):
     string = stack.pop()
     stack.append(Caster(f'$ string-to-number {string}', cast='number'))
 
 
 @regop
-def o6_findAllObjects(op, stack, bytecode):
+def o6_findAllObjects(op, stack, bytecode, game):
     stack.append(f'find-all-objects {stack.pop()}')
 
 
 @regop
-def o72_findAllObjects(op, stack, bytecode):
+def o72_findAllObjects(op, stack, bytecode, game):
     stack.append(f'find-all-objects {stack.pop()}')
 
 
 @regop
-def o90_findAllObjectsWithClassOf(op, stack, bytecode):
+def o90_findAllObjectsWithClassOf(op, stack, bytecode, game):
     classes = get_params(stack)
     room = stack.pop()
     stack.append(f'find-all-objects {room} of-class {classes}')
 
 
 @regop
-def o6_putActorAtXY(op, stack, bytecode):
+def o6_putActorAtXY(op, stack, bytecode, game):
     room = stack.pop()
     ypos = stack.pop()
     xpos = stack.pop()
@@ -2424,7 +2497,7 @@ def o6_putActorAtXY(op, stack, bytecode):
 
 
 @regop
-def o71_getCharIndexInString(op, stack, bytecode):
+def o71_getCharIndexInString(op, stack, bytecode, game):
     value = stack.pop()
     value.cast = 'char'
     end = stack.pop()
@@ -2434,7 +2507,7 @@ def o71_getCharIndexInString(op, stack, bytecode):
 
 
 @regop
-def o6_putActorAtObject(op, stack, bytecode):
+def o6_putActorAtObject(op, stack, bytecode, game):
     room = stack.pop()
     obj = stack.pop()
     act = stack.pop()
@@ -2443,7 +2516,7 @@ def o6_putActorAtObject(op, stack, bytecode):
 
 
 @regop
-def o6_startScriptQuick(op, stack, bytecode):
+def o6_startScriptQuick(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = ", ".join(str(param) for param in params)
     if param_str:
@@ -2453,7 +2526,7 @@ def o6_startScriptQuick(op, stack, bytecode):
 
 
 @regop
-def o6_startScriptQuick2(op, stack, bytecode):
+def o6_startScriptQuick2(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = ", ".join(str(param) for param in params)
     if param_str:
@@ -2465,14 +2538,14 @@ def o6_startScriptQuick2(op, stack, bytecode):
 
 
 @regop
-def o6_panCameraTo(op, stack, bytecode):
+def o6_panCameraTo(op, stack, bytecode, game):
     # TODO: v7 uses 2 pops, x y
     xpos = stack.pop()
     return f'camera-pan-to {xpos}'
 
 
 @regop
-def o6_startObjectQuick(op, stack, bytecode):
+def o6_startObjectQuick(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = ", ".join(str(param) for param in params)
     if param_str:
@@ -2483,29 +2556,29 @@ def o6_startObjectQuick(op, stack, bytecode):
 
 
 @regop
-def o6_stopSentence(op, stack, bytecode):
+def o6_stopSentence(op, stack, bytecode, game):
     return 'stop-sentence'
 
 
 @regop
-def o72_getArrayDimSize(op, stack, bytecode):
+def o72_getArrayDimSize(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     arr = get_var(op.args[1])
     if sub.num == 1:
         stack.append(f'$ array-dimension-base {arr}')
         return
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o80_getSoundVar(op, stack, bytecode):
+def o80_getSoundVar(op, stack, bytecode, game):
     var = stack.pop()
     sound = stack.pop()
     stack.append(f'$ sfx-var {sound} {var}')
 
 
 @regop
-def o80_createSound(op, stack, bytecode):
+def o80_createSound(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 27:
         return f'\tfrom {stack.pop()} \\'
@@ -2515,61 +2588,61 @@ def o80_createSound(op, stack, bytecode):
         return f'$ create-sound {stack.pop()} \\'
     if cmd.num == 255:
         return f'\t(end-create-sound)'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_getActorCostume(op, stack, bytecode):
+def o6_getActorCostume(op, stack, bytecode, game):
     act = stack.pop()
     stack.append(f'actor-costume {act}')
 
 @regop
-def o6_getActorWidth(op, stack, bytecode):
+def o6_getActorWidth(op, stack, bytecode, game):
     act = stack.pop()
     stack.append(f'actor-width {act}')
 
 @regop
-def o6_getActorElevation(op, stack, bytecode):
+def o6_getActorElevation(op, stack, bytecode, game):
     act = stack.pop()
     stack.append(f'actor-elevation {act}')
 
 
 @regop
-def o6_getActorRoom(op, stack, bytecode):
+def o6_getActorRoom(op, stack, bytecode, game):
     act = stack.pop()
     stack.append(f'actor-room {act}')
 
 
 @regop
-def o6_getActorAnimCounter(op, stack, bytecode):
+def o6_getActorAnimCounter(op, stack, bytecode, game):
     act = stack.pop()
     stack.append(f'actor-chore {act}')
 
 
 @regop
-def o6_getActorScaleX(op, stack, bytecode):
+def o6_getActorScaleX(op, stack, bytecode, game):
     act = stack.pop()
     stack.append(f'actor-scale {act}')
 
 
 @regop
-def o6_getActorWalkBox(op, stack, bytecode):
+def o6_getActorWalkBox(op, stack, bytecode, game):
     act = stack.pop()
     stack.append(f'actor-box {act}')
 
 
 @regop
-def o60_localizeArrayToScript(op, stack, bytecode):
+def o60_localizeArrayToScript(op, stack, bytecode, game):
     return f'localize array {stack.pop()}'
 
 
 @regop
-def o80_localizeArrayToRoom(op, stack, bytecode):
+def o80_localizeArrayToRoom(op, stack, bytecode, game):
     return f'localize array [room] {stack.pop()}'
 
 
 @regop
-def o6_freezeUnfreeze(op, stack, bytecode):
+def o6_freezeUnfreeze(op, stack, bytecode, game):
     scr = stack.pop()
     if scr.num == 0:
         return 'unfreeze-scripts'
@@ -2577,7 +2650,7 @@ def o6_freezeUnfreeze(op, stack, bytecode):
 
 
 @regop
-def o71_polygonOps(op, stack, bytecode):
+def o71_polygonOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 247:
         to = stack.pop()
@@ -2594,18 +2667,18 @@ def o71_polygonOps(op, stack, bytecode):
         vert1x = stack.pop()
         id = stack.pop()
         return f'$ draw-polygon {id} [{cmd}] {vert1x},{vert1y} {vert2x},{vert2y} {vert3x},{vert3y} {vert4x},{vert4y}'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_drawObject(op, stack, bytecode):
+def o6_drawObject(op, stack, bytecode, game):
     state = stack.pop()
     obj = stack.pop()
     return f'draw-object {obj} image {state}'
 
 
 @regop
-def o6_drawObjectAt(op, stack, bytecode):
+def o6_drawObjectAt(op, stack, bytecode, game):
     ypos = stack.pop()
     xpos = stack.pop()
     obj = stack.pop()
@@ -2613,7 +2686,7 @@ def o6_drawObjectAt(op, stack, bytecode):
 
 
 @regop
-def o72_drawObject(op, stack, bytecode):
+def o72_drawObject(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 62:
         state = stack.pop()
@@ -2630,49 +2703,49 @@ def o72_drawObject(op, stack, bytecode):
         xpos = stack.pop()
         obj = stack.pop()
         return f'draw-object {obj} at {xpos},{ypos}'
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_setState(op, stack, bytecode):
+def o6_setState(op, stack, bytecode, game):
     state = stack.pop()
     obj = stack.pop()
     return f'state-of {obj} is {state}'
 
 
 @regop
-def o80_setState(op, stack, bytecode):
+def o80_setState(op, stack, bytecode, game):
     state = stack.pop()
     obj = stack.pop()
     return f'state-of {obj} is {state}'
 
 
 @regop
-def o60_setState(op, stack, bytecode):
+def o60_setState(op, stack, bytecode, game):
     state = stack.pop()
     obj = stack.pop()
     return f'state-of {obj} is {state}'
 
 @regop
-def o6_getState(op, stack, bytecode):
+def o6_getState(op, stack, bytecode, game):
     obj = stack.pop()
     stack.append(f'state-of {obj}')
 
 
 @regop
-def o72_getSoundPosition(op, stack, bytecode):
+def o72_getSoundPosition(op, stack, bytecode, game):
     snd = stack.pop()
     stack.append(f'$ sfx-position {snd}')
 
 
 @regop
-def o6_getObjectY(op, stack, bytecode):
+def o6_getObjectY(op, stack, bytecode, game):
     obj = stack.pop()
     stack.append(f'object-y {obj}')
 
 
 @regop
-def o90_getWizData(op, stack, bytecode):
+def o90_getWizData(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 30:
         state = stack.pop()
@@ -2708,11 +2781,11 @@ def o90_getWizData(op, stack, bytecode):
         res = stack.pop()
         stack.append(f'$ wiz-image-pixel-color {res} {state} at {x},{y}')
         return
-    return defop(op, stack, bytecode)
+    return defop(op, stack, bytecode, game)
 
 
 @regop
-def o6_walkActorTo(op, stack, bytecode):
+def o6_walkActorTo(op, stack, bytecode, game):
     # walk actor-name to x-coord,y-coord
     # walk actor-name to actor-name within number
     # walk actor-name to-object object-name
@@ -2723,7 +2796,7 @@ def o6_walkActorTo(op, stack, bytecode):
 
 
 @regop
-def o6_walkActorToObj(op, stack, bytecode):
+def o6_walkActorToObj(op, stack, bytecode, game):
     dist = stack.pop()
     obj = stack.pop()
     act = stack.pop()
@@ -2731,14 +2804,14 @@ def o6_walkActorToObj(op, stack, bytecode):
 
 
 @regop
-def o6_distObjectObject(op, stack, bytecode):
+def o6_distObjectObject(op, stack, bytecode, game):
     another = stack.pop()
     obj = stack.pop()
     stack.append(f'proximity {obj} {another}')
 
 
 @regop
-def o6_setCameraAt(op, stack, bytecode):
+def o6_setCameraAt(op, stack, bytecode, game):
     # ypos = stack.pop()  # v7+
     xpos = stack.pop()
     return f'camera-at {xpos}'
@@ -2822,14 +2895,17 @@ def transform_asts(indent, asts):
                             end = None
                             adv = str(asts[label][-2])
                             step, var = adv[:2], adv[2:]
-                            if step == '++' and f'{var} > ' in str(cond.expr):
-                                asts[label].pop()  # cond
-                                asts[label].pop()  # adv
-                                end = str(cond.expr).replace(f'{var} > ', '')
-                            elif step == '--' and f'{var} < ' in str(cond.expr):
-                                asts[label].pop()  # cond
-                                asts[label].pop()  # adv
-                                end = str(cond.expr).replace(f'{var} < ', '')
+                            # NOTE: Commented these out because it causes problems
+                            # when trying to decompile the HE v71 games.
+                            # (Unsure if this is needed for Lucas v6 games or not.)
+                            # if step == '++' and f'{var} > ' in str(cond.expr):
+                            #     asts[label].pop()  # cond
+                            #     asts[label].pop()  # adv
+                            #     end = str(cond.expr).replace(f'{var} > ', '')
+                            # elif step == '--' and f'{var} < ' in str(cond.expr):
+                            #     asts[label].pop()  # cond
+                            #     asts[label].pop()  # adv
+                            #     end = str(cond.expr).replace(f'{var} < ', '')
                             if end and last_label is not None and asts[last_label]:
                                 assert last_label == list(deps)[idx - 1]
                                 init = str(asts[last_label].pop())
@@ -3044,7 +3120,7 @@ def parse_verb_meta(meta):
             yield key, entry - len(meta)
 
 
-def decompile_script(elem, optable, verbose=False):
+def decompile_script(elem, game, verbose=False):
     if elem.tag == 'OBCD':
         obcd = elem
         elem = sputm.find('VERB', obcd)
@@ -3073,6 +3149,7 @@ def decompile_script(elem, optable, verbose=False):
         assert scr_id is None or scr_id == gid
         gid_str = '' if gid is None else f' {gid}'
         yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
+    optable = get_optable(game)
     bytecode = descumm(script_data, optable)
     # print_bytecode(bytecode)
 
@@ -3119,7 +3196,7 @@ def decompile_script(elem, optable, verbose=False):
             curref = f'_[{off + 8:08d}]'
         if off in refs:
             curref = f'[{off + 8:08d}]'
-        res = ops.get(stat.name, defop)(stat, stack, bytecode)
+        res = ops.get(stat.name, defop)(stat, stack, bytecode, game)
         if res:
             asts[curref].append(res)
             # print(
@@ -3203,16 +3280,15 @@ if __name__ == '__main__':
             )
             fname = f"{script_dir}/{room.attribs['gid']:04d}_{room_no}.scu"
 
-            optable = get_optable(gameres.game)
             with open(fname, 'w') as f:
                 for elem in get_global_scripts(room):
-                    for line in decompile_script(elem, optable, verbose=args.verbose):
+                    for line in decompile_script(elem, gameres.game, verbose=args.verbose):
                         print(line, file=f)
                     print('', file=f)  # end with new line
                 print(f'room {room_no}', '{', file =f)
                 for elem in get_room_scripts(room):
                     print('', file=f)  # end with new line
-                    for line in decompile_script(elem, optable, verbose=args.verbose):
+                    for line in decompile_script(elem, gameres.game, verbose=args.verbose):
                         print(line if line.endswith(']:') or not line else f'\t{line}', file=f)
                 print('}', file=f)
                 print('', file=f)  # end with new line

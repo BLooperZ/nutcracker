@@ -164,6 +164,26 @@ def sys_msg(stream: IO[bytes]) -> Iterable[ScriptArg]:
 def dmsg_op(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (CString(stream), CString(stream))
 
+def ini_op_v71(stream: IO[bytes]) -> Iterable[ScriptArg]:
+    # HACK: The arguments for o70_writeINI are different depending on
+    # what type of value it is.  If it's a number type (1), then only
+    # the option string follows (as the value is stored in the stack).
+    # But both the option and value string follows if it's a string type (2).
+    #
+    # So what I've done to temporary seek the bytecode stream back and read
+    # the type (as a WORD) and seek back when we are done.
+    #
+    # Very hacky solution, but it works for the most part.
+    stream.seek(-3, 1) # seek -3 from current position
+    type = ord(stream.read(1))
+    stream.seek(2, 1) # seek back to where it was.
+    if type == 1:
+        return (CString(stream),)
+    elif type == 2:
+        return (CString(stream), CString(stream))
+    else:
+        raise ValueError(type)
+
 
 def msg_op_v8(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (CString(stream, var_size=4),)
@@ -359,7 +379,7 @@ OPCODES_he60 = realize({
     0xe0: makeop('o60_soundOps', extended_b_op),
     0xE2: makeop('o60_localizeArrayToScript'),
     0xE9: makeop('o60_seekFilePos'),
-    # TODO: 0xea: makeop('o60_redimArray'),
+    0xEA: makeop('o60_redimArray', extended_bw_op),
     0xEB: makeop('o60_readFilePos'),
     0xEC: None,
     0xED: None,
@@ -371,11 +391,11 @@ OPCODES_he70: OpTable = realize({
     0x84: makeop('o70_pickupObject'),
     0x8C: makeop('o70_getActorRoom'),
     0x9B: makeop('o70_resourceRoutines', extended_b_op),
-    # TODO: 0xae: makeop('o70_systemOps'),
+    0XAE: makeop('o70_systemOps', extended_b_op),
     0xEE: makeop('o70_getStringLen'),
     0xF2: makeop('o70_isResourceLoaded', extended_b_op),
     0xF3: makeop('o70_readINI', msg_op),
-    0xF4: makeop('o70_writeINI', dmsg_op),  # TODO: problem, args depends on stack
+    0xF4: makeop('o70_writeINI', ini_op_v71),
     0xF9: makeop('o70_createDirectory', msg_op),
     0xFA: makeop('o70_setSystemMessage', sys_msg),
 })
