@@ -20,6 +20,7 @@ from nutcracker.sputm.script.opcodes import (
     OPCODES_he70,
     OPCODES_he71,
     OPCODES_he72,
+    OPCODES_he73,
     OPCODES_he80,
     OPCODES_he90,
     OPCODES_v6,
@@ -166,6 +167,8 @@ def get_optable(game: Game) -> OpTable:
         return OPCODES_he90
     if game.he_version >= 80:
         return OPCODES_he80
+    if game.he_version >= 73:
+        return OPCODES_he73
     if game.he_version >= 72:
         return OPCODES_he72
     if game.he_version >= 71:

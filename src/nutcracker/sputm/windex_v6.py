@@ -608,6 +608,18 @@ def o6_stopScript(op, stack, bytecode, game):
 
 
 @regop
+def o72_getHeap(op, stack, bytecode, game):
+    sub = Value(op.args[0], signed=False)
+    if sub.num == 11:
+        stack.append('$ free-space')
+        return
+    if sub.num == 12:
+        stack.append('$ largest-block-size')
+        return
+    return defop(op, stack, bytecode, game)
+
+
+@regop
 def o6_arrayOps(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     arr = get_var(op.args[1])
@@ -918,7 +930,7 @@ def o6_dimArray(op, stack, bytecode, game):
 
 
 @regop
-def o6_dummy(op, stack, byecode):
+def o6_dummy(op, stack, byecode, game):
     return '$ dummy'
 
 
@@ -1319,6 +1331,9 @@ def o6_verbOps(op, stack, bytecode, game):
 @regop
 def o72_verbOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
+    if cmd.num == 125:
+        string = pop_str(stack)
+        return f'\tname {string}\\'
     return o6_verbOps(op, stack, bytecode, game)
 
 
@@ -2199,6 +2214,8 @@ def o70_resourceRoutines(op, stack, bytecode, game):
         return f'unlock-costume {stack.pop()}'
     if cmd.num == 115:
         return f'$ unlock-room {stack.pop()}'
+    if cmd.num == 116:
+        return '$ clear-heap'
     if cmd.num == 117:
         return f'charset {stack.pop()}'
     if cmd.num == 119:
@@ -2225,6 +2242,8 @@ def o70_resourceRoutines(op, stack, bytecode, game):
         return f'$ lock-object {stack.pop()}'
     if cmd.num == 235:
         return f'$ unlock-object {stack.pop()}'
+    if cmd.num == 239:
+        return '$ resource-routine-n239'
     return defop(op, stack, bytecode, game)
 
 
@@ -2306,9 +2325,21 @@ def o6_shuffle(op, stack, bytecode, game):
 @regop
 def o72_getResourceSize(op, stack, bytecode, game):
     res = stack.pop()
+    stack.append(f'$ size-of sfx {res}')
+
+
+@regop
+def o73_getResourceSize(op, stack, bytecode, game):  # o72_getResourceSize
+    res = stack.pop()
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 13:
         stack.append(f'$ size-of sfx {res}')
+        return
+    if cmd.num == 15:
+        stack.append(f'$ size-of image {res}')
+        return
+    if cmd.num == 16:
+        stack.append(f'$ size-of costume {res}')
         return
     return defop(op, stack, bytecode, game)
 
@@ -3150,6 +3181,8 @@ def decompile_script(elem, game, verbose=False):
         gid_str = '' if gid is None else f' {gid}'
         yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
     optable = get_optable(game)
+
+    # print('====================')
     bytecode = descumm(script_data, optable)
     # print_bytecode(bytecode)
 
@@ -3170,7 +3203,6 @@ def decompile_script(elem, game, verbose=False):
     #         del g_vars[key]
     g_vars.clear()
 
-    # print('====================')
     for off, stat in bytecode.items():
         if elem.tag == 'VERB' and off + 8 in entries:
             if off + 8 in entries:

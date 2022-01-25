@@ -426,6 +426,7 @@ OPCODES_he72: OpTable = realize({
     0x4A: None,
     0x4E: None,
     0x50: makeop('o72_resetCutscene'),
+    0x51: makeop('o72_getHeap', extended_b_op),
     0x52: makeop('o72_findObjectWithClassOf'),
     0x54: makeop('o72_getObjectImageX'),
     0x55: makeop('o72_getObjectImageY'),
@@ -442,7 +443,7 @@ OPCODES_he72: OpTable = realize({
     0x97: None,
     0x9C: makeop('o72_roomOps', extended_b_op),
     0x9D: makeop('o72_actorOps', extended_b_op),
-    0x9E: makeop('o72_verbOps', verb_ops_v6),
+    0x9E: makeop('o72_verbOps', extended_b_op),
     # TODO: 0xa0: makeop('o72_findObject'),
     0xA4: makeop('o72_arrayOps', array_ops),
     0xAE: makeop('o72_systemOps', extended_b_op),
@@ -466,13 +467,18 @@ OPCODES_he72: OpTable = realize({
     0xEA: makeop('o72_redimArray', extended_bw_op),
     0xF3: makeop('o72_readINI', extended_b_op),
     0xF4: makeop('o72_writeINI', extended_b_op),
-    0xF8: makeop('o72_getResourceSize', extended_b_op),
+    0xF8: makeop('o72_getResourceSize'),
     0xF9: makeop('o72_createDirectory'),
     0xFA: makeop('o72_setSystemMessage', extended_b_op),
 })
 
-OPCODES_he80: OpTable = realize({
+OPCODES_he73: OpTable = realize({
     **OPCODES_he72,
+    0xF8: makeop('o73_getResourceSize', extended_b_op),
+})
+
+OPCODES_he80: OpTable = realize({
+    **OPCODES_he73,
     0x45: makeop('o80_createSound', extended_b_op),
     0x46: makeop('o80_getFileSize'),
     0x48: makeop('o80_stringToInt'),
