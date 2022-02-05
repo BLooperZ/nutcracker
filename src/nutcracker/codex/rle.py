@@ -151,6 +151,7 @@ def decode_lined_rle(data, width, height, verify=True):
                 print('ENCODED', e)
                 ex = True
         if ex:
+            print('ERROR: ENCODED DATA DOES NOT MATCH ORIGINAL')
             exit(1)
 
         assert encoded == data, (encoded, data)

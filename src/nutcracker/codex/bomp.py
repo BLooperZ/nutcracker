@@ -78,7 +78,7 @@ def compressed_group(buf):
 def raw_group(buf):
     return (2 * (len(buf) - 1), list(buf))
 
-def encode_groups(groups, buf=(), limit=4, carry=True, end_limit=1, seps=False):
+def encode_groups(groups, buf=(), limit=4, carry=True, end_limit=1, seps=None):
     buf = list(buf)
     # print('GROUPS', [tuple(g) for g in groups])
     groups = iter(groups)
@@ -88,7 +88,7 @@ def encode_groups(groups, buf=(), limit=4, carry=True, end_limit=1, seps=False):
             yield compressed_group(buf)
             buf = []
 
-        if seps and buf == [0]:
+        if seps and bytes(buf) == seps:
             yield compressed_group(buf)
             if len(group) <= limit:
                 yield raw_group(group)
@@ -100,7 +100,7 @@ def encode_groups(groups, buf=(), limit=4, carry=True, end_limit=1, seps=False):
 
 
         if len(group) < limit or len(buf) + limit > BUFFER_LIMIT:
-            if seps and set(group) == {0}:
+            if seps and bytes(group) == seps:
                 if buf:
                     yield raw_group(buf)
                 buf = group
@@ -137,11 +137,13 @@ def encode_groups(groups, buf=(), limit=4, carry=True, end_limit=1, seps=False):
     if buf:
         if len(set(buf)) == 1 and len(buf) > end_limit:
             yield compressed_group(buf)
+        elif seps and bytes(buf) == seps:
+            yield compressed_group(buf)
         else:
             yield raw_group(buf)
 
 
-def encode_image(bmap, limit=4, carry=True, end_limit=1, seps=False):
+def encode_image(bmap, limit=4, carry=True, end_limit=1, seps=None):
     buffer = bytearray()
     for line in bmap:
         grouped = [list(group) for c, group in itertools.groupby(line)]
