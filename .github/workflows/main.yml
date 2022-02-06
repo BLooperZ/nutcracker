@@ -28,8 +28,10 @@ jobs:
     - name: Install Poetry
       uses: snok/install-poetry@v1
 
-    - run: poetry install
-    - run: pyinstaller src/nutcracker/runner.py
+    - run: |
+        poetry install
+        poetry shell
+        pyinstaller --onefile -n nutcracker src/nutcracker/runner.py
     # Optionally verify that it works (provided that it does not need user interaction)
     - run: ./dist/nutcracker
     - uses: actions/upload-artifact@v2
