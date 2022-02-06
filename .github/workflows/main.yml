@@ -38,6 +38,9 @@ jobs:
             mv ./dist/nutcracker ./dist/nutcracker-linux
           elif [ "$RUNNER_OS" == "macOS" ]; then
             mv ./dist/nutcracker ./dist/nutcracker-macos
+          else
+            cp README.md ./dist/README.md
+            cp LICENSE ./dist/LICENSE
           fi
       shell: bash
     - uses: actions/upload-artifact@v2

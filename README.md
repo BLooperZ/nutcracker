@@ -181,3 +181,5 @@ Rebuild game resources
 ```
 nutcracker sputm build --ref PATH/TO/GAME.000 GAME
 ```
+
+Source available at https://github.com/blooperz/nutcracker
