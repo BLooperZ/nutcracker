@@ -1,10 +1,11 @@
+import functools
 import io
 import os
 import operator
 from collections import defaultdict, deque, OrderedDict
 from dataclasses import dataclass
 from string import printable
-from typing import Iterable, Iterator, Optional
+from typing import Iterable, Optional
 from nutcracker.kernel.element import Element
 
 from nutcracker.sputm.preset import sputm
@@ -59,7 +60,8 @@ class KeyString:
         self.cast = 'string'
 
     def __repr__(self):
-        return f'"{self.orig.msg.decode()}"'
+        encoding = 'windows-1255'
+        return f'"{self.orig.msg.decode(encoding)}"'
 
 
 class Variable:
@@ -1574,7 +1576,8 @@ def o72_actorOps(op, stack, bytecode, game):
         return f'\tcondition {get_params(stack)}'
     if cmd.num == 24:
         return f'\ttalk-condition {stack.pop()}'
-    # TODO: 43 - priority - 1 pop
+    if cmd.num == 43:
+        return f'\tpriority {stack.pop()}'
     # TODO: 64 - default-clipped - 4 pops
     # TODO: 65 - at - 2 pops
     # TODO: 67 - clipped - 4 pops
@@ -1956,6 +1959,10 @@ def o90_wizImageOps(op, stack, bytecode, game):
         return f'\tbox {left},{top} to {right},{bottom} \\'
     if cmd.num == 246:
         return f'\tpolygon {stack.pop()} \\'
+    if cmd.num == 249:
+        a = stack.pop()
+        b = stack.pop()
+        return f'\tpalette {b} in-slot {a} \\'
     if cmd.num == 255:
         return f'\t(end-wiz)'
     return defop(op, stack, bytecode, game)
@@ -3247,28 +3254,6 @@ def decompile_script(elem, game, verbose=False):
 
 
 
-def get_global_scripts(root: Iterable[Element]) -> Iterator[Element]:
-    for elem in root:
-        if elem.tag in {'LECF', 'LFLF', 'OBCD', *script_map}:
-            if elem.tag in {*script_map}:
-                yield elem
-            else:
-                yield from get_global_scripts(elem.children)
-
-
-def get_room_scripts(root: Iterable[Element]) -> Iterator[Element]:
-    for elem in root:
-        if elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
-            if elem.tag == 'SCRP':
-                assert 'ROOM' not in elem.attribs['path'], elem
-                assert 'RMDA' not in elem.attribs['path'], elem
-                continue
-            elif elem.tag in {*script_map, 'OBCD'}:
-                yield elem
-            else:
-                yield from get_room_scripts(elem.children)
-
-
 obj_names = {}
 
 if __name__ == '__main__':
@@ -3277,6 +3262,7 @@ if __name__ == '__main__':
 
     from nutcracker.sputm.tree import open_game_resource, narrow_schema
     from nutcracker.sputm.schema import SCHEMA
+    from nutcracker.sputm.windex.scu import dump_script_file
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
@@ -3312,15 +3298,10 @@ if __name__ == '__main__':
             )
             fname = f"{script_dir}/{room.attribs['gid']:04d}_{room_no}.scu"
 
+            decompile = functools.partial(
+                decompile_script,
+                game=gameres.game,
+                verbose=args.verbose,
+            )
             with open(fname, 'w') as f:
-                for elem in get_global_scripts(room):
-                    for line in decompile_script(elem, gameres.game, verbose=args.verbose):
-                        print(line, file=f)
-                    print('', file=f)  # end with new line
-                print(f'room {room_no}', '{', file =f)
-                for elem in get_room_scripts(room):
-                    print('', file=f)  # end with new line
-                    for line in decompile_script(elem, gameres.game, verbose=args.verbose):
-                        print(line if line.endswith(']:') or not line else f'\t{line}', file=f)
-                print('}', file=f)
-                print('', file=f)  # end with new line
+                dump_script_file(room_no, room, decompile, f)

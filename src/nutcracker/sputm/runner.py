@@ -20,9 +20,11 @@ from nutcracker.sputm.tree import dump_resources, narrow_schema, open_game_resou
 from nutcracker.utils.fileio import write_file
 from .preset import sputm
 from .room import runner as room_image
+from .windex import runner as script_windex
 
 app = typer.Typer()
 app.add_typer(room_image.app, name='room')
+app.add_typer(script_windex.app, name='script')
 
 # ## RESOURCE
 

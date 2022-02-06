@@ -1,13 +1,16 @@
 import io
+import os
 import json
 import operator
 import itertools
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from string import printable
-from typing import Iterable, Iterator, Optional, OrderedDict
+from typing import Iterable, Optional, OrderedDict
 
 from nutcracker.kernel.element import Element
+
+from nutcracker.sputm.preset import sputm
 from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
 
@@ -1581,29 +1584,6 @@ def print_asts(indent, asts):
             yield f'{indent}{st}'
 
 
-
-def get_global_scripts(root: Iterable[Element]) -> Iterator[Element]:
-    for elem in root:
-        if elem.tag in {'LECF', 'LFLF', 'OBCD', *script_map}:
-            if elem.tag in {*script_map}:
-                yield elem
-            else:
-                yield from get_global_scripts(elem.children)
-
-
-def get_room_scripts(root: Iterable[Element]) -> Iterator[Element]:
-    for elem in root:
-        if elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}:
-            if elem.tag == 'SCRP':
-                assert 'ROOM' not in elem.attribs['path'], elem
-                assert 'RMDA' not in elem.attribs['path'], elem
-                continue
-            elif elem.tag in {*script_map, 'OBCD'}:
-                yield elem
-            else:
-                yield from get_room_scripts(elem.children)
-
-
 def parse_verb_meta(meta):
     with io.BytesIO(meta) as stream:
         while True:
@@ -1684,16 +1664,12 @@ def decompile_script(elem):
     yield '}'
 
 
-
 if __name__ == '__main__':
     import argparse
-    import os
-
-    from nutcracker.utils.libio import suppress_stdout
 
     from nutcracker.sputm.tree import open_game_resource, narrow_schema
     from nutcracker.sputm.schema import SCHEMA
-    from nutcracker.sputm.preset import sputm
+    from nutcracker.sputm.windex.scu import dump_script_file
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')
@@ -1701,16 +1677,15 @@ if __name__ == '__main__':
 
     filename = args.filename
 
-    with suppress_stdout():
-        gameres = open_game_resource(filename)
-        basename = gameres.basename
+    gameres = open_game_resource(filename)
+    basename = gameres.basename
 
-        root = gameres.read_resources(
-            max_depth=5,
-            schema=narrow_schema(
-                SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}
-            ),
-        )
+    root = gameres.read_resources(
+        max_depth=5,
+        schema=narrow_schema(
+            SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}
+        ),
+    )
 
     rnam = gameres.rooms
     print(gameres.game)
@@ -1730,14 +1705,4 @@ if __name__ == '__main__':
             fname = f"{script_dir}/{room.attribs['gid']:04d}_{room_no}.scu"
 
             with open(fname, 'w') as f:
-                for elem in get_global_scripts(room):
-                    for line in decompile_script(elem):
-                        print(line, file=f)
-                    print('', file=f)  # end with new line
-                print(f'room {room_no}', '{', file =f)
-                for elem in get_room_scripts(room):
-                    print('', file=f)  # end with new line
-                    for line in decompile_script(elem):
-                        print(line if line.endswith(']:') or not line else f'\t{line}', file=f)
-                print('}', file=f)
-                print('', file=f)  # end with new line
+                dump_script_file(room_no, room, decompile_script, f)

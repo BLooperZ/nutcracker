@@ -9,7 +9,9 @@ Tools for editing resources in SCUMM games.
 * Extract and Rebuild game resources - v5-v8 + HE
 * Extract and Inject text strings - v5-v8 + HE
 * Extract and Replace background and objects images - v5-v8 + HE (option to extract EGA backgrounds)
-* Decompile V5 Scripts to Windex-like (SCUMM debugger from https://quickandeasysoftware.net/monkey-island-2-talkie-prototype) syntax
+* Decompile game scripts to Windex[*]-like syntax - v5-v8 + HE
+
+[*] SCUMM debugger from https://quickandeasysoftware.net/monkey-island-2-talkie-prototype and HE demos for DOS
 
 ## Resources
 
@@ -137,12 +139,12 @@ nutcracker sputm strings_inject  --textfile strings.txt PATH/TO/GAME.000
 
 ### Decompile game script
 
-Supported games: V5
+Supported games: V5-V8, HE
 
 Decompile game scripts to script file with Windex-like syntax:
 
 ```
-python -m nutcracker.sputm.windex_v5 PATH/TO/GAME.000
+nutcracker sputm script decompile PATH/TO/GAME.000
 ```
 *Replace `PATH/TO/GAME.000` to actual game index file (Usually ends with `.000`, `.LA0` or `.HE0`)
 
