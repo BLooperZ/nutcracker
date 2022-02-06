@@ -22,7 +22,7 @@ keywords = ["scumm", "sputm", "smush", "lucasarts", "humongous"]
 python = "^3.9"
 numpy = "^1.19.1"
 parse = "^1.18.0"
-Pillow = "^8.0.1"
+Pillow = ">=8.0.1,<10.0.0"
 typer = "^0.3.2"
 PyYAML = "^5.4.1"
 deal = "^4.5.0"
