@@ -28,10 +28,19 @@ jobs:
     - name: Install Poetry
       uses: snok/install-poetry@v1
 
-    - run: poetry install
-    - run: pyinstaller src/nutcracker/runner.py
+    - run: |
+        poetry install
+        poetry run pyinstaller --onefile -n nutcracker src/nutcracker/runner.py
     # Optionally verify that it works (provided that it does not need user interaction)
     - run: ./dist/nutcracker
+    - run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            mv ./dist/nutcracker ./dist/nutcracker-linux
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            mv ./dist/nutcracker ./dist/nutcracker-macos
+          fi
+      shell: bash
     - uses: actions/upload-artifact@v2
       with:
+        name: nutcracker
         path: dist/*
