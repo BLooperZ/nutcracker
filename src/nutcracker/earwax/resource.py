@@ -3,8 +3,9 @@ import struct
 from typing import Iterator, Tuple
 
 from nutcracker.chiper import xor
+from nutcracker.kernel.buffer import UnexpectedBufferSize
 from nutcracker.sputm.index import compare_pid_off
-from nutcracker.utils.funcutils import flatten
+from nutcracker.utils.funcutils import flatten, grouper
 
 UINT16LE = struct.Struct('<H')
 
@@ -88,6 +89,8 @@ if __name__ == '__main__':
 
         root = earwax.map_chunks(index)
         rnam, droo, idgens = read_index(root)
+        print(droo)
+
         disks = sorted(set(disk for room_id, (disk, _) in droo.items()))
 
         for disk_id in disks:
@@ -134,31 +137,50 @@ if __name__ == '__main__':
                 earwax.render(t)
 
             for t in earwax.find('LE', root):
+                print(disk_file, t)
                 if t.tag == 'LF':
                     room_id = UINT16LE.unpack(t.data[:2])[0]
                     assert t.attribs['gid'] == room_id
-                    schema = earwax.generate_schema(t.data[2:])
-                    schema['SA'] = set()
-                    r = list(earwax(schema=schema).map_chunks(t.data[2:]))
-                    for a in r:
-                        earwax.render(a)
+                    schema = {
+                        'RO': {'SP', 'HD', 'EX', 'CC', 'OC', 'OI', 'NL', 'BM', 'SL', 'LS', 'BX', 'LC', 'PA', 'SA', 'EN'},
+                        'HD': set(),
+                        'CC': set(),
+                        'SP': set(),
+                        'BX': set(),
+                        'PA': set(),
+                        'SA': set(),
+                        'BM': set(),
+                        'OI': set(),
+                        'NL': set(),
+                        'SL': set(),
+                        'OC': set(),
+                        'EX': set(),
+                        'EN': set(),
+                        'LC': set(),
+                        'LS': set(),
+                        'SO': set(),
+                        'SC': set(),
+                        'CO': set(),
+                    }
+                    # schema = earwax.generate_schema(t.data[2:])
+                    # print(schema)
+                    print('ROOM', room_id)
+                    c = 2
 
-        for room_id, (disk, offset) in droo.items():
-            if room_id in {0, 99}:
-                continue
-            if (disk, offset) == (0, 0):
-                room_file = os.path.join(basedir, room_pattern.format(room=room_id))
-                if os.path.exists(room_file):
-                    res = read_file(room_file, key=int(args.chiper_key, 16))
-
-                    print(room_file)
-                    schema = earwax.generate_schema(res)
-
-                    pprint(schema)
-                    # exit(1)
-
-                    root = list(earwax(schema=schema).map_chunks(res))
-                    for t in root:
-                        earwax.render(t)
-
-                    # exit(1)
+                    room_chunk = next(earwax(schema=schema, max_depth=0).map_chunks(t.data, offset=c), None)
+                    assert room_chunk.tag == 'RO', room_chunk
+                    c += len(bytes(room_chunk.chunk))
+                    earwax.render(room_chunk)
+                    r = earwax(schema=dict(schema, RO=set()), max_depth=0).map_chunks(t.data, offset=c)
+                    try:
+                        for a in r:
+                            earwax.render(a)
+                            assert t.data[c+4:c+6] == a.tag.encode(), (t.data[c+4:c+6], a.tag.encode())
+                            c += len(bytes(a.chunk))
+                    except UnexpectedBufferSize as exc:
+                        print(f'warning: {exc}')
+                    rawd = t.data[c:]
+                    if rawd != b'':
+                        print(len(rawd))
+                        for chnk in grouper(rawd, 100):
+                            print('RAWD', bytes(x for x in chnk if x is not None))

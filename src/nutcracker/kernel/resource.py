@@ -28,10 +28,9 @@ def workaround_x80(cfg: _ChunkSetting, buffer: BufferLike, offset: int = 0) -> i
     header appears as '\\x80DIG' and index indicate they should start 1 byte afterwards.
     since header tag needs to be ASCII, it's low risk.
     """
-    SKIP_BYTE_VALUE = 0x80
-    if buffer[offset] == SKIP_BYTE_VALUE:
+    if cfg.skip_byte is not None and buffer[offset] == cfg.skip_byte:
         getattr(cfg, 'logger', logging).warning(
-            'found \\x80 between chunks, skipping 1 byte...',
+            f'found \\x{cfg.skip_byte:02x} between chunks, skipping 1 byte...',
         )
         return offset + 1
     return offset

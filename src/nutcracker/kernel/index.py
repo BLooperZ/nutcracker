@@ -56,6 +56,7 @@ def map_chunks(
     parent: Optional[Element] = None,
     level: int = 0,
     extra: Optional[Callable[[Optional[Element], Chunk, int], Dict[str, Any]]] = None,
+    offset: int = 0,
 ) -> Iterator[Element]:
     ptag = parent.tag if parent else None
     if cfg.max_depth and level >= cfg.max_depth:
@@ -64,7 +65,7 @@ def map_chunks(
         return
     data = memoryview(data)
     with exception_ptag_context(ptag):
-        for offset, chunk in read_chunks(cfg, data):
+        for offset, chunk in read_chunks(cfg, data, offset=offset):
             check_schema(cfg, ptag, chunk.tag)
 
             elem = create_element(

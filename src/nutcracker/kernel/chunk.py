@@ -89,6 +89,7 @@ class StructuredChunk(ChunkFactory, _StructuredChunkHeader):
     def mktag(self, tag: str, data: bytes) -> bytes:
         return self.pack(ChunkHeader(tag.encode('ascii'), len(data) + self.size)) + data
 
+NULL_TAG = b'_'
 
 @dataclass(frozen=True)
 class SizeFixedChunk(StructuredChunk):
@@ -97,10 +98,10 @@ class SizeFixedChunk(StructuredChunk):
     def unpack_from(self, buffer: BufferLike, offset: int = 0) -> ChunkHeader:
         etag, size = self._struct.unpack_from(buffer, offset)
         if set(etag) == {0} and size == 0:
-            return ChunkHeader(etag, len(buffer) - offset)
+            return ChunkHeader(NULL_TAG, len(buffer) - offset)
         return ChunkHeader(etag, size + self.size_fix)
 
     def pack(self, data: ChunkHeader) -> bytes:
-        if set(data.etag) == {0}:
+        if data.etag == NULL_TAG:
             return self._struct.pack(ChunkHeader(b'', 0))
         return self._struct.pack(ChunkHeader(data.etag, data.size - self.size_fix))

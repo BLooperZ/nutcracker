@@ -29,6 +29,7 @@ class _ChunkSetting(ChunkFactory):
 
     align: int = 2
     chunk: ChunkFactory = IFF_CHUNK_EX
+    skip_byte: Optional[int] = None
 
     def untag(self, buffer: BufferLike, offset: int = 0) -> Chunk:
         """Read chunk from given buffer."""
