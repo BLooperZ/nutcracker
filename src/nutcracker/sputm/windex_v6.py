@@ -2063,7 +2063,7 @@ def o6_isActorInBox(op, stack, bytecode, game):
 
 
 @regop
-def o6_createBoxMatrix(op, stack, bytecide):
+def o6_createBoxMatrix(op, stack, bytecode, game):
     return f'$ create-box-matrix'
 
 
