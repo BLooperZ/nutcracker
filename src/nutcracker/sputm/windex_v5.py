@@ -1550,6 +1550,11 @@ def transform_asts(indent, asts):
             if label in deps:
                 keys = set(deps) - deref
                 skip_deref = False
+                for ex in deps[label]:
+                    if isinstance(ex, (ConditionalJump, UnconditionalJump)):
+                        if adr(ex.ref) == f'&{label}':
+                            skip_deref = True
+                            break
                 for lb in keys:
                     if lb in deleted:
                         continue
