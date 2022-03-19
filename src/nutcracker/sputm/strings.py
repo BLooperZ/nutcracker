@@ -56,6 +56,28 @@ def get_all_scripts(
                 yield from get_all_scripts(elem.children, opcodes, script_map)
 
 
+def parse_verb_meta(meta):
+    with io.BytesIO(meta) as stream:
+        while True:
+            key = stream.read(1)
+            if key in {b'\0'}:  # , b'\xFF'}:
+                break
+            entry = int.from_bytes(
+                stream.read(2), byteorder='little', signed=False
+            )
+            yield key, entry - len(meta)
+        assert stream.read() == b''
+
+
+def compose_verb_meta(entries):
+    meta = bytearray()
+    ln = 3 * len(entries) + 1
+    for key, entry in entries:
+        meta += key + (entry + ln).to_bytes(2, byteorder='little', signed=False)
+    meta += b'\0'
+    return bytes(meta)
+
+
 def update_element_strings(
     root: Iterable[Element],
     strings: Iterator[bytes],
@@ -73,6 +95,12 @@ def update_element_strings(
                 serial, script_data = script_map[elem.tag](elem.data)
                 bc = descumm(script_data, opcodes)
                 updated = update_strings(bc, strings)
+                if elem.tag == 'VERB':
+                    pref = list(parse_verb_meta(serial))
+                    comp = compose_verb_meta(pref)
+                    assert comp == serial, (comp, serial, pref)
+                    entries = [(idx, bc[off - 8].offset + 8) for idx, off in pref]
+                    serial = compose_verb_meta(entries)
                 attribs = elem.attribs
                 elem.data = serial + to_bytes(updated)
                 elem.attribs = attribs
