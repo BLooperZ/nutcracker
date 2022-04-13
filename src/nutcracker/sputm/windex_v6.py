@@ -208,6 +208,14 @@ class ConditionalJump:
         return f'if !( {self.expr} ) jump {adr(self.ref)}'
 
 @dataclass
+class ConditionalNotJump:
+    expr: str
+    ref: RefOffset
+
+    def __str__(self) -> str:
+        return f'if ( {self.expr} ) jump {adr(self.ref)}'
+
+@dataclass
 class UnconditionalJump:
     ref: RefOffset
 
@@ -411,7 +419,6 @@ def o6_wordArrayIndexedWrite(op, stack, bytecode, game):
     return f'{arr}[{base}][{idx}] = {val}'
 
 
-
 @regop
 def o6_dup(op, stack, bytecode, game):  # 0x0C
     val = stack.pop()
@@ -591,7 +598,7 @@ def o6_ifNot(op, stack, bytecode, game):
 def o6_if(op, stack, bytecode, game):
     off, *rest = op.args
     assert not rest
-    return f'if ( {stack.pop()} ) jump {adr(off)}'
+    return ConditionalNotJump(stack.pop(), off)
 
 @regop
 def o6_jump(op, stack, bytecode, game):
@@ -751,6 +758,27 @@ def o72_arrayOps(op, stack, bytecode, game):
 
 
 @regop
+def o100_arrayOps(op, stack, bytecode, game):
+    sub = Value(op.args[0], signed=False)
+    arr = get_var(op.args[1])
+    if sub.num == 77:
+        string = pop_str(stack)
+        arr.cast = 'string'
+        return f'{arr} = {string}'
+    if sub.num == 35: # Formatted string
+        num_params = stack.pop().num + 1
+        params = [stack.pop() for _ in range(num_params)]
+        string = pop_str(stack)
+        arr.cast = 'string'
+        return f'{arr} = {string} {" ".join(str(param) for param in params)}'
+    if sub.num == 129:
+        base = stack.pop()
+        params = get_params(stack)
+        return f'{arr}[{base}] = {params}'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
 def o6_isAnyOf(op, stack, bytecode, game):
     params = get_params(stack)
     var = stack.pop()
@@ -792,8 +820,17 @@ def disabled_windowOps(op, stack, bytecode, game):
 
 
 @regop
-def o6_stopObjectCode(op, stack, bytecode, game):
-    # TODO: this might also return the head of stack, windex: end-script / return L.{}
+def o6_stopObjectCodeReturn(op, stack, bytecode, game):
+    return f'return {stack.pop()}'
+
+
+@regop
+def o6_stopObjectCodeObject(op, stack, bytecode, game):
+    return f'end-object'
+
+
+@regop
+def o6_stopObjectCodeScript(op, stack, bytecode, game):
     return f'end-script'
 
 
@@ -807,19 +844,24 @@ def o70_readINI(op, stack, bytecode, game):
     string = op.args[0]
     if sub.num == 1:
         stack.append(Caster(f'read-ini number {string}', cast='number'))
-    elif sub.num == 2:
+        return
+    if sub.num == 2:
         stack.append(Caster(f'read-ini string {string}', cast='string'))
-    # raise NotImplementedError(op.args)
+        return
+    return defop(op, stack, bytecode, game)
+
 
 @regop
 def o72_readINI(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     string = pop_str(stack)
-    if sub.num == 6:
+    if sub.num in {6, 43}:
         stack.append(Caster(f'read-ini number {string}', cast='number'))
-    elif sub.num == 7:
+        return
+    if sub.num in {7, 77}:
         stack.append(Caster(f'read-ini string {string}', cast='string'))
-    # raise NotImplementedError(op.args)
+        return
+    return defop(op, stack, bytecode, game)
 
 @regop
 def o70_writeINI(op, stack, bytecode, game):
@@ -837,11 +879,11 @@ def o70_writeINI(op, stack, bytecode, game):
 @regop
 def o72_writeINI(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
-    if sub.num == 6:
+    if sub.num in {6, 43}:
         value = stack.pop()
         option = pop_str(stack)
         return f'write-ini {option} {value}'
-    if sub.num == 7:
+    if sub.num in {7, 77}:
         value = pop_str(stack)
         option = pop_str(stack)
         return f'write-ini {option} {value}'
@@ -970,6 +1012,54 @@ def o6_talkActor(op, stack, bytecode, game):
     return f'say-line {act} {msg_val(op.args[0])}'
 
 
+def printer_he100(action, op, stack):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 6:
+        ypos = stack.pop()
+        xpos = stack.pop()
+        return f'\tat {xpos},{ypos} \\'
+    if cmd.num == 20:
+        return f'\tcolor {stack.pop()} \\'
+    if cmd.num == 18:
+        return f'\tclipped {stack.pop()} \\'
+    if cmd.num == 12:
+        return f'\tcenter \\'
+    if cmd.num == 46:
+        return f'\tleft \\'
+    if cmd.num == 56:
+        return f'\toverhead \\'
+    if cmd.num == 51:
+        return f'\tno-talk-animation \\'
+    if cmd.num == 79:  # String
+        string = op.args[1]
+        return f'\t{msg_val(string)}\n'
+    if cmd.num == 35:  # Formatted string
+        string = op.args[1]
+        num_params = stack.pop().num + 1
+        params = [stack.pop() for _ in range(num_params)]
+        return f'\t{msg_val(string)} {" ".join(str(param) for param in params)}\n'
+    if cmd.num == 78:
+        res = stack.pop()
+        return f'\ttalkie {res}'
+    if cmd.num == 21:
+        return f'\tcolors {get_params(stack)} \\'
+    if cmd.num == 91:
+        return f'{action} \\'
+    if cmd.num == 92:
+        return f'\tend'
+    raise ValueError(cmd)
+
+
+@regop
+def o100_printSystem(op, stack, bytecode, game):
+    return printer_he100('print-system', op, stack)
+
+
+@regop
+def o100_printDebug(op, stack, bytecode, game):
+    return printer_he100('print-debug', op, stack)
+
+
 @regop
 def o6_setBlastObjectWindow(op, stack, bytecode, game):
     bottom = stack.pop()
@@ -1075,6 +1165,23 @@ def o72_dimArray(op, stack, bytecode, game):
 
 
 @regop
+def o100_dimArray(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    types = {
+        41: 'bit',
+        44: 'nibble',
+        45: 'byte',
+        42: 'int',
+        43: 'dword',
+        77: 'string',
+    }
+    arr = get_var(op.args[1])
+    if cmd.num == 135:
+        return f'undim {arr}'
+    return f'dim {types[cmd.num]} array {arr}[{stack.pop()}]'
+
+
+@regop
 def o90_dim2dim2Array(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     types = {
@@ -1084,6 +1191,27 @@ def o90_dim2dim2Array(op, stack, bytecode, game):
         5: 'int',
         6: 'dword',
         7: 'string',
+    }
+    arr = get_var(op.args[1])
+    order = stack.pop()  # row / column?
+
+    dim1end = stack.pop()
+    dim1start = stack.pop()
+    dim2end = stack.pop()
+    dim2start = stack.pop()
+    return f'$ dim {types[cmd.num]} array {arr}[{dim1start}..{dim1end}][{dim2start}..{dim2end}] order {order}'
+
+
+@regop
+def o100_dim2dim2Array(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    types = {
+        41: 'bit',
+        44: 'nibble',
+        45: 'byte',
+        42: 'int',
+        43: 'dword',
+        77: 'string',
     }
     arr = get_var(op.args[1])
     order = stack.pop()  # row / column?
@@ -1257,6 +1385,18 @@ def o72_kernelGetFunctions(op, stack, bytecode, game):
 
 
 @regop
+def o90_kernelSetFunctions(op, stack, bytecode, game):
+    params = get_params(stack)
+    return f'kludge {params[0]} {params[1:]}'
+
+
+@regop
+def o90_kernelGetFunctions(op, stack, bytecode, game):
+    params = get_params(stack)
+    stack.append(f'kludge {params[0]} {params[1:]}')
+
+
+@regop
 def o6_getActorFromXY(op, stack, bytecode, game):
     ypos = stack.pop()
     xpos = stack.pop()
@@ -1407,6 +1547,45 @@ def o72_roomOps(op, stack, bytecode, game):
         action = options[stack.pop().num]
         return f'{action}-game {savegame}'
     if cmd.num == 234:
+        a = stack.pop()
+        b = stack.pop()
+        return f'$ palette {b} in-slot {a}'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o100_roomOps(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 139:
+        x2 = stack.pop()
+        x1 = stack.pop()
+        return f'room-scroll is {x1} {x2}'
+    if cmd.num == 138:
+        b = stack.pop()
+        a = stack.pop()
+        return f'set-screen {a} to {b}'
+    if cmd.num == 133:
+        end = stack.pop()
+        start = stack.pop()
+        b = stack.pop()
+        g = stack.pop()
+        r = stack.pop()
+        return f'palette {r} {g} {b} in-slot {start} to {end}'
+    if cmd.num == 132:
+        to_slot = stack.pop()
+        from_slot = stack.pop()
+        value = stack.pop()
+        return f'palette intensity {value} in-slot {from_slot} to {to_slot}'
+    if cmd.num == 131:
+        return f'fades {stack.pop()}'
+    if cmd.num == 134:
+        return f'$ room-color is {stack.pop()}'
+    if cmd.num == 137:
+        options = {1: 'save', 2: 'load'}
+        savegame = pop_str(stack)
+        action = options[stack.pop().num]
+        return f'{action}-game {savegame}'
+    if cmd.num == 135:
         a = stack.pop()
         b = stack.pop()
         return f'$ palette {b} in-slot {a}'
@@ -1613,6 +1792,40 @@ def o80_cursorCommand(op, stack, bytecode, game):
 
 
 @regop
+def o100_cursorCommand(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num in {0x80, 0x81}:
+        return f'$ cursor-wiz-image {stack.pop()}'
+    if cmd.num == 0x82:
+        slot = stack.pop()
+        cur = stack.pop()
+        return f'$ cursor-wiz-image {cur} in-slot {slot}'
+    elif cmd.num == 0x86:
+        return 'cursor on'
+    elif cmd.num == 0x87:
+        return 'cursor off'
+    elif cmd.num == 0x8B:
+        return 'userput on'
+    elif cmd.num == 0x8C:
+        return 'userput off'
+    elif cmd.num == 0x88:
+        return 'cursor soft-on'
+    elif cmd.num == 0x89:
+        return 'cursor soft-off'
+    elif cmd.num == 0x8D:
+        return 'userput soft-on'
+    elif cmd.num == 0x8E:
+        return 'userput soft-off'
+    elif cmd.num == 0x0E:
+        return f'charset {stack.pop()}'
+    elif cmd.num == 0x0F:
+        params = get_params(stack)
+        param_str = ', '.join(str(param) for param in params)
+        return f'charset color {param_str}'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
 def o6_actorOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 76:
@@ -1804,6 +2017,22 @@ def o90_setSpriteInfo(op, stack, bytecode, game):
         return f'\tanimation-var {unk} {value} \\'
     if cmd.num == 217:
         return f'\tnew \\'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o100_setSpriteInfo(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 0:
+        max_sprite_id = stack.pop()
+        sprite_id = stack.pop()
+        return f'$ sprite {sprite_id} of {max_sprite_id} \\'
+    if cmd.num == 40:
+        return f'\timage {stack.pop()} \\'
+    if cmd.num == 53:
+        return f'\tnew \\'
+    if cmd.num == 61:
+        return f'\treset \\'
     return defop(op, stack, bytecode, game)
 
 
@@ -2013,10 +2242,10 @@ def o80_readConfigFile(op, stack, bytecode, game):
     option = pop_str(stack)
     section = pop_str(stack)
     filename = pop_str(stack)
-    if cmd.num == 6:
+    if cmd.num in {6, 43}:
         stack.append(Caster(f'(read-ini {filename} {section} {option})', cast='number'))
         return
-    if cmd.num == 7:
+    if cmd.num in {7, 77}:
         stack.append(Caster(f'(read-ini {filename} {section} {option})', cast='string'))
         return
     return defop(op, stack, bytecode, game)
@@ -2035,13 +2264,13 @@ def o71_compareString(op, stack, bytecode, game):
 @regop
 def o80_writeConfigFile(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
-    if cmd.num == 6:
+    if cmd.num in {6, 43}:
         value = stack.pop()
         option = pop_str(stack)
         section = pop_str(stack)
         filename = pop_str(stack)
         return f'write-ini {filename} {section} {option} {value}'
-    if cmd.num == 7:
+    if cmd.num in {7, 77}:
         value = pop_str(stack)
         option = pop_str(stack)
         section = pop_str(stack)
@@ -2259,6 +2488,23 @@ def o90_getPaletteData(op, stack, bytecode, game):
 
 
 @regop
+def o100_getPaletteData(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 73:
+        component = stack.pop()
+        color = stack.pop()
+        slot = stack.pop()
+        stack.append(f'$ from-slot {slot} color {color} component {component}')
+        return
+    if cmd.num == 20:
+        color = stack.pop()
+        slot = stack.pop()
+        stack.append(f'$ from-slot {slot} color {color}')
+        return
+    return defop(op, stack, bytecode, game)
+
+
+@regop
 def o90_paletteOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 57:
@@ -2286,6 +2532,22 @@ def o90_paletteOps(op, stack, bytecode, game):
     if cmd.num == 217:
         return f'\trestore \\'
     if cmd.num == 255:
+        return f'\t(end)'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o100_paletteOps(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 0:
+        palette = stack.pop()
+        return f'$ palette {palette} \\'
+    if cmd.num == 81:
+        color = stack.pop()
+        end = stack.pop()
+        start = stack.pop()
+        return f'\tset-color {start} to {end} value {color} \\'
+    if cmd.num == 92:
         return f'\t(end)'
     return defop(op, stack, bytecode, game)
 
@@ -2402,6 +2664,16 @@ def o6_systemOps(op, stack, bytecode, game):
 
 
 @regop
+def o100_systemOps(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 132:
+        return 'exit-prompt'
+    if cmd.num == 133:
+        return 'quit'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
 def o6_saveRestoreVerbs(op, stack, bytecode, game):
     setval = stack.pop()
     end = stack.pop()
@@ -2460,6 +2732,15 @@ def o72_setSystemMessage(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     string = pop_str(stack)
     if sub.num == 243:
+        return f'$ window-title {string}'
+    # raise NotImplementedError(op.args)
+
+
+@regop
+def o100_setSystemMessage(op, stack, bytecode, game):
+    sub = Value(op.args[0], signed=False)
+    string = pop_str(stack)
+    if sub.num == 80:
         return f'$ window-title {string}'
     # raise NotImplementedError(op.args)
 
@@ -2573,6 +2854,18 @@ def o70_resourceRoutines(op, stack, bytecode, game):
         return f'$ unlock-object {stack.pop()}'
     if cmd.num == 239:
         return '$ resource-routine-n239'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o100_resourceRoutines(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 40:
+        return f'$ image {stack.pop()} \\'
+    if cmd.num == 72:
+        return f'$ sound {stack.pop()} \\'
+    if cmd.num == 133:
+        return f'\tnuke'
     return defop(op, stack, bytecode, game)
 
 
@@ -2909,7 +3202,7 @@ def o90_startScriptUnk(op, stack, bytecode, game):
     cycle = stack.pop()
     scr = stack.pop()
     flags = Value(op.args[0], signed=False)
-    stack.append(f'@@{scr}[{flags}]{{{cycle}}}{param_str}')
+    return f'@@{scr}[{flags}]{{{cycle}}}{param_str}'
 
 
 @regop
@@ -2921,7 +3214,18 @@ def o90_jumpToScriptUnk(op, stack, bytecode, game):
     cycle = stack.pop()
     scr = stack.pop()
     flags = Value(op.args[0], signed=False)
-    stack.append(f'@@!{scr}[{flags}]{{{cycle}}}{param_str}')
+    return f'@@!{scr}[{flags}]{{{cycle}}}{param_str}'
+
+
+@regop
+def o100_startScript(op, stack, bytecode, game):
+    params = get_params(stack)
+    param_str = ", ".join(str(param) for param in params)
+    if param_str:
+        param_str = f' ( {param_str} )'
+    scr = stack.pop()
+    flags = Value(op.args[0], signed=False)
+    return f'start-script {scr}[{flags}]{param_str}'
 
 
 @regop
@@ -2956,6 +3260,18 @@ def o72_getArrayDimSize(op, stack, bytecode, game):
         return
     if sub.num == 2:
         stack.append(f'$ array-dimension-index {arr}')
+        return
+    if sub.num == 4:
+        stack.append(f'$ array-start-base {arr}')
+        return
+    if sub.num == 5:
+        stack.append(f'$ array-end-base {arr}')
+        return
+    if sub.num == 6:
+        stack.append(f'$ array-start-index {arr}')
+        return
+    if sub.num == 7:
+        stack.append(f'$ array-end-index {arr}')
         return
     return defop(op, stack, bytecode, game)
 
@@ -3356,6 +3672,10 @@ def transform_asts(indent, asts):
                         if [str(st) for st in asts[label]] == ['break-here'] and isinstance(ex, ConditionalJump):
                             asts[label].clear()
                             asts[label].append(f'break-until ({ex.expr})')
+                        # elif len(asts[label]) == 2 and isinstance(asts[label][0], ConditionalNotJump) and asts[label][1] == 'break-here':
+                        #     expr = asts[label][0].expr
+                        #     asts[label].clear()
+                        #     asts[label].append(f'break-while !({expr})')
                         else:
                             stats = [f'\t{st}' for st in asts[label]]
                             asts[label].clear()
@@ -3365,7 +3685,6 @@ def transform_asts(indent, asts):
                                 asts[label].append('}')
                             elif isinstance(ex, ConditionalJump):
                                 asts[label].append(f'}} until ({ex.expr})')
-                                
                             else:
                                 raise ValueError()
                         deps[label] = list(falls)
