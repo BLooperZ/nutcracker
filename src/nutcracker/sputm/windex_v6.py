@@ -320,7 +320,7 @@ def o72_startObject(op, stack, bytecode, game):
 @regop
 def o6_pushByte(op, stack, bytecode, game):  # 0x00
     assert len(op.args) == 1 and isinstance(op.args[0], ByteValue), op.args
-    stack.append(Value(op.args[0])) 
+    stack.append(Value(op.args[0], signed=False)) 
 
 
 @regop
