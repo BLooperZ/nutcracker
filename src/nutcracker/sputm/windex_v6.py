@@ -633,6 +633,7 @@ def o6_startScript(op, stack, bytecode, game):
     rec = ' rec' if flags.num & 2 else ''
     return f'start-script{bak}{rec} {scr}{param_str}'
 
+
 @regop
 def o6_jumpToScript(op, stack, bytecode, game):
     params = get_params(stack)
@@ -775,6 +776,14 @@ def o100_arrayOps(op, stack, bytecode, game):
         base = stack.pop()
         params = get_params(stack)
         return f'{arr}[{base}] = {params}'
+    if sub.num == 133:
+        b = stack.pop()
+        c = stack.pop()
+        dim1end = stack.pop()
+        dim1start = stack.pop()
+        dim2end = stack.pop()
+        dim2start = stack.pop()
+        return f'$range {arr}[{dim2start}..{dim2end}][{dim1start}..{dim1end}] = {c}..{b}'
     return defop(op, stack, bytecode, game)
 
 
@@ -1221,6 +1230,22 @@ def o100_dim2dim2Array(op, stack, bytecode, game):
     dim2end = stack.pop()
     dim2start = stack.pop()
     return f'$ dim {types[cmd.num]} array {arr}[{dim1start}..{dim1end}][{dim2start}..{dim2end}] order {order}'
+
+
+@regop
+def o100_dim2dimArray(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    types = {
+        41: 'bit',
+        44: 'nibble',
+        45: 'byte',
+        42: 'int',
+        43: 'dword',
+        77: 'string',
+    }
+    arr = get_var(op.args[1])
+    dim2, dim1 =  stack.pop(), stack.pop()
+    return f'dim {types[cmd.num]} array {arr}[{dim1}][{dim2}]'
 
 
 @regop
@@ -2002,7 +2027,7 @@ def o90_setSpriteInfo(op, stack, bytecode, game):
         return f'\tspecial-draw {flags} \\'
     if cmd.num == 124:
         flags = stack.pop()
-        return f'\tflags {flags} \\'
+        return f'\tupdate {flags} \\'
     if cmd.num == 125:
         params = get_params(stack)
         return f'\tclass is {params} \\'
@@ -2027,12 +2052,50 @@ def o100_setSpriteInfo(op, stack, bytecode, game):
         max_sprite_id = stack.pop()
         sprite_id = stack.pop()
         return f'$ sprite {sprite_id} of {max_sprite_id} \\'
+    if cmd.num == 3:
+        flags = stack.pop()
+        return f'\tanimation {flags} \\'
+    if cmd.num == 4:
+        speed = stack.pop()
+        return f'\tanimation-speed {speed} \\'
+    if cmd.num == 6:
+        ypos = stack.pop()
+        xpos = stack.pop()
+        return f'\tat {xpos},{ypos}'
+    if cmd.num == 16:
+        params = get_params(stack)
+        return f'\tclass is {params} \\'
+    if cmd.num == 32:
+        return f'\terase {stack.pop()} \\'
+    if cmd.num == 38:
+        return f'\tgroup {stack.pop()}'
     if cmd.num == 40:
         return f'\timage {stack.pop()} \\'
+    if cmd.num == 49:
+        ypos = stack.pop()
+        xpos = stack.pop()
+        return f'\tmove {xpos},{ypos}'
     if cmd.num == 53:
         return f'\tnew \\'
+    if cmd.num == 54:
+        ptype = stack.pop()
+        value = stack.pop()
+        return f'\tset-property {value} in {ptype} \\'
+    if cmd.num == 57:
+        palette = stack.pop()
+        return f'\tpalette {palette} \\'
+    if cmd.num == 59:
+        return f'\tpriority {stack.pop()}'
+    if cmd.num == 60:
+        value = stack.pop()
+        flag = stack.pop()
+        return f'\tflag {flag} {value} \\'
     if cmd.num == 61:
         return f'\treset \\'
+    if cmd.num == 73:
+        return f'$ state {stack.pop()} \\'
+    if cmd.num == 82:
+        return f'\tupdate {stack.pop()} \\'
     return defop(op, stack, bytecode, game)
 
 
@@ -2088,6 +2151,10 @@ def o90_getSpriteInfo(op, stack, bytecode, game):
         sprite = stack.pop()
         stack.append(f'$ sprite-state {sprite}')
         return
+    if sub.num == 63:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-image {sprite}')
+        return
     if sub.num == 86:
         sprite = stack.pop()
         stack.append(f'$ sprite-palette {sprite}')
@@ -2110,6 +2177,44 @@ def o90_getSpriteInfo(op, stack, bytecode, game):
         unk = stack.pop()
         sprite = stack.pop()
         stack.append(f'$ sprite-animation-var {sprite} {unk}')
+        return
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o100_getSpriteInfo(op, stack, bytecode, game):
+    sub = Value(op.args[0], signed=False)
+    if sub.num == 26:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-num-states {sprite}')
+        return
+    if sub.num == 30:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-display-x {sprite}')
+        return
+    if sub.num == 31:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-display-y {sprite}')
+        return
+    if sub.num == 40:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-image {sprite}')
+        return
+    if sub.num == 59:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-priority {sprite}')
+        return
+    if sub.num == 73:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-state {sprite}')
+        return
+    if sub.num == 85:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-x {sprite}')
+        return
+    if sub.num == 86:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-y {sprite}')
         return
     return defop(op, stack, bytecode, game)
 
@@ -2139,16 +2244,42 @@ def o90_setSpriteGroupInfo(op, stack, bytecode, game):
 
 
 @regop
+def o100_setSpriteGroupInfo(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 6:
+        dy = stack.pop()
+        dx = stack.pop()
+        return f'\tmove {dx},{dy}'
+    if cmd.num == 0:
+        return f'$ sprite-group {stack.pop()} \\'
+    if cmd.num == 49:
+        ypos = stack.pop()
+        xpos = stack.pop()
+        return f'\tat {xpos},{ypos}'
+    if cmd.num == 18:
+        bottom = stack.pop()
+        right = stack.pop()
+        top = stack.pop()
+        left = stack.pop()
+        return f'\tbox {left},{top} to {right},{bottom}'
+    if cmd.num == 53:
+        return f'\tnew'
+    if cmd.num == 59:
+        return f'\tpriority {stack.pop()} \\'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
 def o90_getDistanceBetweenPoints(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
-    if cmd.num == 28:
+    if cmd.num in {23, 28}:
         y2 = stack.pop()
         x2 = stack.pop()
         y1 = stack.pop()
         x1 = stack.pop()
         stack.append(f'$ distance-2d {x1},{y1} to {x2},{y2}')
         return
-    if cmd.num == 29:
+    if cmd.num in {24, 29}:
         z2 = stack.pop()
         y2 = stack.pop()
         x2 = stack.pop()
@@ -2158,6 +2289,14 @@ def o90_getDistanceBetweenPoints(op, stack, bytecode, game):
         stack.append(f'$ distance-3d {x1},{y1},{z1} to {x2},{y2},{z2}')
         return
     return defop(op, stack, bytecode, game)
+
+
+@regop
+def o90_getPolygonOverlap(op, stack, bytecode, game):
+    poly2 = get_params(stack)
+    poly1 = get_params(stack)
+    action = stack.pop()
+    stack.append(f'$ polygon-overlap {action} {poly1} {poly2}')
 
 
 @regop
@@ -2471,6 +2610,65 @@ def o90_wizImageOps(op, stack, bytecode, game):
 
 
 @regop
+def o100_wizImageOps(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 0:
+        res = stack.pop()
+        return f'$ load-wiz-image {res} \\'
+    if cmd.num in {6, 132}:
+        y1 = stack.pop()
+        x1 = stack.pop()
+        if isinstance(x1, str):
+            x1 = f'({x1})'
+        if isinstance(y1, str):
+            y1 = f'({y1})'
+        return f'\tat {x1},{y1} \\'
+    if cmd.num == 11:
+        bottom = stack.pop()
+        right = stack.pop()
+        top = stack.pop()
+        left = stack.pop()
+        comp = stack.pop()
+        return f'\tcompressed-box {comp} {left},{top} to {right},{bottom} \\'
+    if cmd.num == 18:
+        bottom = stack.pop()
+        right = stack.pop()
+        top = stack.pop()
+        left = stack.pop()
+        return f'\tbox {left},{top} to {right},{bottom} \\'
+    if cmd.num == 21:
+        a = stack.pop()
+        b = stack.pop()
+        return f'\tpalette {b} in-slot {a} \\'
+    if cmd.num == 29:
+        return f'\tmode 1 \\'
+    if cmd.num == 39:
+        height = stack.pop()
+        return f'\theight {height} \\'
+    if cmd.num == 47:
+        string = pop_str(stack)
+        return f'\tfrom-file {string} \\'
+    if cmd.num == 53:
+        return '\tempty \\'
+    if cmd.num == 55:
+        flags = stack.pop()
+        state = stack.pop()
+        x1 = stack.pop()
+        y1 = stack.pop()
+        res = stack.pop()
+        return f'$ draw-wiz-image {res} state {state} at {x1},{y1} flags {flags}'
+    if cmd.num == 57:
+        palette = stack.pop()
+        return f'\tpalette {palette} \\'
+    if cmd.num == 92:
+        return f'\t(end-wiz)'
+    if cmd.num == 135:
+        res = stack.pop()
+        return f'\tresource {res} \\'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
 def o90_getPaletteData(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 66:
@@ -2530,7 +2728,7 @@ def o90_paletteOps(op, stack, bytecode, game):
         palette = stack.pop()
         return f'\tcopy-from {palette} \\'
     if cmd.num == 217:
-        return f'\trestore \\'
+        return f'\treset \\'
     if cmd.num == 255:
         return f'\t(end)'
     return defop(op, stack, bytecode, game)
@@ -2547,6 +2745,8 @@ def o100_paletteOps(op, stack, bytecode, game):
         end = stack.pop()
         start = stack.pop()
         return f'\tset-color {start} to {end} value {color} \\'
+    if cmd.num == 53:
+        return f'\treset \\'
     if cmd.num == 92:
         return f'\t(end)'
     return defop(op, stack, bytecode, game)
@@ -3206,6 +3406,18 @@ def o90_startScriptUnk(op, stack, bytecode, game):
 
 
 @regop
+def o100_startScriptUnk(op, stack, bytecode, game):
+    params = get_params(stack)
+    param_str = ", ".join(str(param) for param in params)
+    if param_str:
+        param_str = f' ( {param_str} )'
+    cycle = stack.pop()
+    scr = stack.pop()
+    flags = Value(op.args[0], signed=False)
+    return f'@@{scr}[{flags}]{{{cycle}}}{param_str}'
+
+
+@regop
 def o90_jumpToScriptUnk(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = ", ".join(str(param) for param in params)
@@ -3225,7 +3437,9 @@ def o100_startScript(op, stack, bytecode, game):
         param_str = f' ( {param_str} )'
     scr = stack.pop()
     flags = Value(op.args[0], signed=False)
-    return f'start-script {scr}[{flags}]{param_str}'
+    bak = ' bak' if flags.num in {128, 129} else ''
+    rec = ' rec' if flags.num in {129, 130} else ''
+    return f'start-script{bak}{rec} {scr}{param_str}'
 
 
 @regop
@@ -3507,6 +3721,50 @@ def o90_getWizData(op, stack, bytecode, game):
         stack.append(f'$ wiz-image-pixel-color {res} {state} at {x},{y} is transparent')
         return
     if cmd.num == 66:
+        y = stack.pop()
+        x = stack.pop()
+        state = stack.pop()
+        res = stack.pop()
+        stack.append(f'$ wiz-image-pixel-color {res} {state} at {x},{y}')
+        return
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o100_getWizData(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 85:
+        state = stack.pop()
+        res = stack.pop()
+        stack.append(f'$ wiz-image-x {res} {state}')
+        return
+    if cmd.num == 86:
+        state = stack.pop()
+        res = stack.pop()
+        stack.append(f'$ wiz-image-y {res} {state}')
+        return
+    if cmd.num == 84:
+        state = stack.pop()
+        res = stack.pop()
+        stack.append(f'$ wiz-image-width {res} {state}')
+        return
+    if cmd.num == 39:
+        state = stack.pop()
+        res = stack.pop()
+        stack.append(f'$ wiz-image-height {res} {state}')
+        return
+    if cmd.num == 26:
+        res = stack.pop()
+        stack.append(f'$ wiz-image-num-states {res}')
+        return
+    if cmd.num == 33:
+        y = stack.pop()
+        x = stack.pop()
+        state = stack.pop()
+        res = stack.pop()
+        stack.append(f'$ wiz-image-pixel-color {res} {state} at {x},{y} is transparent')
+        return
+    if cmd.num == 20:
         y = stack.pop()
         x = stack.pop()
         state = stack.pop()
