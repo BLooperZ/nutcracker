@@ -84,6 +84,21 @@ class Variable:
     def __repr__(self):
 
         pref = 'V'  # Global Variable
+        if isinstance(self.orig, DWordValue):
+            if not self.num & 0xF0000000:
+                assert self.num & 0xFFFFFFF == self.num, self.num
+                if self.num in self.names:
+                    return self.names[self.num]
+            elif self.num & 0x80000000:
+                pref = 'R'  # Room Variable
+                # TODO: or bit varoable on < he80, B
+            else:
+                assert self.num & 0x40000000, self.num
+                pref = 'L'  # Local Variable
+            num = self.num & 0xFFFFFFF
+            return f'{pref}.{num}'  # [{self.cast}]'
+
+        assert isinstance(self.orig, WordValue), self.orig
         if not self.num & 0xF000:
             assert self.num & 0xFFF == self.num, self.num
             if self.num in self.names:
@@ -325,7 +340,7 @@ def o6_pushByte(op, stack, bytecode, game):  # 0x00
 
 @regop
 def o6_pushWord(op, stack, bytecode, game):  # 0x01
-    assert len(op.args) == 1 and isinstance(op.args[0], WordValue), op.args
+    assert len(op.args) == 1 and isinstance(op.args[0], (WordValue, DWordValue)), op.args
     stack.append(Value(op.args[0])) 
 
 
@@ -361,9 +376,12 @@ def o6_setBoxSet(op, stack, bytecode, game):
 def o6_loadRoomWithEgo(op, stack, bytecode, game):
     ypos = stack.pop()
     xpos = stack.pop()
-    room = stack.pop()
+    if game.version < 7:
+        room = stack.pop()
+        obj = stack.pop()
+        return f'come-out-door {obj} in-room {room} walk {xpos},{ypos}'
     obj = stack.pop()
-    return f'come-out-door {obj} in-room {room} walk {xpos},{ypos}'
+    return f'come-out-door {obj} walk {xpos},{ypos}'
 
 
 @regop
@@ -374,7 +392,7 @@ def o6_pushByteVar(op, stack, bytecode, game):  # 0x02
 
 @regop
 def o6_pushWordVar(op, stack, bytecode, game):  # 0x03
-    assert len(op.args) == 1 and isinstance(op.args[0], WordValue), op.args
+    assert len(op.args) == 1 and isinstance(op.args[0], (WordValue, DWordValue)), op.args
     stack.append(get_var(op.args[0]))
 
 
@@ -528,6 +546,11 @@ def o6_div(op, stack, bytecode, game):
 
 
 @regop
+def o8_mod(op, stack, bytecode, game):
+    second, first = stack.pop(), stack.pop()
+    stack.append(BinExpr('%', first, second))
+
+@regop
 def o90_mod(op, stack, bytecode, game):
     second, first = stack.pop(), stack.pop()
     stack.append(BinExpr('%', first, second))
@@ -609,7 +632,7 @@ def o6_jump(op, stack, bytecode, game):
 
 @regop
 def o6_writeWordVar(op, stack, bytecode, game):
-    assert len(op.args) == 1 and isinstance(op.args[0], WordValue), op.args
+    assert len(op.args) == 1 and isinstance(op.args[0], (WordValue, DWordValue)), op.args
     value = stack.pop()
     var = get_var(op.args[0])
     var.cast = getattr(value, 'cast', None)
@@ -698,6 +721,28 @@ def o6_arrayOps(op, stack, bytecode, game):
         param_str = f'{", ".join(str(param) for param in params)}'
         return f'{arr}[{base}] = {param_str}' 
     if sub.num == 212:
+        col = stack.pop()
+        params = get_params(stack)
+        param_str = f'{", ".join(str(param) for param in params)}'
+        base = stack.pop()
+        return f'{arr}[{base}][{col}] = {param_str}' 
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o8_arrayOps(op, stack, bytecode, game):
+    sub = Value(op.args[0], signed=False)
+    arr = get_var(op.args[1])
+    if sub.num == 20:
+        base = stack.pop()
+        base_str = '' if base.num == 0 else f'$${base}'
+        return f'{arr}[{base_str}] = {msg_val(op.args[2])}' 
+    if sub.num == 21:
+        base = stack.pop()
+        params = get_params(stack)
+        param_str = f'{", ".join(str(param) for param in params)}'
+        return f'{arr}[{base}] = {param_str}' 
+    if sub.num == 22:
         col = stack.pop()
         params = get_params(stack)
         param_str = f'{", ".join(str(param) for param in params)}'
@@ -920,6 +965,12 @@ def o72_debugInput(op, stack, bytecode, game):
 
 
 @regop
+def o8_debug(op, stack, bytecode, game):
+    level = stack.pop()
+    return f'debug {level}'
+
+
+@regop
 def o80_getFileSize(op, stack, bytecode, game):
     string = pop_str(stack)
     stack.append(f'$ file-size {string}')
@@ -969,9 +1020,78 @@ def printer(action, op, stack):
     raise ValueError(cmd)
 
 
+def printer_v8(action, op, stack):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 200:
+        return f'{action} \\'
+    if cmd.num == 201:
+        return f'\tend'
+    if cmd.num == 202:
+        ypos = stack.pop()
+        xpos = stack.pop()
+        return f'\tat {xpos},{ypos} \\'
+    if cmd.num == 203:
+        return f'\tcolor {stack.pop()} \\'
+    if cmd.num == 204:
+        return f'\tcenter \\'
+    if cmd.num == 205:
+        return f'\tcharset {stack.pop()} \\'
+    if cmd.num == 206:
+        return f'\tleft \\'
+    if cmd.num == 207:
+        return f'\toverhead \\'
+    if cmd.num == 208:  # String
+        return f'\tno-talk-animation \\'
+    if cmd.num == 209:  # String
+        string = op.args[1]
+        return f'\t{msg_val(string)}\n'
+    if cmd.num == 210:
+        return f'\twrap \\'
+    raise ValueError(cmd)
+
+
+@regop
+def o8_printDebug(op, stack, bytecode, game):
+    return printer_v8('print-debug', op, stack)
+
+
+@regop
+def o8_printText(op, stack, bytecode, game):
+    return printer_v8('print-text', op, stack)
+
+
+@regop
+def o8_blastText(op, stack, bytecode, game):
+    return printer_v8('blast-text', op, stack)
+
+
+@regop
+def o8_printLine(op, stack, bytecode, game):
+    return printer_v8('print-line', op, stack)
+
+
+@regop
+def o8_printSystem(op, stack, bytecode, game):
+    return printer_v8('print-system', op, stack)
+
+
+@regop
+def o8_printEgo(op, stack, bytecode, game):
+    # with io.BytesIO(b'\x09\x00') as stream:
+    #     stack.append(get_var(WordValue(stream)))
+    return printer_v8('say-line', op, stack)
+
+
+@regop
+def o8_printActor(op, stack, bytecode, game):
+    return printer_v8('say-line', op, stack)
+
+
+
 @regop
 def o6_printDebug(op, stack, bytecode, game):
     return printer('print-debug', op, stack)
+
 
 @regop
 def o6_printText(op, stack, bytecode, game):
@@ -1017,6 +1137,12 @@ def o6_talkEgo(op, stack, bytecode, game):
 
 @regop
 def o6_talkActor(op, stack, bytecode, game):
+    act = stack.pop()
+    return f'say-line {act} {msg_val(op.args[0])}'
+
+
+@regop
+def o8_talkActor(op, stack, bytecode, game):
     act = stack.pop()
     return f'say-line {act} {msg_val(op.args[0])}'
 
@@ -1087,6 +1213,12 @@ def o71_getStringWidth(op, stack, bytecode, game):
 
 
 @regop
+def o8_getStringWidth(op, stack, bytecode, game):
+    charset = stack.pop()
+    stack.append(f'string-width charset {charset} {msg_val(op.args[0])}')
+
+
+@regop
 def o71_getStringLenForWidth(op, stack, bytecode, game):
     ln = stack.pop()
     pos = stack.pop()
@@ -1137,6 +1269,19 @@ def o6_dimArray(op, stack, bytecode, game):
 
 
 @regop
+def o8_dimArray(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    types = {
+        10: 'int',
+        11: 'string',
+    }
+    arr = get_var(op.args[1])
+    if cmd.num == 12:
+        return f'undim {arr}'
+    return f'dim {types[cmd.num]} array {arr}[{stack.pop()}]'
+
+
+@regop
 def o6_dummy(op, stack, byecode, game):
     return '$ dummy'
 
@@ -1155,6 +1300,19 @@ def o6_dim2dimArray(op, stack, bytecode, game):
     dim2, dim1 =  stack.pop(), stack.pop()
     return f'dim {types[cmd.num]} array {arr}[{dim1}][{dim2}]'
 
+
+@regop
+def o8_dim2dimArray(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    types = {
+        10: 'int',
+        11: 'string',
+    }
+    arr = get_var(op.args[1])
+    if cmd.num == 12:
+        return f'undim {arr}'
+    dim2, dim1 =  stack.pop(), stack.pop()
+    return f'dim {types[cmd.num]} array {arr}[{dim1}][{dim2}]'
 
 @regop
 def o72_dimArray(op, stack, bytecode, game):
@@ -1290,6 +1448,14 @@ def o6_doSentence(op, stack, bytecode, game):
 
 
 @regop
+def o8_doSentence(op, stack, bytecode, game):
+    obj_b = stack.pop()
+    obj_a = stack.pop()
+    verb = stack.pop()
+    return f'do-sentence {verb} {obj_a} with {obj_b}'
+
+
+@regop
 def o6_soundKludge(op, stack, bytecode, game):
     params = get_params(stack)
     param_str = " ".join(str(param) for param in params)
@@ -1367,7 +1533,19 @@ def o6_kernelSetFunctions(op, stack, bytecode, game):
 
 
 @regop
+def o8_kernelSetFunctions(op, stack, bytecode, game):
+    params = get_params(stack)
+    return f'kludge {params[0]} {params[1:]}'
+
+
+@regop
 def o6_kernelGetFunctions(op, stack, bytecode, game):
+    params = get_params(stack)
+    stack.append(f'kludge {params[0]} {params[1:]}')
+
+
+@regop
+def o8_kernelGetFunctions(op, stack, bytecode, game):
     params = get_params(stack)
     stack.append(f'kludge {params[0]} {params[1:]}')
 
@@ -1539,6 +1717,40 @@ def o60_roomOps(op, stack, bytecode, game):
 
 
 @regop
+def o8_roomOps(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 82:
+        slot = stack.pop()
+        blue = stack.pop()
+        green = stack.pop()
+        red = stack.pop()
+        return f'palette {red} {green} {blue} in-slot {slot}'
+    if cmd.num == 87:
+        return f'fades {stack.pop()}'
+    if cmd.num == 88:
+        to_slot = stack.pop()
+        from_slot = stack.pop()
+        blue = stack.pop()
+        green = stack.pop()
+        red = stack.pop()
+        return f'palette intensity {red},{green},{blue} in-slot {from_slot} to {to_slot}'
+    if cmd.num == 89:
+       steps = stack.pop()
+       to_slot = stack.pop()
+       from_slot = stack.pop()
+       number = stack.pop()
+       return f'palette transform {number} in-slot {from_slot} to {to_slot} steps {steps}'
+    if cmd.num == 92:
+        # windex show empty string here
+        return f'$ room-color is {stack.pop()}'
+    if cmd.num == 93:
+        return f'$ quick-save-game'
+    if cmd.num == 94:
+        return f'$ quick-load-game'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
 def o72_roomOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 172:
@@ -1677,15 +1889,62 @@ def o72_verbOps(op, stack, bytecode, game):
 
 
 @regop
+def o8_verbOps(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 150:
+        verb = stack.pop()
+        return f'verb {verb} \\'
+    if cmd.num == 151:
+        return '\tnew \\'
+    if cmd.num == 152:
+        return '\tdelete \\'
+    if cmd.num == 153:
+        return f'\tname {msg_val(op.args[1])} \\'
+    if cmd.num == 154:
+        ypos = stack.pop()
+        xpos = stack.pop()
+        return f'\tat {xpos},{ypos} \\'
+    if cmd.num == 155:
+        return '\ton \\'
+    if cmd.num == 156:
+        return '\toff \\'
+    if cmd.num == 157:
+        color = stack.pop()
+        return f'\tcolor {color} \\'
+    if cmd.num == 158:
+        color = stack.pop()
+        return f'\thicolor {color} \\'
+    if cmd.num == 160:
+        color = stack.pop()
+        return f'\tdimcolor {color} \\'
+    if cmd.num == 161:
+        return '\tdim \\'
+    if cmd.num == 162:
+        return f'\tkey {stack.pop()} \\'
+    if cmd.num == 163:
+        room =stack.pop()
+        im = stack.pop()
+        return f'\timage {im} in-room {room} \\'
+    if cmd.num == 165:
+        return '\tcenter \\'
+    if cmd.num == 167:
+        return f'\tspacing {stack.pop()} \\'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
 def o6_actorFollowCamera(op, stack, bytecode, game):
     return f'camera-follow {stack.pop()}'
 
 
 @regop
 def o6_pickupObject(op, stack, bytecode, game):
-    room = stack.pop()
+    if game.version < 7:
+        room = stack.pop()
+        obj = stack.pop()
+        return f'pick-up-object {obj} in-room {room}'
     obj = stack.pop()
-    return f'pick-up-object {obj} in-room {room}'
+    return f'pick-up-object {obj}'
 
 
 @regop
@@ -1777,6 +2036,50 @@ def o6_cursorCommand(op, stack, bytecode, game):
         # This command sets transparent colors in the cursor.
         # It can be called multiple times for multiple transparent colors.
         return f'cursor transparent {stack.pop()}'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o8_cursorCommand(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 0xDC:
+        return 'cursor on'
+    elif cmd.num == 0xDD:
+        return 'cursor off'
+    elif cmd.num == 0xDE:
+        return 'cursor soft-on'
+    elif cmd.num == 0xDF:
+        return 'cursor soft-off'
+    elif cmd.num == 0xE0:
+        return 'userput on'
+    elif cmd.num == 0xE1:
+        return 'userput off'
+    elif cmd.num == 0xE2:
+        return 'userput soft-on'
+    elif cmd.num == 0xE3:
+        return 'userput soft-off'
+    elif cmd.num == 0xE4:
+        image = stack.pop()
+        return f'cursor {stack.pop()} image {image}'
+    elif cmd.num == 0xE5:
+        ypos = stack.pop()
+        xpos = stack.pop()
+        return f'cursor hotspot {xpos} {ypos}'
+    elif cmd.num == 0xE6:
+        # > cursor transparent color
+        # This command sets transparent colors in the cursor.
+        # It can be called multiple times for multiple transparent colors.
+        return f'cursor transparent {stack.pop()}'
+    elif cmd.num == 0xE7:
+        return f'charset {stack.pop()}'
+    elif cmd.num == 0xE8:
+        params = get_params(stack)
+        param_str = ', '.join(str(param) for param in params)
+        return f'charset color {param_str}'
+    elif cmd.num == 0xE9:
+        ypos = stack.pop()
+        xpos = stack.pop()
+        return f'put-cursor {xpos},{ypos}'
     return defop(op, stack, bytecode, game)
 
 
@@ -1977,6 +2280,98 @@ def o72_actorOps(op, stack, bytecode, game):
         slot = stack.pop()
         return f'\tsay {slot} {string}\\'
     return o6_actorOps(op, stack, bytecode, game)
+
+
+@regop
+def o8_actorOps(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 100:
+        return f'\tcostume {stack.pop()} \\'
+    if cmd.num == 101:
+        y = stack.pop()
+        x = stack.pop()
+        return f'\tstep-dist {x},{y} \\'
+    if cmd.num == 103:
+        return '\tanimation default \\'
+    if cmd.num == 104:
+        return f'\tinit-animation {stack.pop()}'
+    if cmd.num == 105:
+        stop = stack.pop()
+        start = stack.pop()
+        return f'\ttalk-animation {start} {stop} \\'
+    if cmd.num == 106:
+        return f'\twalk-animation {stack.pop()} \\'
+    if cmd.num == 107:
+        return f'\tstand-animation {stack.pop()} \\'
+    if cmd.num == 108:
+        return f'\tanimation-speed {stack.pop()} \\'
+    if cmd.num == 109:
+        return '\tdefault'
+    if cmd.num == 110:
+        return f'\televation {stack.pop()}'
+    if cmd.num == 111:
+        new_color = stack.pop()
+        old_color = stack.pop()
+        return f'\tcolor {old_color} is {new_color}'
+    if cmd.num == 112:
+        color = stack.pop()
+        return f'\ttalk-color {color} \\'
+    if cmd.num == 113:
+        return f'\tname {msg_val(op.args[1])}'
+    if cmd.num == 114:
+        return f'\twidth {stack.pop()}'
+    if cmd.num == 115:
+        return f'\tscale {stack.pop()}'
+    if cmd.num == 116:
+        return f'\tnever-zclip'
+    if cmd.num == 117:
+        return f'\talways-zclip {stack.pop()}'
+    if cmd.num == 118:
+        return f'\tignore-boxes \\'
+    if cmd.num == 119:
+        return f'\tfollow-boxes \\'
+    if cmd.num == 120:
+        return f'\tspecial-draw {stack.pop()}'
+    if cmd.num == 121:
+        ypos = stack.pop()
+        xpos = stack.pop()
+        return f'\ttext-offset {xpos},{ypos} \\'
+    if cmd.num == 122:
+        return f'actor {stack.pop()} \\'
+    if cmd.num == 123:
+        value = stack.pop()
+        var = stack.pop()
+        return f'\tanimation-var {var} {value}'
+    if cmd.num == 124:
+        return f'\tignore-turns on \\'
+    if cmd.num == 125:
+        return f'\tignore-turns off \\'
+    if cmd.num == 126:
+        return f'\tnew \\'
+    if cmd.num == 127:
+        return f'\tdepth {stack.pop()} \\'
+    if cmd.num == 128:
+        return f'\tstop \\'
+    if cmd.num == 129:
+        return f'\tface {stack.pop()} \\'
+    if cmd.num == 130:
+        return f'\tturn {stack.pop()} \\'
+    if cmd.num == 135:
+        return f'\tvolume {stack.pop()} \\'
+    if cmd.num == 136:
+        return f'\tfrequency {stack.pop()} \\'
+    if cmd.num == 137:
+        return f'\tpan {stack.pop()} \\'
+    # if cmd.num == 78:
+    #     return f'\tsound {get_params(stack)}'
+    # # TODO: 82 - animation - 3 pops
+    # TODO: 228 - actor-walk-script 1 pop
+    # TODO: 229 - actor-stop - no pops
+    # TODO: 230 - direction - 1 pop
+    # TODO: 233 - stop-walk - no pops
+    # TODO: 234 - resume-walk - no pops
+    # TODO: 235 - talk-script - 1 pop
+    return defop(op, stack, bytecode, game)
 
 
 @regop
@@ -2419,6 +2814,25 @@ def o80_writeConfigFile(op, stack, bytecode, game):
 
 
 @regop
+def o8_getObjectImageX(op, stack, bytecode, game):
+    stack.append(f'object-image-x {stack.pop()}')
+
+
+@regop
+def o8_getObjectImageY(op, stack, bytecode, game):
+    stack.append(f'object-image-y {stack.pop()}')
+
+
+@regop
+def o8_getObjectImageHeight(op, stack, bytecode, game):
+    stack.append(f'object-image-height {stack.pop()}')
+
+
+@regop
+def o8_getObjectImageWidth(op, stack, bytecode, game):
+    stack.append(f'object-image-width {stack.pop()}')
+
+@regop
 def o72_getNumFreeArrays(op, stack, bytecode, game):
     stack.append('$ num-free-arrays')
 
@@ -2785,6 +3199,30 @@ def o6_wait(op, stack, bytecode, game):
 
 
 @regop
+def o8_wait(op, stack, bytecode, game):
+    sub = Value(op.args[0], signed=False)
+    if sub.num == 30:
+        return f'wait-for-actor {stack.pop()} [ref {adr(op.args[1])}]'
+    if sub.num == 31:
+        return 'wait-for-message'
+    if sub.num == 32:
+        return 'wait-for-camera'
+    if sub.num == 34:
+        return f'wait-for-animation {stack.pop()} [ref {adr(op.args[1])}]'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o8_cameraOps(op, stack, bytecode, game):
+    sub = Value(op.args[0], signed=False)
+    if sub.num == 50:
+        return f'camera pause'
+    if sub.num == 51:
+        return 'camera resume'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
 def o6_pseudoRoom(op, stack, bytecode, game):
     params = get_params(stack)
     room = stack.pop()
@@ -2859,6 +3297,16 @@ def o6_systemOps(op, stack, bytecode, game):
     if cmd.num == 159:
         return 'pause'
     if cmd.num == 160:
+        return 'quit'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o8_systemOps(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 40:
+        return 'restart'
+    if cmd.num == 41:
         return 'quit'
     return defop(op, stack, bytecode, game)
 
@@ -2986,6 +3434,47 @@ def o6_resourceRoutines(op, stack, bytecode, game):
         room = stack.pop()
         obj = stack.pop()
         return f'load-object {obj} in-room {room}'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o8_resourceRoutines(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 61:
+        return f'load-costume {stack.pop()}'
+    if cmd.num == 62:
+        obj = stack.pop()
+        return f'load-object {obj}'
+    if cmd.num == 63:
+        return f'load-room {stack.pop()}'
+    if cmd.num == 64:
+        return f'load-script {stack.pop()}'
+    if cmd.num == 65:
+        return f'load-sound {stack.pop()}'
+    if cmd.num == 66:
+        return f'lock-costume {stack.pop()}'
+    if cmd.num == 67:
+        return f'lock-room {stack.pop()}'
+    if cmd.num == 68:
+        return f'lock-script {stack.pop()}'
+    if cmd.num == 69:
+        return f'lock-sound {stack.pop()}'
+    if cmd.num == 70:
+        return f'unlock-costume {stack.pop()}'
+    if cmd.num == 71:
+        return f'unlock-room {stack.pop()}'
+    if cmd.num == 72:
+        return f'unlock-script {stack.pop()}'
+    if cmd.num == 73:
+        return f'unlock-sound {stack.pop()}'
+    if cmd.num == 74:
+        return f'nuke-costume {stack.pop()}'
+    if cmd.num == 75:
+        return f'nuke-room {stack.pop()}'
+    if cmd.num == 76:
+        return f'nuke-script {stack.pop()}'
+    if cmd.num == 77:
+        return f'nuke-sound {stack.pop()}'
     return defop(op, stack, bytecode, game)
 
 
@@ -3197,9 +3686,26 @@ def o6_getObjectOldDir(op, stack, bytecode, game):
     obj = stack.pop()
     stack.append(f'actor-facing {obj}')
 
+
+@regop
+def o6_getObjectNewDir(op, stack, bytecode, game):
+    obj = stack.pop()
+    stack.append(f'actor-facing {obj}')
+
+
 @regop
 def o70_getActorRoom(op, stack, bytecode, game):
     stack.append(f'actor-room {stack.pop()}')
+
+
+@regop
+def o8_getActorChore(op, stack, bytecode, game):
+    stack.append(f'actor-chore {stack.pop()}')
+
+
+@regop
+def o8_getActorZPlane(op, stack, bytecode, game):
+    stack.append(f'actor-zplane {stack.pop()}')
 
 
 @regop
@@ -3365,7 +3871,7 @@ def o71_getCharIndexInString(op, stack, bytecode, game):
 
 @regop
 def o6_putActorAtObject(op, stack, bytecode, game):
-    room = stack.pop()
+    room = stack.pop() if game.version < 7 else 0  # NOTE: 0 is valid also for <7
     obj = stack.pop()
     act = stack.pop()
     room = '' if room == 0 else f' in room {room}'
@@ -3575,6 +4081,11 @@ def o6_freezeUnfreeze(op, stack, bytecode, game):
     if scr.num == 0:
         return 'unfreeze-scripts'
     return f'freeze-scripts {scr}'
+
+
+@regop
+def o8_startVideo(op, stack, bytecode, game):
+    return f'start-video {msg_val(op.args[0])}'
 
 
 @regop
@@ -3798,6 +4309,13 @@ def o6_distObjectObject(op, stack, bytecode, game):
     another = stack.pop()
     obj = stack.pop()
     stack.append(f'proximity {obj} {another}')
+
+
+@regop
+def o6_distPtPt(op, stack, bytecode, game):
+    y2, x2 = stack.pop(), stack.pop()
+    y1, x1 = stack.pop(), stack.pop()
+    stack.append(f'proximity {x1},{y1} to {x2},{y2}')
 
 
 @regop

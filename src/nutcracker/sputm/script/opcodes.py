@@ -853,14 +853,14 @@ OPCODES_v8: OpTable = realize({
     0x8C: makeop('o6_panCameraTo'),
     0x8D: makeop('o6_actorFollowCamera'),
     0x8E: makeop('o6_setCameraAt'),
-    0x8F: makeop('o6_printActor', msg_cmd_v8),
-    0x90: makeop('o6_printEgo', msg_cmd_v8),
-    0x91: makeop('o6_talkActor', msg_op_v8),
-    0x92: makeop('o6_talkEgo', msg_op_v8),
-    0x93: makeop('o6_printLine', msg_cmd_v8),
-    0x94: makeop('o6_printText', msg_cmd_v8),
-    0x95: makeop('o6_printDebug', msg_cmd_v8),
-    0x96: makeop('o6_printSystem', msg_cmd_v8),
+    0x8F: makeop('o8_printActor', msg_cmd_v8),  # o6_printActor
+    0x90: makeop('o8_printEgo', msg_cmd_v8),  # o6_printEgo
+    0x91: makeop('o8_talkActor', msg_op_v8),  # o6_talkActor
+    0x92: makeop('o8_talkEgo', msg_op_v8),  # o6_talkEgo
+    0x93: makeop('o8_printLine', msg_cmd_v8),  # o6_printLine
+    0x94: makeop('o8_printText', msg_cmd_v8),  # o6_printText
+    0x95: makeop('o8_printDebug', msg_cmd_v8),  # o6_printDebug
+    0x96: makeop('o8_printSystem', msg_cmd_v8),  # o6_printSystem
     0x97: makeop('o8_blastText', msg_cmd_v8),
     0x98: makeop('o8_drawObject'),
     0x9C: makeop('o8_cursorCommand', extended_b_op),
@@ -872,7 +872,7 @@ OPCODES_v8: OpTable = realize({
     0xA2: makeop('o6_putActorAtObject'),
     0xA3: makeop('o6_faceActor'),
     0xA4: makeop('o6_animateActor'),
-    0xA5: makeop('o6_doSentence'),
+    0xA5: makeop('o8_doSentence'),  # o6_doSentence
     0xA6: makeop('o6_pickupObject'),
     0xA7: makeop('o6_setBoxFlags'),
     0xA8: makeop('o6_createBoxMatrix'),
