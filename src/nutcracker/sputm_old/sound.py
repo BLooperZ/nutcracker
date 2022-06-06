@@ -49,12 +49,10 @@ def read_streams(src_dir: str, ext: str, files: Iterable[str]) -> Iterable[bytes
 
 if __name__ == '__main__':
     import argparse
-    import pprint
 
-    from .build import update_loff
-    from .index2 import read_game_resources
-    from .preset import sputm
-    from .resource import detect_resource
+    from nutcracker.sputm.tree import open_game_resource, narrow_schema
+    from nutcracker.sputm.preset import sputm
+    from nutcracker.sputm.schema import SCHEMA
 
     parser = argparse.ArgumentParser(description='read smush file')
     group = parser.add_mutually_exclusive_group()
@@ -66,35 +64,28 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-    game = detect_resource(args.filename)
-    index_file, *disks = game.resources
+    gameres = open_game_resource(args.filename)
 
-    index = read_file(index_file, key=game.chiper_key)
-
-    s = sputm.generate_schema(index)
-    pprint.pprint(s)
-
-    index_root = sputm(schema=s).map_chunks(index)
-    index_root = list(index_root)
-
-    _, idgens = game.read_index(index_root)
-
-    root = read_game_resources(game, idgens, disks, max_depth=5)
+    root = gameres.read_resources(
+        schema=narrow_schema(
+            SCHEMA, {'LECF', 'LFLF', 'SOUN'}
+        )
+    )
 
     if args.extract:
         os.makedirs('sfx_ext', exist_ok=True)
-        with open(args.textfile, 'r') as voctable:
-            coff = next(voctable)
-            for off, stream in get_all_sounds(root):
-                vname = f'{off:08x}'
-                if coff.startswith(vname):
-                    vname = coff[8:-1]
-                    coff = next(voctable, '')
-                else:
-                    print(coff, 'X', vname)
+        # with open(args.textfile, 'r') as voctable:
+        #     coff = next(voctable)
+        for off, stream in get_all_sounds(root):
+            vname = f'{off:08x}'
+            # if coff.startswith(vname):
+            #     vname = coff[8:-1]
+            #     coff = next(voctable, '')
+            # else:
+            #     print(coff, 'X', vname)
 
-                with open(os.path.join('sfx_ext', f'{vname}.voc'), 'wb') as voc:
-                    voc.write(stream)
+            with open(os.path.join('sfx_ext', f'{vname}.voc'), 'wb') as voc:
+                voc.write(stream)
 
     elif args.inject:
         # TODO: use actual streams
@@ -106,6 +97,4 @@ if __name__ == '__main__':
         updated_resource = list(inject_sound_chunks(root, cstreams))
 
         basename = os.path.basename(args.filename)
-        rebuild_resources(
-            game, basename, index_file, disks, index_root, updated_resource
-        )
+        rebuild_resources(gameres, basename, updated_resource)
