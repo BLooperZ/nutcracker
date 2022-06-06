@@ -70,8 +70,8 @@ def encode_block_v8(filename, blocktype, version=8, ref=None):
             # tr = TRANSPARENCY
             return bytes([code]) + encode_he(bytes(npim.ravel()), palen)
         elif code == 150:
-            assert len(set(npim.ravel())) == 1 
-            return bytes([code, npim[0]])
+            assert len(set(npim.ravel())) == 1
+            return bytes([code, npim.ravel()[0]])
 
 
 if __name__ == '__main__':

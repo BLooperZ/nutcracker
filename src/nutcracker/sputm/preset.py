@@ -1,4 +1,3 @@
-from pytest import skip
 from nutcracker.kernel import preset, settings
 
 from .schema import SCHEMA
