@@ -32,24 +32,18 @@ class ObjectHeader:
     yoff: int
 
 
-def read_objects(room):
+def read_objects(room, version):
     for obim in sputm.findall('OBIM', room):
         imhd = sputm.find('IMHD', obim).data
-        if len(imhd) == 16:
-            obj_id, obj_height, obj_width, obj_x, obj_y = read_imhd(imhd)
+        if version < 8:
+            print('IMHD', len(imhd), imhd)
+            if version == 7:
+                assert len(imhd) < 80, len(imhd)
+                obj_id, obj_height, obj_width, obj_x, obj_y = read_imhd_v7(imhd)
+            else:
+                obj_id, obj_height, obj_width, obj_x, obj_y = read_imhd(imhd)
 
-            assert obj_id == obim.attribs['gid']
-
-            for imxx in sputm.findall('IM{:02x}', obim):
-                path = imxx.attribs['path']
-                name = f'{obj_id:04d}_{imxx.tag}'
-
-                yield path, name, imxx.children[0], ObjectHeader(height=obj_height, width=obj_width, xoff=obj_x, yoff=obj_y)
-        elif len(imhd) < 80:
-            # Game version == 7
-            print(imhd)
-            obj_id, obj_height, obj_width, obj_x, obj_y = read_imhd_v7(imhd)
-            # assert obj_id == obim.attribs['gid'], (obj_id, obim.attribs['gid'])  # assertion breaks on HE games
+            assert obj_id == obim.attribs['gid'], (obj_id, obim.attribs['gid'])
 
             for imxx in sputm.findall('IM{:02x}', obim):
                 path = imxx.attribs['path']
@@ -163,7 +157,7 @@ def make_room_images_patch(root, basedir, rnam, version):
                         # write_file(res_path, sputm.mktag(imxx.tag, encoded))
                     print((im_path, imxx.attribs['path'], imxx.tag))
 
-            for path, obj_name, imag, obj_header in read_objects(room):
+            for path, obj_name, imag, obj_header in read_objects(room, version):
                 if imag.tag == 'WRAP':
                     images = list(
                         encode_images_v8(
