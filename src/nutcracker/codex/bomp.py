@@ -32,10 +32,14 @@ def decode_line(
 
             if decoded_size and len(buffer) >= decoded_size:
                 rest = stream.read()
-                assert rest in {
+                if rest not in {
                     b'', b'\x00',
-                    b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
-                }, rest
+                    b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00',
+                }:
+                    print(f'WARNING: {rest!r}', decoded_size)
+                    decoded_rest = decode_line(rest)
+                    print('WARNING:', decoded_rest, len(decoded_rest))
+
                 break
 
             code = stream.read(1)[0]
