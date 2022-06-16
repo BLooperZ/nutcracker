@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import io
+import os
+import pathlib
 import struct
 import wave
 
@@ -15,6 +17,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     res = read_file(args.filename)
+    basename = os.path.basename(args.filename)
+
+    target_dir = pathlib.Path('OUT') / basename
+    os.makedirs(target_dir, exist_ok=True)
 
     tlkb = sputm.assert_tag('TLKB', sputm.untag(res))
     chunks = (
@@ -48,7 +54,7 @@ if __name__ == '__main__':
         # with open(f'OUT/TALK_SDAT_{idx:04d}.RAW', 'wb') as aud:
         #     # aud.write(b'\x80' * frame_audio_size[12] * frame_no)
         #     aud.write(sound)
-        with wave.open(f'OUT/{offset:08d}.WAV', 'w') as wav:
+        with wave.open(str(target_dir / f'{offset:08d}.WAV'), 'w') as wav:
             # aud.write(b'\x80' * frame_audio_size[12] * frame_no)
             wav.setnchannels(1)
             wav.setsampwidth(1)
