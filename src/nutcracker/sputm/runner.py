@@ -80,7 +80,7 @@ def extract_strings(
 
     root = gameres.read_resources(
         schema=narrow_schema(
-            SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', *script_map}
+            SCHEMA, {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', 'TLKE', *script_map}
         )
     )
 
