@@ -131,7 +131,7 @@ def escape_message(
                 if ord(t) not in {1, 2, 3, 8}:
                     c += stream.read(var_size)
                 c = b''.join(f'\\x{v:02X}'.encode() for v in c)
-            elif c not in (printable.encode() + bytes(range(ord('\xE0'), ord('\xFA')))):
+            elif c not in (printable.encode() + bytes(range(ord('\xE0'), ord('\xFA') + 1))):
                 c = b''.join(f'\\x{v:02X}'.encode() for v in c)
             elif c == b'\\':
                 c = b'\\\\'

@@ -107,6 +107,8 @@ def array_ops(stream: IO[bytes]) -> Iterable[ScriptArg]:
     arr = WordValue(stream)
     if ord(cmd.op) in {127}:
         return (cmd, arr, WordValue(stream))
+    if ord(cmd.op) in {138}:
+        return (cmd, arr, WordValue(stream), WordValue(stream))
     # if ord(cmd.op) in {194}:
     #     return (cmd, arr, CString(stream))
     return (cmd, arr)
@@ -163,9 +165,25 @@ def wait_ops_v8(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (cmd,)
 
 
+def wait_ops_he100(stream: IO[bytes]) -> Iterable[ScriptArg]:
+    cmd = ByteValue(stream)
+    if ord(cmd.op) in {128}:
+        return (cmd, RefOffset(stream))
+    # if ord(cmd.op) in {194}:
+    #     return (cmd, arr, CString(stream))
+    return (cmd,)
+
+
 def file_op(stream: IO[bytes]) -> Iterable[ScriptArg]:
     cmd = ByteValue(stream)
     if ord(cmd.op) in {8}:
+        return (cmd, ByteValue(stream))
+    return (cmd,)
+
+
+def file_op_he100(stream: IO[bytes]) -> Iterable[ScriptArg]:
+    cmd = ByteValue(stream)
+    if ord(cmd.op) in {5}:
         return (cmd, ByteValue(stream))
     return (cmd,)
 
@@ -578,8 +596,8 @@ OPCODES_he100: OpTable = realize({
 	0x0E: makeop('o6_loadRoom'),
 	# TODO: 0x0f: makeop('o6_panCameraTo'),
 	# TODO: 0x10: makeop('o72_captureWizImage'),
-	# TODO: 0x11: makeop('o100_jumpToScript'),
-	# TODO: 0x12: makeop('o6_setClass'),
+	0x11: makeop('o100_jumpToScript', extended_b_op),
+	0x12: makeop('o6_setClass'),
 	0x13: makeop('o60_closeFile'),
 	# TODO: 0x14: makeop('o6_loadRoomWithEgo'),
 	# TODO: 0x16: makeop('o72_createDirectory'),
@@ -593,9 +611,9 @@ OPCODES_he100: OpTable = realize({
 	0x1E: makeop('o100_dim2dimArray', extended_bw_op),
 	0x1F: makeop('o100_dimArray', extended_bw_op),
 	0x20: makeop('o6_div'),
-	# TODO: 0x21: makeop('o6_animateActor'),
+	0x21: makeop('o6_animateActor'),
 	# TODO: 0x22: makeop('o6_doSentence'),
-	# TODO: 0x23: makeop('o6_drawBox'),
+	0x23: makeop('o6_drawBox'),
 	# TODO: 0x24: makeop('o72_drawWizImage'),
 	# TODO: 0x25: makeop('o80_drawWizPolygon'),
 	# TODO: 0x26: makeop('o100_drawLine'),
@@ -616,7 +634,7 @@ OPCODES_he100: OpTable = realize({
 	0x35: makeop('o6_if', jump_cmd),
 	0x36: makeop('o6_ifNot', jump_cmd),
 	0x37: makeop('o100_wizImageOps', extended_b_op),
-	# TODO: 0x38: makeop('o72_isAnyOf'),
+	0x38: makeop('o72_isAnyOf'),
 	0x39: makeop('o6_wordVarInc', extended_w_op),
 	0x3A: makeop('o6_wordArrayInc', extended_w_op),
 	0x3B: makeop('o6_jump', jump_cmd),
@@ -656,7 +674,7 @@ OPCODES_he100: OpTable = realize({
 	0x5f: makeop('o6_pushWord', extended_w_op),
 	0x60: makeop('o6_pushWordVar', extended_w_op),
 	0x61: makeop('o6_putActorAtObject'),
-	# TODO: 0x62: makeop('o6_putActorAtXY'),
+	0x62: makeop('o6_putActorAtXY'),
 	0x64: makeop('o100_redimArray', extended_bw_op),
 	0x65: makeop('o72_rename'),
 	0x66: makeop('o6_stopObjectCodeReturn'),  # o6_stopObjectCode
@@ -671,22 +689,22 @@ OPCODES_he100: OpTable = realize({
 	# TODO: 0x71: makeop('o6_setBoxSet'),
 	0x72: makeop('o100_setSystemMessage', extended_b_op),
 	# TODO: 0x73: makeop('o6_shuffle'),
-	# TODO: 0x74: makeop('o6_delay'),
+	0x74: makeop('o6_delay'),
 	# TODO: 0x75: makeop('o6_delayMinutes'),
 	# TODO: 0x76: makeop('o6_delaySeconds'),
 	0x77: makeop('o100_soundOps', extended_b_op),
 	# TODO: 0x78: makeop('o80_sourceDebug'),
 	0x79: makeop('o100_setSpriteInfo', extended_b_op),
 	# TODO: 0x7a: makeop('o6_stampObject'),
-	# TODO: 0x7b: makeop('o72_startObject'),
-	0x7c: makeop('o100_startScript', extended_b_op),
+	0x7B: makeop('o72_startObject', extended_b_op),
+	0x7C: makeop('o100_startScript', extended_b_op),
 	# TODO: 0x7d: makeop('o6_startScriptQuick'),
 	# TODO: 0x7e: makeop('o80_setState'),
 	# TODO: 0x7f: makeop('o6_stopObjectScript'),
 	0x80: makeop('o6_stopScript'),
-	# TODO: 0x81: makeop('o6_stopSentence'),
-	# TODO: 0x82: makeop('o6_stopSound'),
-	# TODO: 0x83: makeop('o6_stopTalking'),
+	0x81: makeop('o6_stopSentence'),
+	0x82: makeop('o6_stopSound'),
+	0x83: makeop('o6_stopTalking'),
 	0x84: makeop('o6_writeWordVar', extended_w_op),
 	0x85: makeop('o6_wordArrayWrite', extended_w_op),
 	0x86: makeop('o6_wordArrayIndexedWrite', extended_w_op),
@@ -695,22 +713,22 @@ OPCODES_he100: OpTable = realize({
 	# TODO: 0x8a: makeop('o72_setTimer'),
 	0x8B: makeop('o100_cursorCommand', extended_b_op),
 	# TODO: 0x8c: makeop('o100_videoOps'),
-	# TODO: 0x8d: makeop('o100_wait'),
+	0x8D: makeop('o100_wait', wait_ops_he100),
 	# TODO: 0x8e: makeop('o6_walkActorToObj'),
 	# TODO: 0x8f: makeop('o6_walkActorTo'),
-	# TODO: 0x90: makeop('o100_writeFile'),
+	0x90: makeop('o100_writeFile', file_op_he100),
 	0x91: makeop('o72_writeINI', extended_b_op),
 	0x92: makeop('o80_writeConfigFile', extended_b_op),
 	0x93: makeop('o6_abs'),
 	# TODO: 0x94: makeop('o6_getActorWalkBox'),
 	# TODO: 0x95: makeop('o6_getActorCostume'),
 	# TODO: 0x96: makeop('o6_getActorElevation'),
-	# TODO: 0x97: makeop('o6_getObjectOldDir'),
-	# TODO: 0x98: makeop('o6_getActorMoving'),
+	0x97: makeop('o6_getObjectOldDir'),
+	0x98: makeop('o6_getActorMoving'),
 	# TODO: 0x99: makeop('o90_getActorData'),
-	# TODO: 0x9a: makeop('o6_getActorRoom'),
+	0x9a: makeop('o6_getActorRoom'),
 	# TODO: 0x9b: makeop('o6_getActorScaleX'),
-	# TODO: 0x9c: makeop('o6_getAnimateVariable'),
+	0x9C: makeop('o6_getAnimateVariable'),
 	# TODO: 0x9d: makeop('o6_getActorWidth'),
 	# TODO: 0x9e: makeop('o6_getObjectX'),
 	# TODO: 0x9f: makeop('o6_getObjectY'),
@@ -718,19 +736,19 @@ OPCODES_he100: OpTable = realize({
 	# TODO: 0xa1: makeop('o90_getSegmentAngle'),
 	# TODO: 0xa2: makeop('o90_getActorAnimProgress'),
 	0xA3: makeop('o90_getDistanceBetweenPoints', extended_b_op),
-	# TODO: 0xa4: makeop('o6_ifClassOfIs'),
+	0xA4: makeop('o6_ifClassOfIs'),
 	# TODO: 0xa6: makeop('o90_cond'),
 	0xA7: makeop('o90_cos'),
 	# TODO: 0xa8: makeop('o100_debugInput'),
 	# TODO: 0xa9: makeop('o80_getFileSize'),
-	# TODO: 0xaa: makeop('o6_getActorFromXY'),
-	# TODO: 0xab: makeop('o72_findAllObjects'),
+	0xAA: makeop('o6_getActorFromXY'),
+	0xAB: makeop('o72_findAllObjects'),
 	# TODO: 0xac: makeop('o90_findAllObjectsWithClassOf'),
 	# TODO: 0xad: makeop('o71_findBox'),
 	# TODO: 0xae: makeop('o6_findInventory'),
-	# TODO: 0xaf: makeop('o72_findObject'),
+	0xAF: makeop('o72_findObject'),
 	# TODO: 0xb0: makeop('o72_findObjectWithClassOf'),
-	# TODO: 0xb1: makeop('o71_polygonHit'),
+	0xB1: makeop('o71_polygonHit'),
 	# TODO: 0xb2: makeop('o90_getLinesIntersectionPoint'),
 	# TODO: 0xb3: makeop('o90_fontUnk'),
 	# TODO: 0xb4: makeop('o72_getNumFreeArrays'),
@@ -786,7 +804,7 @@ OPCODES_he100: OpTable = realize({
 	# TODO: 0xe8: makeop('o71_getStringWidth'),
 	# TODO: 0xe9: makeop('o60_readFilePos'),
 	# TODO: 0xea: makeop('o72_getTimer'),
-	# TODO: 0xeb: makeop('o6_getVerbEntrypoint'),
+	0xEB: makeop('o6_getVerbEntrypoint'),
 	# TODO: 0xec: makeop('o100_getVideoData'),
 })
 
