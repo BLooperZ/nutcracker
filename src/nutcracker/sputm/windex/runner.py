@@ -56,7 +56,7 @@ def decompile(
             )
             fname = f"{script_dir}/{room.attribs['gid']:04d}_{room_no}.scu"
 
-            with open(fname, 'w') as script_file:
+            with open(fname, 'w', encoding='windows-1255', errors='ignore') as script_file:
                 dump_script_file(room_no, room, decompile, script_file)
 
 
