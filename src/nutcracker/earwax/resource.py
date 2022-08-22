@@ -1,4 +1,5 @@
 import io
+import os
 import struct
 from pprint import pprint
 from typing import Iterator, Tuple
@@ -8,7 +9,11 @@ from nutcracker.kernel.buffer import Splicer, UnexpectedBufferSize
 from nutcracker.kernel.chunk import Chunk
 from nutcracker.kernel.index import create_element
 from nutcracker.sputm.index import compare_pid_off
+from nutcracker.sputm.tree import save_tree
 from nutcracker.utils.funcutils import flatten, grouper
+from nutcracker.utils.fileio import read_file
+
+from .preset import earwax
 
 UINT16LE = struct.Struct('<H')
 
@@ -62,7 +67,8 @@ def read_index(root):
             pprint(('0C', dcos))
         if t.tag == '0O':
             print('OBJ DIR not yet supported')
-    return rnam, droo, {
+    return rnam, {
+        'LF': droo,
         'SO': compare_pid_off(dsou, base=-2),
         'SC': compare_pid_off(dscr, base=-2),
         'CO': compare_pid_off(dcos, base=-2),
@@ -70,19 +76,23 @@ def read_index(root):
     }
 
 
-def open_game_resource(filename: str):
-    index = read_file(filename, key=int(args.chiper_key, 16))
+def read_config(filename, chiper_key=0x00):
+    index = read_file(filename, key=chiper_key)
+
+    root = earwax.map_chunks(index)
+    rnam, idgens = read_index(root)
+    return rnam, idgens
+
+
+def open_game_resource(filename: str, chiper_key=0x00):
+    rnam, idgens = read_config(filename)
 
     basename = os.path.basename(filename)
     room_pattern = '{room:02d}.LFL' if basename == '00.LFL' else '{room:03d}.LFL'
     disk_pattetn = 'DISK{disk:02d}.LEC'
     basedir = os.path.dirname(filename)
 
-    root = earwax.map_chunks(index)
-    rnam, droo, idgens = read_index(root)
-    print(droo)
-
-    disks = sorted(set(disk for room_id, (disk, _) in droo.items()))
+    disks = sorted(set(disk for room_id, (disk, _) in idgens['LF'].items()))
 
     for disk_id in disks:
         if disk_id == 0:
@@ -119,6 +129,17 @@ def open_game_resource(filename: str):
 
             res = {'path': path, 'gid': gid}
             return res
+
+
+        def path_only(parent, chunk, offset):
+            base = chunk.tag
+
+            dirname = parent.attribs['path'] if parent else ''
+            path = os.path.join(dirname, base)
+
+            res = {'path': path}
+            return res
+
 
         disk_file = os.path.join(basedir, disk_pattetn.format(disk=disk_id))
         res = read_file(disk_file, key=0x69)
@@ -163,7 +184,7 @@ def open_game_resource(filename: str):
             # print('ROOM', room_id)
             c = 2
 
-            room_chunk = next(earwax(schema=schema, max_depth=0).map_chunks(t.data, offset=c), None)
+            room_chunk = next(earwax(schema=schema, max_depth=0).map_chunks(t.data, offset=c, parent=t, extra=path_only), None)
             assert room_chunk.tag == 'RO', room_chunk
             t.children.append(room_chunk)
             c += len(bytes(room_chunk.chunk))
@@ -186,6 +207,7 @@ def open_game_resource(filename: str):
                     create_element(
                         c,
                         Chunk('__', rawd, Splicer(0, len(rawd))),
+                        path=os.path.join(t.attribs['path'], 'REST')
                     )
                 )
                 # print(t.children)
@@ -194,15 +216,19 @@ def open_game_resource(filename: str):
                 #     print('RAWD', bytes(x for x in chnk if x is not None))
         yield from root
 
+def dump_resources(
+    root, basename,
+):
+    os.makedirs(basename, exist_ok=True)
+    with open(os.path.join(basename, 'rpdump.xml'), 'w') as f:
+        for disk in root:
+            earwax.render(disk, stream=f)
+            save_tree(earwax, disk, basedir=basename)
+
 
 if __name__ == '__main__':
     import argparse
     import glob
-    import os
-
-    from nutcracker.utils.fileio import read_file
-
-    from .preset import earwax
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('files', nargs='+', help='files to read from')
@@ -211,6 +237,7 @@ if __name__ == '__main__':
 
     files = set(flatten(glob.iglob(r) for r in args.files))
     for filename in files:
-        root = open_game_resource(filename)
-        for t in root:
-            earwax.render(t)
+        root = open_game_resource(filename, int(args.chiper_key, 16))
+        # for t in root:
+        #     earwax.render(t)
+        dump_resources(root, 'monkey-ega')
