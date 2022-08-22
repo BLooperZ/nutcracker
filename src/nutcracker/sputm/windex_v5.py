@@ -126,9 +126,8 @@ def build_print(args):
             if masked == 0x00:
                 posx = next(args)
                 posy = next(args)
-                assert isinstance(
-                    posx, Variable if arg.op[0] & 0x80 else WordValue
-                ) and isinstance(posy, Variable if arg.op[0] & 0x40 else WordValue)
+                assert isinstance(posx, Variable if arg.op[0] & 0x80 else WordValue), (hex(arg.op[0]), type(posx))
+                assert isinstance(posy, Variable if arg.op[0] & 0x40 else WordValue), (hex(arg.op[0]), type(posy))
                 yield f'at {value(posx)},{value(posy)}'
                 continue
             if masked == 0x01:
@@ -241,14 +240,8 @@ def build_verb(args):
             if masked == 0x05:
                 posx = next(args)
                 posy = next(args)
-                if arg.op[0] & 0x80:
-                    assert isinstance(posx, Variable) and isinstance(posy, Variable)
-                elif arg.op[0] & 0x40:
-                    assert isinstance(posx, WordValue) and isinstance(posy, Variable)
-                else:
-                    assert isinstance(posx, WordValue) and isinstance(
-                        posy, WordValue
-                    ), (hex(arg.op[0]), type(posx), type(posy))
+                assert isinstance(posx, Variable if arg.op[0] & 0x80 else WordValue), (hex(arg.op[0]), type(posx))
+                assert isinstance(posy, Variable if arg.op[0] & 0x40 else WordValue), (hex(arg.op[0]), type(posy))
                 yield f'at {value(posx)},{value(posy)}'
                 continue
             if masked == 0x06:
