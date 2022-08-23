@@ -8,7 +8,7 @@ from nutcracker.chiper import xor
 from nutcracker.kernel.buffer import Splicer, UnexpectedBufferSize
 from nutcracker.kernel.chunk import Chunk
 from nutcracker.kernel.index import create_element
-from nutcracker.sputm.index import compare_pid_off
+from nutcracker.sputm.index import compare_pid_off, read_inner_uint16le, read_uint8le
 from nutcracker.sputm.tree import save_tree
 from nutcracker.utils.funcutils import flatten, grouper
 from nutcracker.utils.fileio import read_file
@@ -45,6 +45,9 @@ def read_offs(data: bytes) -> Iterator[Tuple[int, int]]:
             offset = int.from_bytes(stream.read(4), byteorder='little', signed=False)
             yield room_num, offset
 
+def read_inner_uint16le(pid, data, off):
+    res = int.from_bytes(data[0:2], byteorder='little', signed=False)
+    return res
 
 def read_index(root):
     rnam = {}
@@ -132,12 +135,31 @@ def open_game_resource(filename: str, chiper_key=0x00):
 
 
         def path_only(parent, chunk, offset):
-            base = chunk.tag
+            idgens = {
+                'OC': read_inner_uint16le,
+                'OI': read_inner_uint16le,
+                'LS': read_uint8le,
+            }
+            get_gid = idgens.get(chunk.tag)
+            if not parent:
+                gid = disk_id
+            else:
+                gid = get_gid and get_gid(
+                    parent and parent.attribs['gid'], chunk.data, offset
+                )
+
+            base = chunk.tag + (
+                f'_{gid:04d}'
+                if gid is not None
+                else ''
+                if not get_gid
+                else f'_o_{offset:04X}'
+            )
 
             dirname = parent.attribs['path'] if parent else ''
             path = os.path.join(dirname, base)
 
-            res = {'path': path}
+            res = {'path': path, 'gid': gid}
             return res
 
 

@@ -335,8 +335,11 @@ def build_script(args):
                 continue
         yield str(arg)
 
+actor_convert = [
+    1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20,
+]
 
-def build_actor(args):
+def build_actor(args, version=5):
     args = iter(args)
     while True:
         # [00000008] actor #12 costome #208 BYTE hex=0x15 dec=21 BYTE hex=0x13 dec=19 BYTE hex=0x02 dec=2 BYTE hex=0x02 dec=2 default BYTE hex=0x02 dec=2
@@ -345,7 +348,10 @@ def build_actor(args):
         if isinstance(arg, ByteValue):
             if arg.op[0] == 0xFF:
                 break
-            masked = arg.op[0] & 0x1F
+            op = arg.op[0]
+            if version < 5:
+                op = (op & 0xE0) | actor_convert[(op & 0x1F) - 1]
+            masked = op & 0x1F
             if masked == 0x01:
                 yield f'costume {value(next(args))}'
                 continue
@@ -394,6 +400,9 @@ def build_actor(args):
                 continue
             if masked == 0x11:
                 ax1 = next(args)
+                if version < 5:
+                    yield f'scale {value(ax1)}'
+                    continue
                 ax2 = next(args)
                 assert isinstance(
                     ax1, Variable if arg.op[0] & PARAM_1 else ByteValue

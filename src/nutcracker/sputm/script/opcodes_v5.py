@@ -371,7 +371,12 @@ def o5_move(opcode, stream):
         raise NotImplementedError()
 
 
-def o5_actorOps(opcode, stream):
+actor_convert = [
+    1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20,
+]
+
+
+def o5_actorOps(opcode, stream, version=5):
     if opcode in {
         0x13,
         0x53,
@@ -385,11 +390,17 @@ def o5_actorOps(opcode, stream):
             yield sub
             if sub.op[0] == 0xFF:
                 break
-            masked = ord(sub.op) & 0x1F
+            op = ord(sub.op)
+            if version < 5:
+                op = (op & 0xE0) | actor_convert[(op & 0x1F) - 1]
+            masked = op & 0x1F
             if masked in {0, 1, 3, 4, 6, 12, 14, 16, 19, 22, 23}:
                 yield from get_params(sub.op[0], stream, BYTE)
             elif masked in {2, 5, 11, 17}:
-                yield from get_params(sub.op[0], stream, 2 * BYTE)
+                if version < 5 and masked == 17:
+                    yield from get_params(sub.op[0], stream, BYTE)
+                else:
+                    yield from get_params(sub.op[0], stream, 2 * BYTE)
             elif masked in {7}:
                 yield from get_params(sub.op[0], stream, 3 * BYTE)
             elif masked in {8, 10, 18, 20, 21}:
@@ -407,10 +418,13 @@ def o5_actorOps(opcode, stream):
         if masked in {1, 2, 3}:
             yield from get_params(sub.op[0], stream, 2 * WORD)
         elif masked in {4}:
-            yield from get_params(sub.op[0], stream, 3 * WORD)
-            sub2 = ByteValue(stream)
-            yield sub2
-            yield from get_params(sub2.op[0], stream, BYTE)
+            if version < 5:
+                yield from get_params(sub.op[0], stream, 2 * WORD)
+            else:
+                yield from get_params(sub.op[0], stream, 3 * WORD)
+                sub2 = ByteValue(stream)
+                yield sub2
+                yield from get_params(sub2.op[0], stream, BYTE)
         elif masked in {5, 6}:
             pass
         elif masked in {7}:
