@@ -105,3 +105,19 @@ class SizeFixedChunk(StructuredChunk):
         if data.etag == NULL_TAG:
             return self._struct.pack(ChunkHeader(b'', 0))
         return self._struct.pack(ChunkHeader(data.etag, data.size - self.size_fix))
+
+@dataclass(frozen=True)
+class OldSputmChunk(StructuredChunk):
+    size_fix: int = 0
+
+    def unpack_from(self, buffer: BufferLike, offset: int = 0) -> ChunkHeader:
+        etag, size = self._struct.unpack_from(buffer, offset)
+        if set(etag) == {0}:
+            etag = NULL_TAG
+        return ChunkHeader(etag, size + self.size_fix)
+
+    def pack(self, data: ChunkHeader) -> bytes:
+        etag = data.etag
+        if etag == NULL_TAG:
+            etag = b'\0\0'
+        return self._struct.pack(ChunkHeader(etag, data.size - self.size_fix))

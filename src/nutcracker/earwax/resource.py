@@ -117,7 +117,7 @@ def open_game_resource(filename: str, chiper_key=0x00):
                     parent and parent.attribs['gid'], chunk.data, offset
                 )
                 if get_gid and not gid:
-                    print('GID', chunk, parent, droo)
+                    print('WARNING: MISSING GID', chunk, offset, parent)
 
             base = chunk.tag + (
                 f'_{gid:04d}'
@@ -217,7 +217,7 @@ def open_game_resource(filename: str, chiper_key=0x00):
             try:
                 for a in r:
                     # earwax.render(a)
-                    assert t.data[c+4:c+6] == a.tag.encode(), (t.data[c+4:c+6], a.tag.encode())
+                    assert a.tag == '_' or t.data[c+4:c+6] == a.tag.encode(), (t.data[c+4:c+6], a.tag.encode())
                     c += len(bytes(a.chunk))
                     t.children.append(a)
                     # print(a)

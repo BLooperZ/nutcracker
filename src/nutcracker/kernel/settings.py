@@ -5,13 +5,13 @@ from struct import Struct
 from typing import Mapping, Optional, Set
 
 from .buffer import BufferLike
-from .chunk import Chunk, ChunkFactory, ChunkHeader, SizeFixedChunk, StructuredChunk
+from .chunk import Chunk, ChunkFactory, ChunkHeader, OldSputmChunk, SizeFixedChunk, StructuredChunk
 from .structured import StructuredTuple
 
 SCUMM_CHUNK_HEADER = StructuredTuple(('size', 'etag'), Struct('<I2s'), ChunkHeader)
 IFF_CHUNK_HEADER = StructuredTuple(('etag', 'size'), Struct('>4sI'), ChunkHeader)
 
-SCUMM_CHUNK = StructuredChunk(SCUMM_CHUNK_HEADER)
+SCUMM_CHUNK = OldSputmChunk(SCUMM_CHUNK_HEADER)
 IFF_CHUNK_IN = SizeFixedChunk(IFF_CHUNK_HEADER)
 IFF_CHUNK_EX = SizeFixedChunk(IFF_CHUNK_HEADER, size_fix=IFF_CHUNK_HEADER.size)
 
