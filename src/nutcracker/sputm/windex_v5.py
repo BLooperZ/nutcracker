@@ -150,6 +150,9 @@ def build_print(args):
                 assert not arg.op[0] & 0x80
                 yield 'overhead'
                 continue
+            if masked == 0x08:
+                yield f'voice {value(next(args))} delay {value(next(args))}'
+                continue
             if masked == 0x0F:
                 assert not arg.op[0] & 0x80
                 yield f'{msg_val(next(args))}'
@@ -818,6 +821,12 @@ def o5_resource_wd(op):
             return 'userput soft-on'
         if masked == 0x08:
             return 'userput soft-off'
+        if masked == 0x0A:
+            return f'cursor {value(op.args[1])} image {value(op.args[2])}'
+        if masked == 0x0B:
+            return f'cursor {value(op.args[1])} hotspot {value(op.args[2])},{value(op.args[3])}'
+        if masked == 0x0C:
+            return f'cursor {value(op.args[1])}'
         if masked == 0x0D:
             return f'charset {value(op.args[1])}'
         if masked == 0x0E:
