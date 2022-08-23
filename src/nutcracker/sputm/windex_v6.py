@@ -4897,7 +4897,8 @@ def decompile_script(elem, game, verbose=False):
     for off, stat in bytecode.items():
         if elem.tag == 'VERB' and off + 8 in entries:
             if off + 8 in entries:
-                yield from print_locals(indent)
+                if off + 8 > min(entries.keys()):
+                    yield from print_locals(indent)
                 l_vars.clear()
                 yield from print_asts(indent, transform_asts(indent, asts))
                 curref = f'_[{off + 8:08d}]'

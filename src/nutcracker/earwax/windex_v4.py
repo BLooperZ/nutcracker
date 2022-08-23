@@ -298,7 +298,8 @@ def decompile_script(elem):
         coff = off + 8
         if elem.tag == 'OC' and coff in entries:
             if coff in entries:
-                yield from print_locals(indent)
+                if coff > min(entries.keys()):
+                    yield from print_locals(indent)
                 l_vars.clear()
                 yield from print_asts(indent, asts)  # transform_asts(indent, asts))
                 curref = f'_[{coff:08d}]'
