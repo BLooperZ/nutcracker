@@ -181,7 +181,7 @@ def xop(func):
     return nop(func.__name__, func)
 
 
-def decode_parse_string(stream):
+def decode_parse_string(stream, version=5):
     while True:
         sub = ByteValue(stream)
         yield sub
@@ -195,6 +195,8 @@ def decode_parse_string(stream):
         elif masked in {2}:
             yield from get_params(sub.op[0], stream, WORD)
         elif masked in {4, 6, 7}:
+            if masked == 6 and version == 3:
+                yield from get_params(sub.op[0], stream, WORD)
             continue
         if masked in {15}:
             yield CString(stream)
@@ -461,7 +463,7 @@ def o5_actorOps(opcode, stream, version=5):
             raise NotImplementedError(sub.op[0] & 0x1F)
 
 
-def o5_jumpRelative(opcode, stream):
+def o5_jumpRelative(opcode, stream, version=5):
     if opcode in {
         0x18,  # o5_jumpRelative
     }:
@@ -487,7 +489,7 @@ def o5_jumpRelative(opcode, stream):
         0xD8,  # o5_printEgo
     }:
         # raise NotImplementedError('o5_printEgo')
-        return tuple(decode_parse_string(stream))
+        return tuple(decode_parse_string(stream, version=version))
 
 
 def o5_resourceRoutines(opcode, stream):
@@ -825,7 +827,7 @@ def o5_startScript(opcode, stream):
         raise NotImplementedError(opcode, 'o5_startScript')
 
 
-def o5_getObjectOwner(opcode, stream):
+def o5_getObjectOwner(opcode, stream, version=5):
     if opcode in {
         0x10,  # o5_getObjectOwner
         0x90,  # o5_getObjectOwner
@@ -836,6 +838,10 @@ def o5_getObjectOwner(opcode, stream):
         0x30,  # o5_matrixOps
         0xB0,  # o5_matrixOps
     }:
+        if version == 3:
+            yield from get_params(opcode, stream, BYTE)
+            yield ByteValue(stream)
+            return
         sub = ByteValue(stream)
         yield sub
         masked = ord(sub.op) & 0x1F
@@ -927,13 +933,13 @@ def o5_faceActor(opcode, stream):
         raise NotImplementedError(opcode, 'o5_faceActor')
 
 
-def o5_print(opcode, stream):
+def o5_print(opcode, stream, version=5):
     if opcode in {
         0x14,  # o5_print
         0x94,  # o5_print
     }:
         yield from get_params(opcode, stream, BYTE)
-        yield from decode_parse_string(stream)
+        yield from decode_parse_string(stream, version=version)
         # raise NotImplementedError('o5_print')
     elif opcode in {
         0x54,  # o5_setObjectName

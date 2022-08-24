@@ -1,17 +1,14 @@
 
 from collections import defaultdict, deque
-from ensurepip import version
 import io
-import operator
 import os
-import sys
 from typing import IO, Callable, Iterable, Iterator, Tuple
 from nutcracker.earwax.resource import open_game_resource, read_config
 from nutcracker.kernel.element import Element
 from nutcracker.sputm.script.bytecode import local_script, refresh_offsets, to_bytes, verb_script
-from nutcracker.sputm.script.opcodes_v5 import BYTE, WORD, OPCODES_v5, get_params, get_result_pos, o5_actorOps, o5_drawObject, o5_getObjectOwner, o5_isActorInBox, o5_setState, o5_startMusic, o5_startSound, realize_v5, xop
+from nutcracker.sputm.script.opcodes_v5 import BYTE, WORD, OPCODES_v5, get_params, get_result_pos, o5_actorOps, o5_getObjectOwner, o5_isActorInBox, o5_setState, o5_startMusic, o5_startSound, realize_v5, xop
 from nutcracker.sputm.script.parser import ByteValue, RefOffset
-from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, build_actor, descumm_v5, o5_mus_wd, o5_owner_wd, o5_room_wd, o5_sound_wd, o5_state_wd, parse_verb_meta, print_asts, print_locals, ops, value, l_vars
+from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, build_actor, o5_mus_wd, o5_owner_wd, o5_room_wd, o5_sound_wd, o5_state_wd, print_asts, print_locals, ops, value, l_vars
 from nutcracker.utils.funcutils import flatten
 
 def global_script(data: bytes) -> Tuple[bytes, bytes]:

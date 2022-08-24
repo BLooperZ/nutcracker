@@ -8,7 +8,7 @@ from nutcracker.chiper import xor
 from nutcracker.kernel.buffer import Splicer, UnexpectedBufferSize
 from nutcracker.kernel.chunk import Chunk
 from nutcracker.kernel.index import create_element
-from nutcracker.sputm.index import compare_pid_off, read_inner_uint16le, read_uint8le
+from nutcracker.sputm.index import compare_pid_off, read_uint8le
 from nutcracker.sputm.tree import save_tree
 from nutcracker.utils.funcutils import flatten, grouper
 from nutcracker.utils.fileio import read_file
@@ -88,7 +88,7 @@ def read_config(filename, chiper_key=0x00):
 
 
 def open_game_resource(filename: str, chiper_key=0x00):
-    rnam, idgens = read_config(filename)
+    rnam, idgens = read_config(filename, chiper_key=chiper_key)
 
     basename = os.path.basename(filename)
     room_pattern = '{room:02d}.LFL' if basename == '00.LFL' else '{room:03d}.LFL'
@@ -259,7 +259,7 @@ if __name__ == '__main__':
 
     files = set(flatten(glob.iglob(r) for r in args.files))
     for filename in files:
-        root = open_game_resource(filename, int(args.chiper_key, 16))
+        root = list(open_game_resource(filename, int(args.chiper_key, 16)))
         # for t in root:
-        #     earwax.render(t)
-        dump_resources(root, 'monkey-ega')
+            # earwax.render(t)
+        dump_resources(root, os.path.basename(os.path.dirname(filename)))
