@@ -2,8 +2,8 @@
 from collections import defaultdict, deque
 import os
 from nutcracker.earwax.older import open_game_resource, read_config
-from nutcracker.earwax.windex_v4 import OPCODES_v4, descumm_v4, dump_script_file, o4_actorOps, o4_owner_wd, o4_room_wd, parse_verb_meta_v4, script_map
-from nutcracker.sputm.script.opcodes_v5 import BYTE, WORD, get_params, o5_getObjectOwner, o5_jumpRelative, o5_multiply, o5_print, o5_resourceRoutines, realize_v5, xop
+from nutcracker.earwax.windex_v4 import OPCODES_v4, descumm_v4, dump_script_file, o4_actorOps, o4_mus_wd, o4_owner_wd, o4_room_wd, parse_verb_meta_v4, script_map
+from nutcracker.sputm.script.opcodes_v5 import BYTE, WORD, get_params, get_result_pos, o5_getObjectOwner, o5_jumpRelative, o5_multiply, o5_print, o5_resourceRoutines, o5_startMusic, realize_v5, xop
 from nutcracker.sputm.script.parser import ByteValue, RefOffset
 from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, o5_mult_wd, o5_print_wd, o5_resource_wd, print_asts, print_locals, ops, value, l_vars
 from nutcracker.utils.funcutils import flatten
@@ -39,7 +39,14 @@ def o3_owner_wd(op):
         return f'set-box {value(op.args[0])} to {value(op.args[1])}'
     return o4_owner_wd(op)
 
-# ops.clear()
+
+def o3_mus_wd(op):
+    if op.opcode in {0x02, 0x82}:
+        return f'{value(op.args[0])} = music {value(op.args[1])}'
+    return o4_mus_wd(op)
+
+
+ops[0x02] = o3_mus_wd
 ops[0x0C] = o3_resource_wd
 ops[0x10] = o3_owner_wd
 ops[0x13] = o3_room_wd
@@ -77,8 +84,21 @@ def o3_jumpRelative(opcode, stream):
 def o3_getObjectOwner(opcode, stream):
     yield from o5_getObjectOwner(opcode, stream, version=3)
 
+
+def o3_startMusic(opcode, stream):
+    if opcode in {
+        0x02,
+        0x82,  # o5_startMusic
+    }:
+        yield get_result_pos(opcode, stream)
+        yield from get_params(opcode, stream, BYTE)
+        return
+    yield from o5_startMusic(opcode, stream)
+
+
 OPCODES_v3 = realize_v5({
     **OPCODES_v4,
+    0x02: xop(o3_startMusic),
     0x0C: xop(o3_waitForSentence),
     0x10: xop(o3_getObjectOwner),
     0x13: xop(o3_roomOps),
