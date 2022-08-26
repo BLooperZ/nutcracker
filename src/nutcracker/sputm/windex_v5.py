@@ -115,7 +115,7 @@ def colored(arg):
     return value(arg)
 
 
-def build_print(args):
+def build_print(args, version=5):
     args = iter(args)
     while True:
         arg = next(args)
@@ -143,6 +143,9 @@ def build_print(args):
                 yield 'center'
                 continue
             if masked == 0x06:
+                if version == 3:
+                    yield f'height {value(next(args))}'
+                    continue
                 assert not arg.op[0] & 0x80
                 yield 'left'
                 continue
@@ -893,7 +896,7 @@ def o5_delay_wd(op):
 
 
 @regop(0x0F)
-def o5_state_wd(op):
+def o5_stateof_wd(op):
     if op.opcode in {0x0F, 0x8F}:
         var = op.args[0]
         obj = op.args[1]
@@ -964,6 +967,8 @@ def o5_room_wd(op):
         masked = sub.op[0] & 0x1F
         if masked == 0x01:
             return f'room-scroll {value(op.args[1])} to {value(op.args[2])}'
+        if masked == 0x02:
+            return f'room-color {value(op.args[1])} in-slot {value(op.args[2])}'
         if masked == 0x03:
             return f'set-screen {value(op.args[1])} to {value(op.args[2])}'
         if masked == 0x04:
@@ -1010,7 +1015,7 @@ def o5_room_wd(op):
 
 
 @regop(0x14)
-def o5_print_wd(op):
+def o5_print_wd(op, version=5):
     if op.opcode in {0x14, 0x94}:
         # 0x14 o5_print { BYTE hex=0xfd dec=253 BYTE hex=0x0f dec=15 MSG b'\xff\n\x02#\xff\n\xad\x04\xff\n\x08\x00\xff\n\x00\x00' }
         # -> print-debug "....."
@@ -1018,7 +1023,7 @@ def o5_print_wd(op):
         # 0x14 o5_print { BYTE hex=0xff dec=255 BYTE hex=0x00 dec=0 WORD hex=0x00a0 dec=160 WORD hex=0x0008 dec=8 BYTE hex=0x04 dec=4 BYTE hex=0x07 dec=7 BYTE hex=0xff dec=255 }
         # -> print-line at #160,#8 center overhead
         actor = op.args[0]
-        params = ' '.join(build_print(op.args[1:]))
+        params = ' '.join(build_print(op.args[1:], version=version))
         if isinstance(actor, ByteValue):
             if actor.op[0] == 0xFC:
                 return f'print-system {params}'

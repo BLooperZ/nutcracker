@@ -1,25 +1,49 @@
 
 from collections import defaultdict, deque
+import io
 import os
 from typing import IO, Callable, Iterable, Iterator, Tuple
 from nutcracker.earwax.older_sizeonly import open_game_resource
 from nutcracker.earwax.windex_v3 import OPCODES_v3, descumm_v4, ops
-from nutcracker.earwax.windex_v4 import get_room_scripts, parse_verb_meta_v4, get_global_scripts
+from nutcracker.earwax.windex_v4 import get_room_scripts, get_global_scripts, global_script
 from nutcracker.kernel.element import Element
+from nutcracker.sputm.script.bytecode import verb_script
 from nutcracker.sputm.script.parser import ByteValue, RefOffset
 from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, print_asts, print_locals, l_vars
 from nutcracker.utils.funcutils import flatten
 
 def global_script_v3(data: bytes) -> Tuple[bytes, bytes]:
-    return data[:2], data[2:]
+    return data[:4], data[4:]
+
+VERB_HEADER_SIZE = 17
+
+def verb_script_v3(data):
+    header = data[:VERB_HEADER_SIZE]
+    print(data)
+    print(header)
+    # exit(1)
+    pref, data = verb_script(data[VERB_HEADER_SIZE:])
+    return header + pref, data
+
+def parse_verb_meta_v3(meta):
+    with io.BytesIO(meta[VERB_HEADER_SIZE:]) as stream:
+        while True:
+            key = stream.read(1)
+            if key in {b'\0'}:  # , b'\xFF'}:
+                break
+            entry = int.from_bytes(
+                stream.read(2), byteorder='little', signed=False
+            )
+            yield key, entry - len(meta)
+        assert stream.read() == b''
 
 
 script_map = {
     'SC': global_script_v3,
-    # 'OC': verb_script_v4,
-    # 'LS': local_script,
-    # 'EN': global_script,
-    # 'EX': global_script,
+    'OC': verb_script_v3,
+    'LS': global_script,
+    'EN': global_script,
+    'EX': global_script,
 }
 
 
@@ -50,7 +74,7 @@ def decompile_script(elem):
     obj_id = None
     indent = '\t'
     if elem.tag == 'OC':
-        pref = list(parse_verb_meta_v4(pref))
+        pref = list(parse_verb_meta_v3(pref))
         obj_id = elem.attribs.get('gid') or 123
     respath_comment = f'; {elem.tag} {elem.attribs["path"]}'
     titles = {
@@ -65,7 +89,7 @@ def decompile_script(elem):
         obj_name_str = obj_name.decode('ascii', errors='ignore')
         yield ' '.join([f'\tname is', f'"{obj_name_str}"'])
     else:
-        gid = elem.attribs['gid']
+        gid = elem.attribs.get('gid')
         gid_str = '' if gid is None else f' {gid}'
         yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
 
@@ -78,7 +102,7 @@ def decompile_script(elem):
     sts = deque()
     asts = defaultdict(deque)
     if elem.tag == 'OC':
-        entries = {(off - len(obj_name) + 1): idx[0] for idx, off in pref}
+        entries = {(off - len(obj_name) + 7): idx[0] for idx, off in pref}
     res = None
     for off, stat in bytecode.items():
         coff = off + 8

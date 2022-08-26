@@ -134,7 +134,7 @@ def get_var(stream):
         if more & 0x2000:
             return Variable(var.num - 0x2000, Variable(more - 0x2000))
         else:
-            assert more < 0x2000, (var, more)
+            # assert more < 0x2000, (var, more)
             return Variable(var.num - 0x2000, word)
     return var
 

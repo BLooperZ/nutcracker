@@ -2,6 +2,7 @@ import io
 import os
 import struct
 from collections import defaultdict
+from nutcracker.earwax.older_room import read_room
 
 from nutcracker.utils.fileio import read_file
 from nutcracker.utils.funcutils import flatten
@@ -47,10 +48,13 @@ def save_tree_data_only(cfg, element, basedir='.'):
         for c in element.children:
             save_tree_data_only(cfg, c, basedir=basedir)
     else:
-        print(repr(path), element)
         with open(path, 'wb') as f:
             # f.write(cfg.mktag(element.tag, element.data))
-            f.write(UINT16LE.pack(len(element.data) + UINT16LE.size) + element.data)
+            f.write(element.data)
+
+
+def mkblock(data):
+    return UINT16LE.pack(len(data) + UINT16LE.size) + data
 
 
 def open_game_resource(filename: str, chiper_key=0x00):
@@ -115,13 +119,14 @@ def open_game_resource(filename: str, chiper_key=0x00):
         )
         with io.BytesIO(room_data) as stream:
             rm_block = read_block(stream)
-            room.children.append(
-                create_element(
-                    0,
-                    earwax.untag(earwax.mktag('RO', rm_block)),
-                    path=os.path.join(room.attribs['path'], f'ROv3'),
-                )
+            rm_elem = create_element(
+                0,
+                earwax.untag(earwax.mktag('RO', mkblock(rm_block))),
+                path=os.path.join(room.attribs['path'], f'ROv3'),
             )
+            room.children.append(rm_elem)
+
+            rm_elem = read_room(rm_elem)
 
             while stream.tell() < len(room_data):
                 offset = stream.tell()
@@ -135,7 +140,7 @@ def open_game_resource(filename: str, chiper_key=0x00):
                 room.children.append(
                     create_element(
                         offset,
-                        earwax.untag(earwax.mktag(idx[2], block)),
+                        earwax.untag(earwax.mktag(idx[2], mkblock(block))),
                         path=os.path.join(room.attribs['path'], f'{idx[2]}v3_{idx[1]:04d}' if idx[1] else f'UN_{offset:04x}'),
                         **({'gid':idx[1]} if idx[1] else {}),
                     ),
