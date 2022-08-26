@@ -28,6 +28,14 @@ def read_room(elem):
     unk2 = read_uint16le(src_file, 8)
     im_offs = read_uint16le(src_file, 10)
 
+    elem.children.append(
+        create_element(
+            4,
+            earwax.untag(earwax.mktag('HD', src_file[4:8])),
+            path=os.path.join(elem.attribs['path'], f'HDv3'),
+        )
+    )
+
     ma_off = read_uint16le(src_file, 12)
     unk_off2 = read_uint16le(src_file, 14)
     unk_off3 = read_uint16le(src_file, 16)
@@ -51,8 +59,6 @@ def read_room(elem):
     obcds = [read_uint16le(src_file, off) for off in range(curroff, curroff + 2 * num_objects, 2)]
     curroff += 2 * num_objects
     assert len(obims) == num_objects, (len(obcds), num_objects)
-
-
 
     sounds = src_file[curroff:curroff+num_sounds]
     elem.children.append(
