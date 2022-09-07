@@ -4,7 +4,7 @@ import io
 import os
 import struct
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Mapping, Optional, Set
+from typing import Any, Callable, Dict, Mapping, Optional, Set, Tuple
 
 from nutcracker.utils.fileio import read_file
 
@@ -163,9 +163,11 @@ def create_config(game: Game) -> GameResourceConfig:
     raise NotImplementedError('SCUMM < 5 is not implemented')
 
 
-def open_game_resource(filename: str) -> GameResource:
+def open_game_resource(filename: str, version: Optional[Tuple[int, int]] = None) -> GameResource:
     game = load_resource(filename)
 
+    if version:
+        game.version, game.he_version = version
     config = create_config(game)
 
     rooms, idgens = config.read_index(game.index)

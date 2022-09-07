@@ -1,6 +1,8 @@
 import functools
 import os
+from enum import Enum
 from pathlib import Path
+from typing import Optional
 
 import typer
 
@@ -14,13 +16,32 @@ from .. import windex_v5, windex_v6
 
 app = typer.Typer()
 
+SUPPORTED_VERSION = {
+    '8': (8, 0),
+    '7': (7, 0),
+    'he100': (6, 100),
+    'he99': (6, 99),
+    'he98': (6, 98),
+    'he90': (6, 90),
+    'he80': (6, 80),
+    'he73': (6, 73),
+    'he72': (6, 72),
+    'he71': (6, 71),
+    'he70': (6, 70),
+    'he60': (6, 60),
+    '6': (6, 0),
+    '5': (5, 0),
+}
+
+Version = Enum('Version', dict(zip(SUPPORTED_VERSION.keys(), SUPPORTED_VERSION.keys())))
 
 @app.command('decompile')
 def decompile(
     filename: Path = typer.Argument(..., help='Game resource index file'),
+    gver: Optional[Version] = typer.Option(None, '--game', '-g', help='Force game version'),
     verbose: bool = typer.Option(False, '--verbose', help='Dump each opcode for debug'),
 ) -> None:
-    gameres = open_game_resource(filename)
+    gameres = open_game_resource(filename, SUPPORTED_VERSION.get(gver and gver.name))
     basename = gameres.basename
 
     root = gameres.read_resources(
