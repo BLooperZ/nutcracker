@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nutcracker"
-version = "0.3.14159"
+version = "0.3.141591"
 description = "Tools for editing resources in SCUMM games."
 authors = ["BLooperZ <blooperz@users.noreply.github.com>"]
 license = "GPL-3.0-or-later"
@@ -17,9 +17,10 @@ classifiers = [
     "Topic :: Utilities",
 ]
 keywords = ["scumm", "sputm", "smush", "lucasarts", "humongous"]
+repository = "https://github.com/blooperz/nutcracker"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "3.9"
 numpy = "^1.19.1"
 parse = "^1.18.0"
 Pillow = "^8.0.1"
@@ -35,9 +36,7 @@ flake8 = "^3.8.4"
 black = "^20.8b1"
 nitpick = "^0.23.1"
 pyinstaller = "^4.6"
-
-[tool.poetry.urls]
-repository = "https://github.com/blooperz/nutcracker"
+pip-licenses = "^3.5.4"
 
 [tool.poetry.scripts]
 nutcracker = "nutcracker.runner:app"
