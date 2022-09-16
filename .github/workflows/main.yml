@@ -29,10 +29,13 @@ jobs:
       uses: snok/install-poetry@v1
 
     - run: |
-        poetry install
+        poetry install --no-root
+        poetry build
+        poetry run pip install --no-index --find-links=dist nutcracker
+        mv dist dist_old
         poetry run pyinstaller --onefile -n nutcracker src/nutcracker/runner.py
     # Optionally verify that it works (provided that it does not need user interaction)
-    - run: ./dist/nutcracker
+    - run: ./dist/nutcracker --help
     - run: |
           if [ "$RUNNER_OS" == "Linux" ]; then
             mv ./dist/nutcracker ./dist/nutcracker-linux
@@ -40,7 +43,7 @@ jobs:
             mv ./dist/nutcracker ./dist/nutcracker-macos
           else
             cp README.md ./dist/README.md
-            cp LICENSE ./dist/LICENSE
+            poetry run pip-licenses --from=all --format=plain-vertical --with-license-file --no-license-path --with-urls --with-description --output-file ./dist/LICENSE
           fi
       shell: bash
     - uses: actions/upload-artifact@v2
