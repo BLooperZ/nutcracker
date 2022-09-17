@@ -1,7 +1,7 @@
 import io
 import itertools
 
-import numpy as np
+# import numpy as np
 
 
 from nutcracker.codex import base, bomp
@@ -21,7 +21,7 @@ PARAMS = [
 
 
 def decode1(width, height, f, verify=False):
-    BG = 39
+    # BG = 39
 
     # print(mat)
     mat = bomp.decode_image(f, width, height)
@@ -47,5 +47,5 @@ def decode1(width, height, f, verify=False):
 
         assert any(x == f[:len(x)] for x in encs), (encs, f)
 
-    mat = np.where(mat==0, BG, mat)
+    # mat = np.where(mat==0, BG, mat)
     return mat
