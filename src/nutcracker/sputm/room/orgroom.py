@@ -80,7 +80,7 @@ def encode_images_v8(basedir, imag, obj_name, room_id, rnam):
         print(image)
 
         if os.path.exists(im_path):
-            encoded = encode_block_v8(im_path, imxx.tag)
+            encoded = encode_block_v8(im_path, imxx.tag, ref=imxx)
             if image.tag == 'SMAP':
                 zpln = sputm.find('ZPLN', image)
                 assert (
