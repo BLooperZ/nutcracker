@@ -19,6 +19,9 @@ jobs:
         - windows-latest
         - ubuntu-latest
         - macos-latest
+    defaults:
+      run:
+        shell: bash
 
     steps:
     - uses: actions/checkout@v2
@@ -45,7 +48,6 @@ jobs:
             cp README.md ./dist/README.md
             poetry run pip-licenses --from=all --format=plain-vertical --with-license-file --no-license-path --with-urls --with-description --output-file ./dist/LICENSE
           fi
-      shell: bash
     - uses: actions/upload-artifact@v2
       with:
         name: nutcracker
