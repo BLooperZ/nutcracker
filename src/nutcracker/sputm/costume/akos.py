@@ -66,7 +66,7 @@ def decode32(width, height, pal, data):
 def decode16(width, height, pal, data):
     with io.BytesIO(data) as stream:
         bpp = stream.read(1)[0]
-        out = smap.decode_complex(stream, width * height, bpp)
+        out = smap.decode_run_majmin(stream, width * height, bpp)
         return convert_to_pil_image(out, size=(width, height))
 
 def decode_frame(akhd, ci, cd, palette):

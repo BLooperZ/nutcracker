@@ -6,7 +6,6 @@ from typing import Sequence
 import numpy as np
 
 from nutcracker.utils.funcutils import grouper
-from nutcracker.graphics.image import convert_to_pil_image
 
 TRANSPARENCY = 255
 
@@ -56,7 +55,7 @@ def decode_basic(stream, decoded_size, palen):
         return out.getvalue()
 
 
-def decode_complex(stream, decoded_size, palen):
+def decode_run_majmin(stream, decoded_size, palen):
     with io.BytesIO() as out:
 
         color = stream.read(1)[0]
@@ -110,7 +109,7 @@ def encode_basic(data, palen):
 
 
 
-def encode_complex(data, palen, limit=255):
+def encode_run_majmin(data, palen, limit=255):
     bits = []
     grouped = (list(group) for _, group in itertools.groupby(data))
     color = None
@@ -215,7 +214,7 @@ def get_method_info(code):
     elif 0x40 <= code <= 0x80:
         # elif 64 <= code <=128:
         assert direction == 'HORIZONTAL'
-        method = decode_complex
+        method = decode_run_majmin
     elif 0x86 <= code <= 0x94:
         # elif 134 <= code <=148:
         method = decode_he
@@ -246,12 +245,12 @@ def encode_raw(data, *args):
 def encode_strip(data, height, width, code, allow_upgrade=True):
     method, direction, tr, palen = get_method_info(code)
     data = bytes(data) if direction == 'HORIZONTAL' else bytes(data.T)
-    if method == decode_complex:
+    if method == decode_run_majmin:
         if code - palen in {60, 80}:
-            encode_method = partial(encode_complex, limit=255)
+            encode_method = partial(encode_run_majmin, limit=255)
         else:
             assert code - palen in {100, 120}, (code, palen)
-            encode_method = partial(encode_complex, limit=12)
+            encode_method = partial(encode_run_majmin, limit=12)
     elif method == decode_basic:
         encode_method = encode_basic
     elif method == decode_he:
@@ -304,13 +303,13 @@ def parse_strip(height, width, data, transparency=None):
         #         assert encode_basic(dec_stream, height, palen, 8) == data[1:]
 
 
-        if decode_method in {decode_complex, decode_basic, decode_he}:
-            if decode_method == decode_complex:
+        if decode_method in {decode_run_majmin, decode_basic, decode_he}:
+            if decode_method == decode_run_majmin:
                 if code - palen in {60, 80}:
-                    encode_method = partial(encode_complex, limit=255)
+                    encode_method = partial(encode_run_majmin, limit=255)
                 else:
                     assert code - palen in {100, 120}, (code, palen)
-                    encode_method = partial(encode_complex, limit=12)
+                    encode_method = partial(encode_run_majmin, limit=12)
             elif decode_method == decode_basic:
                 encode_method = encode_basic
             elif decode_method == decode_he:
