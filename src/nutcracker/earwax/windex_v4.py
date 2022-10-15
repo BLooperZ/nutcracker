@@ -8,7 +8,7 @@ from nutcracker.kernel.element import Element
 from nutcracker.sputm.script.bytecode import local_script, refresh_offsets, to_bytes, verb_script
 from nutcracker.sputm.script.opcodes_v5 import BYTE, WORD, OPCODES_v5, get_params, get_result_pos, o5_actorOps, o5_getObjectOwner, o5_isActorInBox, o5_setState, o5_startMusic, o5_startSound, realize_v5, xop
 from nutcracker.sputm.script.parser import ByteValue, RefOffset
-from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, build_actor, o5_mus_wd, o5_owner_wd, o5_room_wd, o5_sound_wd, o5_state_wd, print_asts, print_locals, ops, value, l_vars
+from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, build_actor, o5_mus_wd, o5_owner_wd, o5_room_wd, o5_sound_wd, o5_state_wd, print_asts, print_locals, ops, semantic_key, value, l_vars
 from nutcracker.utils.funcutils import flatten
 
 def global_script(data: bytes) -> Tuple[bytes, bytes]:
@@ -62,7 +62,7 @@ def o4_room_wd(op):
         actor = op.args[0]
         assert op.args[-1].op[0] == 0xFF
         rest_params = ' '.join(build_actor(op.args[1:], version=4))
-        return f'actor {value(actor)} {rest_params}'
+        return f'actor {value(actor, sem="object")} {rest_params}'
     return o5_room_wd(op)
 
 def o4_state_wd(op):
@@ -77,14 +77,14 @@ def o4_mus_wd(op):
 
 def o4_jump_wd(op):
     return ConditionalJump(
-        f'state-of {value(op.args[0])} is {value(op.args[1])}',
+        f'state-of {value(op.args[0], sem="object")} is {value(op.args[1], sem="state")}',
         op.args[2]
     )
 
 def o4_draw_wd(op):
     obj = op.args[0]
     # assert op.args[-1].op[0] == 0xFF
-    return f'draw-object {value(obj)} at {value(op.args[1])},{value(op.args[2])}'
+    return f'draw-object {value(obj, sem="object")} at {value(op.args[1])},{value(op.args[2])}'
 
 
 def o4_owner_wd(op):
@@ -92,14 +92,14 @@ def o4_owner_wd(op):
         return f'$ lights {value(op.args[0])} {value(op.args[1])} {value(op.args[2])}'
     if op.opcode in {0x50, 0xD0}:
         obj = op.args[0]
-        return f'pick-up-object {value(obj)}'
+        return f'pick-up-object {value(obj, sem="object")}'
     return o5_owner_wd(op)
 
 
 def o4_sound_wd(op):
     if op.opcode in {0x5C, 0xDC}:
         if ord(op.args[0].op) == 3:
-            return f'fades {value(op.args[1])}'
+            return f'fades {value(op.args[1], sem="fade")}'
     return o5_sound_wd(op)
 
 
@@ -269,7 +269,7 @@ def decompile_script(elem):
         'EX': 'exit',
     }
     if elem.tag == 'OC':
-        yield ' '.join([f'object', f'{obj_id}', '{', respath_comment])
+        yield ' '.join([f'object', semantic_key(obj_id, sem='object'), '{', respath_comment])
         obj_name, script_data = script_data.split(b'\0', maxsplit=1)
         obj_name_str = obj_name.decode('ascii', errors='ignore')
         yield ' '.join([f'\tname is', f'"{obj_name_str}"'])
@@ -277,7 +277,7 @@ def decompile_script(elem):
         scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
         gid = elem.attribs['gid']
         assert scr_id is None or scr_id == gid
-        gid_str = '' if gid is None else f' {gid}'
+        gid_str = '' if gid is None else f' {semantic_key(gid, "script")}'
         yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
 
     print('============', elem)
@@ -305,7 +305,7 @@ def decompile_script(elem):
                 yield '\t}'
                 l_vars.clear()
             yield ''  # new line
-            yield f'\tverb {entries[coff]} {{'
+            yield f'\tverb {semantic_key(entries[coff], sem="verb")} {{'
             indent = 2 * '\t'
         if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
             curref = f'_[{coff:08d}]'

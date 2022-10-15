@@ -9,7 +9,7 @@ from nutcracker.earwax.windex_v4 import get_room_scripts, get_global_scripts, gl
 from nutcracker.kernel.element import Element
 from nutcracker.sputm.script.bytecode import verb_script
 from nutcracker.sputm.script.parser import ByteValue, RefOffset
-from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, print_asts, print_locals, l_vars
+from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, print_asts, print_locals, l_vars, semantic_key
 from nutcracker.utils.funcutils import flatten
 
 def global_script_v3(data: bytes) -> Tuple[bytes, bytes]:
@@ -84,13 +84,13 @@ def decompile_script(elem):
         'EX': 'exit',
     }
     if elem.tag == 'OC':
-        yield ' '.join([f'object', f'{obj_id}', '{', respath_comment])
+        yield ' '.join([f'object', semantic_key(obj_id, sem='object'), '{', respath_comment])
         obj_name, script_data = script_data.split(b'\0', maxsplit=1)
         obj_name_str = obj_name.decode('ascii', errors='ignore')
         yield ' '.join([f'\tname is', f'"{obj_name_str}"'])
     else:
         gid = elem.attribs.get('gid')
-        gid_str = '' if gid is None else f' {gid}'
+        gid_str = '' if gid is None else f' {semantic_key(gid, "script")}'
         yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
 
     print('============', elem)
@@ -118,7 +118,7 @@ def decompile_script(elem):
                 yield '\t}'
                 l_vars.clear()
             yield ''  # new line
-            yield f'\tverb {entries[coff]} {{'
+            yield f'\tverb {semantic_key(entries[coff], sem="verb")} {{'
             indent = 2 * '\t'
         if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
             curref = f'_[{coff:08d}]'
