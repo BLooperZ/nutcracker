@@ -27,35 +27,51 @@ if __name__ == '__main__':
     os.makedirs(target_dir, exist_ok=True)
 
     song = next(sputm.map_chunks(res))
+    sputm.render(song)
 
     children = iter(song.children)
 
     sghd = sputm.assert_tag('SGHD', next(children))
     num_songs, = UINT32LE.unpack_from(sghd)
-    print(num_songs)
+    print(num_songs, 'songs')
 
     songs = []
 
-    for i in range(num_songs):
-        elem = next(children)
-        assert elem.tag == 'SGEN', elem
+    if len(sghd) > 32:
 
-        songs.append(
-            dict(
-                zip(
-                    ('song', 'offset', 'size'),
-                    UINT32LE_x3.unpack_from(elem.data),
-                ),
-                name=elem.data[UINT32LE_x3.size:]
+        for i in range(num_songs):
+            songs.append(
+                dict(
+                    zip(
+                        ('song', 'offset', 'size'),
+                        UINT32LE_x3.unpack_from(sghd, offset=4 + (UINT32LE_x3.size + 13) * i),
+                    ),
+                    name=sghd[4 + (UINT32LE_x3.size + 13) * i + UINT32LE_x3.size:4 + (UINT32LE_x3.size + 13) * i + UINT32LE_x3.size + 13]
+                )
             )
-        )
-    
+
+    else:
+
+        for i in range(num_songs):
+            elem = next(children)
+            assert elem.tag == 'SGEN', elem
+
+            songs.append(
+                dict(
+                    zip(
+                        ('song', 'offset', 'size'),
+                        UINT32LE_x3.unpack_from(elem.data),
+                    ),
+                    name=elem.data[UINT32LE_x3.size:]
+                )
+            )
+
     for s in songs:
         elem = next(children)
         assert elem.tag == 'DIGI', elem
         assert elem.attribs['offset'] + 8 == s['offset'], (elem.attribs['offset'] + 8, s['offset'])
         assert elem.attribs['size'] + 8 == s['size'], (elem.attribs['size'] + 8, s['size'])
-        assert s['name'] == b'\0', s['name']
+        assert s['name'] in {b'\0', b'abcdefghijklm'}, s['name']
 
         songid = s['song']
         
