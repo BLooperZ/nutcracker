@@ -17,12 +17,14 @@ version_by_ext_maxs = {
     ('.HE0', 40): (6, 80),  # (6, 72), (6, 73), (6, 80),
     ('.HE0', 38): (6, 71),  # (6, 60), (6, 70), (6, 71),
     ('.000', 38): (6, 0),
+    ('.SM0', 38): (6, 0),
     ('.000', 26): (5, 0),
     ('.LFL', 26): (5, 0),
 }
 
 chiper_keys = {
     '.000': 0x69,
+    '.SM0': 0x69,
     '.HE0': 0x69,
     '.LA0': 0x00,
 }
@@ -47,6 +49,8 @@ class Game(_GameMeta):
 def get_disk(game: _GameMeta, num: int) -> str:
     if game.ext == '.000':
         return f'{game.basename}.{num:03d}'
+    if game.ext == '.SM0':
+        return f'{game.basename}.SM{num:d}'
     if game.ext == '.HE0':
         if game.he_version >= 98 and num > 0:
             return f"{game.basename}.({chr(ord('`') + num)})"
