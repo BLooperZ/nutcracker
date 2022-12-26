@@ -10,6 +10,7 @@ from ..preset import sputm
 from ..tree import open_game_resource, narrow_schema
 from ..schema import SCHEMA
 from ..script.bytecode import script_map
+from ..strings import RAW_ENCODING
 
 from .scu import dump_script_file
 from .. import windex_v5, windex_v6
@@ -78,7 +79,7 @@ def decompile(
             )
             fname = f"{script_dir}/{room.attribs['gid']:04d}_{room_no}.scu"
 
-            with open(fname, 'w', encoding='windows-1255', errors='ignore') as script_file:
+            with open(fname, 'w', **RAW_ENCODING) as script_file:
                 dump_script_file(room_no, room, decompile, script_file)
 
 

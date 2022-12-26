@@ -11,6 +11,7 @@ from typing import Iterable, Optional, OrderedDict
 from nutcracker.kernel.element import Element
 
 from nutcracker.sputm.preset import sputm
+from nutcracker.sputm.strings import RAW_ENCODING, EncodingSetting
 from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
 
@@ -75,15 +76,15 @@ def escape_message(
                     if ord(t) not in {1, 2, 3, 8}:
                         c += stream.read(var_size)
                     c = b''.join(f'\\x{v:02X}'.encode() for v in c)
-            elif c not in (printable.encode() + bytes(range(ord('\xE0'), ord('\xFA')))):
+            elif c not in (printable.encode() + bytes(range(ord('\xE0'), ord('\xFA') + 1))):
                 c = b''.join(f'\\x{v:02X}'.encode() for v in c)
             elif c == b'\\':
                 c = b'\\\\'
             yield c
 
 
-def msg_to_print(msg: bytes, encoding: str = 'windows-1255') -> str:
-    return b''.join(escape_message(msg, escape=b'\xff')).decode(encoding)
+def msg_to_print(msg: bytes, encoding: EncodingSetting = RAW_ENCODING) -> str:
+    return b''.join(escape_message(msg, escape=b'\xff')).decode(**encoding)
 
 
 def msg_val(arg):

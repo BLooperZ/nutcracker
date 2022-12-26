@@ -16,7 +16,8 @@ from nutcracker.sputm.schema import SCHEMA
 
 from nutcracker.sputm.script.bytecode import script_map, descumm
 from nutcracker.sputm.script.opcodes import ByteValue, RefOffset, WordValue
-from nutcracker.sputm.strings import get_optable
+from nutcracker.sputm.strings import RAW_ENCODING, EncodingSetting, get_optable
+
 
 
 class Value:
@@ -60,8 +61,7 @@ class KeyString:
         self.cast = 'string'
 
     def __repr__(self):
-        encoding = 'windows-1255'
-        return f'"{self.orig.msg.decode(encoding)}"'
+        return f'"{self.orig.msg.decode(**RAW_ENCODING)}"'
 
 
 class Variable:
@@ -261,15 +261,15 @@ def escape_message(
                     if ord(t) not in {1, 2, 3, 8}:
                         c += stream.read(var_size)
                     c = b''.join(f'\\x{v:02X}'.encode() for v in c)
-            elif c not in (printable.encode() + bytes(range(ord('\xE0'), ord('\xFA')))):
+            elif c not in (printable.encode() + bytes(range(ord('\xE0'), ord('\xFA') + 1))):
                 c = b''.join(f'\\x{v:02X}'.encode() for v in c)
             elif c == b'\\':
                 c = b'\\\\'
             yield c
 
 
-def msg_to_print(msg: bytes, encoding: str = 'windows-1255') -> str:
-    return b''.join(escape_message(msg, escape=b'\xff')).decode(encoding)
+def msg_to_print(msg: bytes, encoding: EncodingSetting = RAW_ENCODING) -> str:
+    return b''.join(escape_message(msg, escape=b'\xff')).decode(**encoding)
 
 
 def msg_val(arg):

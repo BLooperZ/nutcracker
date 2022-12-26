@@ -2,7 +2,7 @@
 
 import io
 from string import printable
-from typing import Callable, Iterable, Iterator, Mapping, Optional, Tuple
+from typing import Callable, Iterable, Iterator, Mapping, Optional, Tuple, TypedDict
 
 from nutcracker.sputm.script.bytecode import (
     descumm,
@@ -33,6 +33,14 @@ from nutcracker.sputm.script.opcodes_v5 import OPCODES_v5
 from .preset import sputm
 from .resource import Game
 from .types import Element
+
+
+class EncodingSetting(TypedDict):
+    encoding: str
+    errors: str
+
+
+RAW_ENCODING = EncodingSetting(encoding='ascii', errors='surrogateescape')
 
 
 def get_all_scripts(
@@ -152,12 +160,12 @@ def unescape_message(msg: bytes) -> bytes:
     return (prefix + b''.join(encode_seq(seq) for seq in rest)).replace(b'\\\\', b'\\')
 
 
-def print_to_msg(line: str, encoding: str = 'windows-1255') -> bytes:
+def print_to_msg(line: str, encoding: EncodingSetting = RAW_ENCODING) -> bytes:
     return (
         unescape_message(
             line
             .replace('\r', '')
-            .replace('\n', '').encode(encoding)
+            .replace('\n', '').encode(**encoding)
         )
         .replace(b'\\x0D', b'\r')
         .replace(b'\\x09', b'\t')
@@ -167,7 +175,7 @@ def print_to_msg(line: str, encoding: str = 'windows-1255') -> bytes:
     )
 
 
-def msg_to_print(msg: bytes, encoding: str = 'windows-1255', var_size=2) -> str:
+def msg_to_print(msg: bytes, encoding: EncodingSetting = RAW_ENCODING, var_size=2) -> str:
     assert b'\\x80' not in msg
     assert b'\\xd9' not in msg
     assert b'\\x0D' not in msg
@@ -181,7 +189,7 @@ def msg_to_print(msg: bytes, encoding: str = 'windows-1255', var_size=2) -> str:
         .replace(b'\x80', b'\\x80')
         .replace(b'\xd9', b'\\xd9')
         .replace(b'\x7f', b'\\x7f')
-        .decode(encoding)
+        .decode(**encoding)
     )
     assert (unescaped := print_to_msg(line, encoding)) == msg, (unescaped, escaped, msg)
     return line
