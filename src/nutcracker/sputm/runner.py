@@ -9,6 +9,7 @@ from nutcracker.sputm.char.decode import decode_all_fonts, get_chars
 from nutcracker.sputm.char.encode import encode_char
 from nutcracker.sputm.schema import SCHEMA
 from nutcracker.sputm.strings import (
+    RAW_ENCODING,
     get_all_scripts,
     get_optable,
     get_script_map,
@@ -86,7 +87,7 @@ def extract_strings(
 
     var_size = 4 if gameres.game.version >= 8 else 2
 
-    with open(textfile, 'w') as f:
+    with open(textfile, 'w', **RAW_ENCODING) as f:
         for msg in get_all_scripts(root, script_ops, script_map):
             print(msg_to_print(msg, var_size=var_size), file=f)
 
@@ -111,7 +112,7 @@ def inject_strings(
         )
     )
 
-    with open(textfile, 'r') as f:
+    with open(textfile, 'r', **RAW_ENCODING) as f:
         fixed_lines = (print_to_msg(line) for line in f)
         updated_resource = list(
             update_element_strings(root, fixed_lines, script_ops, script_map)
