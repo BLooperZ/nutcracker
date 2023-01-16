@@ -1,4 +1,3 @@
-
 import glob
 import io
 import os
@@ -19,14 +18,11 @@ def read_uint16les(stream):
     return read_uint16le(stream.read(2))
 
 def parse_strip_ega(height, strip_width, data):
-    color = 0
-    run = 0
-    x = 0
     y = 0
-
-    output = [0 for _ in range(height * strip_width)]
+    length = height * strip_width
+    output = bytearray(length)
     with io.BytesIO(data) as s:
-        while x < 8:
+        while y < length:
             color = ord(s.read(1))
             if color & 0x80:
                 run = color & 0x3F
@@ -34,32 +30,23 @@ def parse_strip_ega(height, strip_width, data):
                     color = ord(s.read(1))
                     if run == 0:
                         run = ord(s.read(1))
-                    for z in range(run):
-                        output[y * strip_width + x] = (color & 0xf) if z & 1 else (color >> 4)
-                        y += 1
-                        if y >= height:
-                            y = 0
-                            x += 1
+                    output[y:y + run] = bytes(
+                        ((color & 0xF) if z & 1 else (color >> 4)) for z in range(run)
+                    )
+                    y += run
                 else:
                     if run == 0:
                         run = ord(s.read(1))
-                    for z in range(run):
-                        output[y * strip_width + x] = output[y * strip_width + x - 1]
+                    for _ in range(run):
+                        output[y] = output[y - height]
                         y += 1
-                        if y >= height:
-                            y = 0
-                            x += 1
             else:
                 run = color >> 4
                 if run == 0:
                     run = ord(s.read(1))
-                for z in range(run):
-                    output[y * strip_width + x] = color & 0xf
-                    y += 1
-                    if y >= height:
-                        y = 0
-                        x += 1
-        return np.asarray(output, dtype=np.uint8).reshape(height, strip_width)
+                output[y:y + run] = bytes([color & 0xF] * run)
+                y += run
+        return np.asarray(output, dtype=np.uint8).reshape(strip_width, height).T
 
 
 def decode_smap(height: int, width: int, data: bytes) -> Sequence[Sequence[int]]:
