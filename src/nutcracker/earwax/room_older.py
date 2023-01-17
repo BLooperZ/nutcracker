@@ -21,6 +21,7 @@ def parse_strip_ega(height, strip_width, data):
     y = 0
     length = height * strip_width
     output = bytearray(length)
+    # print(list(data))
     with io.BytesIO(data) as s:
         while y < length:
             color = ord(s.read(1))
@@ -30,6 +31,7 @@ def parse_strip_ega(height, strip_width, data):
                     color = ord(s.read(1))
                     if run == 0:
                         run = ord(s.read(1))
+                    # print(run, color & 0xF, color >> 4, 'DITHER')
                     output[y:y + run] = bytes(
                         ((color & 0xF) if z & 1 else (color >> 4)) for z in range(run)
                     )
@@ -37,6 +39,7 @@ def parse_strip_ega(height, strip_width, data):
                 else:
                     if run == 0:
                         run = ord(s.read(1))
+                    # print(run, 'COPY')
                     for _ in range(run):
                         output[y] = output[y - height]
                         y += 1
@@ -44,6 +47,7 @@ def parse_strip_ega(height, strip_width, data):
                 run = color >> 4
                 if run == 0:
                     run = ord(s.read(1))
+                # print(run, color & 0xF, 'NIBBLE')
                 output[y:y + run] = bytes([color & 0xF] * run)
                 y += run
         return np.asarray(output, dtype=np.uint8).reshape(strip_width, height).T
@@ -86,7 +90,8 @@ if __name__ == '__main__':
         os.makedirs(basename / 'backgrounds', exist_ok=True)
         os.makedirs(basename / 'objects', exist_ok=True)
 
-        for idx, room in enumerate(root):
+        for room in root:
+            room_id = room.attribs['gid']
             ro = room.children[0]
             assert ro.tag == 'RO', ro.tag
             hd = earwax.find('HD', ro)
@@ -97,7 +102,8 @@ if __name__ == '__main__':
             bgim = decode_smap(height, width, im.data)
             imx = convert_to_pil_image(bgim)
             imx.putpalette(EGA_PALETTE)
-            imx.save(basename / 'backgrounds' / f'room_{idx:02d}.png')
+            imx.save(basename / 'backgrounds' / f'room_{room_id:02d}.png')
+            # assert np.array_equal(decode_smap(height, width, im.data[:2] + encode_smap(bgim)), bgim)
 
             for oi in earwax.findall('OI', ro):
                 for oc in earwax.findall('OC', ro):
@@ -109,4 +115,4 @@ if __name__ == '__main__':
                         oiim = decode_smap(height, width, oi.data)
                         imx = convert_to_pil_image(oiim)
                         imx.putpalette(EGA_PALETTE)
-                        imx.save(basename / 'objects' / f'object_{obj_id:02d}.png')
+                        imx.save(basename / 'objects' / f'room_{room_id:02d}_object_{obj_id:04d}.png')
