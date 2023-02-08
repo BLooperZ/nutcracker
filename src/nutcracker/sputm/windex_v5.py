@@ -1347,7 +1347,11 @@ def collapse_override(asts):
     return asts
 
 
-def transform_asts(indent, asts):
+def transform_asts(indent, asts, transform=True):
+
+    if not transform:
+        return asts
+
     # Collapse break-here
     asts = collapse_break_here(asts)
 
@@ -1633,7 +1637,7 @@ def semantic_key(name, sem=None):
     return str(name)
 
 
-def decompile_script(elem):
+def decompile_script(elem, transform=True):
     if elem.tag == 'OBCD':
         obcd = elem
         elem = sputm.find('VERB', obcd)
@@ -1677,7 +1681,7 @@ def decompile_script(elem):
                 if off + 8 > min(entries.keys()):
                     yield from print_locals(indent)
                 l_vars.clear()
-                yield from print_asts(indent, transform_asts(indent, asts))
+                yield from print_asts(indent, transform_asts(indent, asts, transform=transform))
                 curref = f'_[{off + 8:08d}]'
                 asts = defaultdict(deque)
             if off + 8 > min(entries.keys()):
@@ -1695,7 +1699,7 @@ def decompile_script(elem):
         asts[curref].append(res)
     yield from print_locals(indent)
     l_vars.clear()
-    yield from print_asts(indent, transform_asts(indent, asts))
+    yield from print_asts(indent, transform_asts(indent, asts, transform=transform))
     if elem.tag == 'VERB' and entries:
         yield '\t}'
     yield '}'

@@ -4762,7 +4762,11 @@ def collapse_override(asts):
     return asts
 
 
-def transform_asts(indent, asts):
+def transform_asts(indent, asts, transform=True):
+
+    if not transform:
+        return asts
+
     asts = collapse_override(asts)
 
 
@@ -5050,7 +5054,7 @@ def parse_verb_meta(meta):
             yield key, entry - len(meta)
 
 
-def decompile_script(elem, game, verbose=False):
+def decompile_script(elem, game, verbose=False, transform=True):
     if elem.tag == 'OBCD':
         obcd = elem
         elem = sputm.find('VERB', obcd)
@@ -5108,7 +5112,7 @@ def decompile_script(elem, game, verbose=False):
                 if off + 8 > min(entries.keys()):
                     yield from print_locals(indent)
                 l_vars.clear()
-                yield from print_asts(indent, transform_asts(indent, asts))
+                yield from print_asts(indent, transform_asts(indent, asts, transform=transform))
                 curref = f'_[{off + 8:08d}]'
                 asts = defaultdict(deque)
             if off + 8 > min(entries.keys()):
@@ -5140,7 +5144,7 @@ def decompile_script(elem, game, verbose=False):
             # )
     yield from print_locals(indent)
     l_vars.clear()
-    yield from print_asts(indent, transform_asts(indent, asts))
+    yield from print_asts(indent, transform_asts(indent, asts, transform=transform))
     if elem.tag == 'VERB' and entries:
         yield '\t}'
     yield '}'

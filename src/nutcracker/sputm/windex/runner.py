@@ -42,6 +42,7 @@ def decompile(
     filename: Path = typer.Argument(..., help='Game resource index file'),
     gver: Optional[Version] = typer.Option(None, '--game', '-g', help='Force game version'),
     verbose: bool = typer.Option(False, '--verbose', help='Dump each opcode for debug'),
+    skip_transform: bool = typer.Option(False, '--skip-transform', help='Disable structure simplification'),
 ) -> None:
     gameres = open_game_resource(filename, SUPPORTED_VERSION.get(gver and gver.name))
     basename = gameres.basename
@@ -65,9 +66,13 @@ def decompile(
             windex_v6.decompile_script,
             game=gameres.game,
             verbose=verbose,
+            transform=not skip_transform,
         )
     elif gameres.game.version >= 5:
-        decompile = windex_v5.decompile_script
+        decompile = functools.partial(
+            windex_v5.decompile_script,
+            transform=not skip_transform,
+        )
 
     for disk in root:
         for room in sputm.findall('LFLF', disk):
