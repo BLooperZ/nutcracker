@@ -163,8 +163,12 @@ def create_config(game: Game) -> GameResourceConfig:
     raise NotImplementedError('SCUMM < 5 is not implemented')
 
 
-def open_game_resource(filename: str, version: Optional[Tuple[int, int]] = None) -> GameResource:
-    game = load_resource(filename)
+def open_game_resource(
+    filename: str,
+    version: Optional[Tuple[int, int]] = None,
+    chiper_key: Optional[int] = None,
+) -> GameResource:
+    game = load_resource(filename, chiper_key=chiper_key)
 
     if version:
         game.version, game.he_version = version

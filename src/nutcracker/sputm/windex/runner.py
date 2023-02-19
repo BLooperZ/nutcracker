@@ -42,9 +42,14 @@ def decompile(
     filename: Path = typer.Argument(..., help='Game resource index file'),
     gver: Optional[Version] = typer.Option(None, '--game', '-g', help='Force game version'),
     verbose: bool = typer.Option(False, '--verbose', help='Dump each opcode for debug'),
+    chiper_key: Optional[str] = typer.Option(None, '--chiper-key', help='XOR key for decrypting game resources'),
     skip_transform: bool = typer.Option(False, '--skip-transform', help='Disable structure simplification'),
 ) -> None:
-    gameres = open_game_resource(filename, SUPPORTED_VERSION.get(gver and gver.name))
+    gameres = open_game_resource(
+        filename,
+        SUPPORTED_VERSION.get(gver and gver.name),
+        chiper_key and int(chiper_key, 16),
+    )
     basename = gameres.basename
 
     root = gameres.read_resources(

@@ -1,7 +1,7 @@
 import glob
 import os
 from dataclasses import asdict, dataclass, field
-from typing import Sequence
+from typing import Optional, Sequence
 
 from nutcracker.utils.fileio import read_file
 
@@ -61,13 +61,14 @@ def get_disk(game: _GameMeta, num: int) -> str:
     return f'DISK{num:02d}.LEC' if num > 0 else '000.LFL'
 
 
-def load_resource(index_file: str):
+def load_resource(index_file: str, chiper_key: Optional[int] = None):
     print(index_file)
     basename, ext = os.path.splitext(os.path.basename(index_file))
     ext = ext.upper()
     basedir = os.path.dirname(index_file)
 
-    chiper_key = chiper_keys.get(ext, 0x00)
+    if chiper_key is None:
+        chiper_key = chiper_keys.get(ext, 0x00)
 
     index = read_file(index_file, key=chiper_key)
 
