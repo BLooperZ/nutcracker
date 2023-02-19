@@ -2327,7 +2327,7 @@ def o6_actorOps(op, stack, bytecode, game):
         return f'\tscale {stack.pop()}'
     if cmd.num == 93:
         return f'\tnever-zclip'
-    if cmd.num == 94:
+    if cmd.num in {94, 225}:
         return f'\talways-zclip {stack.pop()}'
     if cmd.num == 95:
         return f'\tignore-boxes \\'
