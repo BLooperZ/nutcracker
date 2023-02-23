@@ -1052,12 +1052,12 @@ def printer(action, op, stack, pop_actor=False):
         return f'\tno-talk-animation'
     if cmd.num == 75:  # String
         string = op.args[1]
-        return f'\t{msg_val(string)}\n'
+        return f'\t{msg_val(string)}'
     if cmd.num == 194:  # Formatted string
         string = op.args[1]
         num_params = stack.pop().num + 1
         params = [stack.pop() for _ in range(num_params)]
-        return f'\t{msg_val(string)} {" ".join(str(param) for param in params)}\n'
+        return f'\t{msg_val(string)} {" ".join(str(param) for param in params)}'
     if cmd.num == 225:
         res = stack.pop()
         return f'\ttalkie {res}'
@@ -1102,7 +1102,7 @@ def printer_v8(action, op, stack, pop_actor=False):
         return f'\tno-talk-animation'
     if cmd.num == 209:  # String
         string = op.args[1]
-        return f'\t{msg_val(string)}\n'
+        return f'\t{msg_val(string)}'
     if cmd.num == 210:
         return f'\twrap'
     raise ValueError(cmd)
@@ -1225,12 +1225,12 @@ def printer_he100(action, op, stack, pop_actor=False):
         return f'\tno-talk-animation'
     if cmd.num == 79:  # String
         string = op.args[1]
-        return f'\t{msg_val(string)}\n'
+        return f'\t{msg_val(string)}'
     if cmd.num == 35:  # Formatted string
         string = op.args[1]
         num_params = stack.pop().num + 1
         params = [stack.pop() for _ in range(num_params)]
-        return f'\t{msg_val(string)} {" ".join(str(param) for param in params)}\n'
+        return f'\t{msg_val(string)} {" ".join(str(param) for param in params)}'
     if cmd.num == 78:
         res = stack.pop()
         return f'\ttalkie {res}'
@@ -4766,16 +4766,23 @@ def break_lines(asts):
     for _, seq in asts.items():
         stats = iter(list(seq))
         seq.clear()
-        last_line = None
+        last_line = []
         for st in stats:
             if last_line:
-                if isinstance(st, str) and st.startswith('\t'):
-                    assert isinstance(last_line, str), repr(last_line)
-                    last_line += ' \\'
-                seq.append(last_line)
-            last_line = st
+                if not (isinstance(st, str) and st.startswith('\t')):
+                    if len(last_line) > 1:
+                        assert all(isinstance(part, str) for part in last_line), repr(last_line)
+                        term = last_line.pop() + '\n'
+                        last_line = [x + ' \\' for x in last_line] + [term]
+                    seq.extend(last_line)
+                    last_line.clear()
+            last_line.append(st)
         if last_line:
-            seq.append(last_line)
+            if len(last_line) > 1:
+                assert all(isinstance(part, str) for part in last_line), repr(last_line)
+                term = last_line.pop() + '\n'
+                last_line = [x + ' \\' for x in last_line] + [term]
+            seq.extend(last_line)
     return asts
 
 
