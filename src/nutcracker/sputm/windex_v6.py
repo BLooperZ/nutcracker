@@ -1037,19 +1037,19 @@ def printer(action, op, stack, pop_actor=False):
     if cmd.num == 65:
         ypos = stack.pop()
         xpos = stack.pop()
-        return f'\tat {xpos},{ypos} \\'
+        return f'\tat {xpos},{ypos}'
     if cmd.num == 66:
-        return f'\tcolor {stack.pop()} \\'
+        return f'\tcolor {stack.pop()}'
     if cmd.num == 67:
-        return f'\tclipped {stack.pop()} \\'
+        return f'\tclipped {stack.pop()}'
     if cmd.num == 69:
-        return f'\tcenter \\'
+        return f'\tcenter'
     if cmd.num == 71:  # String
-        return f'\tleft \\'
+        return f'\tleft'
     if cmd.num == 72:  # String
-        return f'\toverhead \\'
+        return f'\toverhead'
     if cmd.num == 74:  # String
-        return f'\tno-talk-animation \\'
+        return f'\tno-talk-animation'
     if cmd.num == 75:  # String
         string = op.args[1]
         return f'\t{msg_val(string)}\n'
@@ -1064,13 +1064,13 @@ def printer(action, op, stack, pop_actor=False):
     if cmd.num == 249:
         colors = stack.pop()
         if colors.num == 1:
-            return f'\tcolor {stack.pop()} \\'
+            return f'\tcolor {stack.pop()}'
         stack.append(colors)
-        return f'\tcolors {get_params(stack)} \\'
+        return f'\tcolors {get_params(stack)}'
     if cmd.num == 254:
         if pop_actor:
-            return f'{action} {stack.pop()} \\'
-        return f'{action} \\'
+            return f'{action} {stack.pop()}'
+        return f'{action}'
     if cmd.num == 255:
         return f'\tend'
     raise ValueError(cmd)
@@ -1080,31 +1080,31 @@ def printer_v8(action, op, stack, pop_actor=False):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 200:
         if pop_actor:
-            return f'{action} {stack.pop()} \\'
-        return f'{action} \\'
+            return f'{action} {stack.pop()}'
+        return f'{action}'
     if cmd.num == 201:
         return f'\tend'
     if cmd.num == 202:
         ypos = stack.pop()
         xpos = stack.pop()
-        return f'\tat {xpos},{ypos} \\'
+        return f'\tat {xpos},{ypos}'
     if cmd.num == 203:
-        return f'\tcolor {stack.pop()} \\'
+        return f'\tcolor {stack.pop()}'
     if cmd.num == 204:
-        return f'\tcenter \\'
+        return f'\tcenter'
     if cmd.num == 205:
-        return f'\tcharset {stack.pop()} \\'
+        return f'\tcharset {stack.pop()}'
     if cmd.num == 206:
-        return f'\tleft \\'
+        return f'\tleft'
     if cmd.num == 207:
-        return f'\toverhead \\'
+        return f'\toverhead'
     if cmd.num == 208:  # String
-        return f'\tno-talk-animation \\'
+        return f'\tno-talk-animation'
     if cmd.num == 209:  # String
         string = op.args[1]
         return f'\t{msg_val(string)}\n'
     if cmd.num == 210:
-        return f'\twrap \\'
+        return f'\twrap'
     raise ValueError(cmd)
 
 
@@ -1210,19 +1210,19 @@ def printer_he100(action, op, stack, pop_actor=False):
     if cmd.num == 6:
         ypos = stack.pop()
         xpos = stack.pop()
-        return f'\tat {xpos},{ypos} \\'
+        return f'\tat {xpos},{ypos}'
     if cmd.num == 20:
-        return f'\tcolor {stack.pop()} \\'
+        return f'\tcolor {stack.pop()}'
     if cmd.num == 18:
-        return f'\tclipped {stack.pop()} \\'
+        return f'\tclipped {stack.pop()}'
     if cmd.num == 12:
-        return f'\tcenter \\'
+        return f'\tcenter'
     if cmd.num == 46:
-        return f'\tleft \\'
+        return f'\tleft'
     if cmd.num == 56:
-        return f'\toverhead \\'
+        return f'\toverhead'
     if cmd.num == 51:
-        return f'\tno-talk-animation \\'
+        return f'\tno-talk-animation'
     if cmd.num == 79:  # String
         string = op.args[1]
         return f'\t{msg_val(string)}\n'
@@ -1235,11 +1235,11 @@ def printer_he100(action, op, stack, pop_actor=False):
         res = stack.pop()
         return f'\ttalkie {res}'
     if cmd.num == 21:
-        return f'\tcolors {get_params(stack)} \\'
+        return f'\tcolors {get_params(stack)}'
     if cmd.num == 91:
         if pop_actor:
-            return f'{action} {stack.pop()} \\'
-        return f'{action} \\'
+            return f'{action} {stack.pop()}'
+        return f'{action}'
     if cmd.num == 92:
         return f'\tend'
     raise ValueError(cmd)
@@ -1594,7 +1594,7 @@ def o60_soundOps(op, stack, bytecode, game):
 def o70_soundOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 9:
-        return f'\tsoft \\'
+        return f'\tsoft'
     if cmd.num == 23:
         val = stack.pop()
         var = stack.pop()
@@ -1605,15 +1605,15 @@ def o70_soundOps(op, stack, bytecode, game):
         res = stack.pop()
         return f'$ sfx-set {res} volume to {val}'
     if cmd.num == 56:
-        return f'\tquick \\'
+        return f'\tquick'
     if cmd.num == 232:
-        return f'$ sfx {stack.pop()} \\'
+        return f'$ sfx {stack.pop()}'
     if cmd.num == 230:
-        return f'\tchannel {stack.pop()} \\'
+        return f'\tchannel {stack.pop()}'
     if cmd.num == 231:
-        return f'\toffset {stack.pop()} \\'
+        return f'\toffset {stack.pop()}'
     if cmd.num == 245:
-        return f'\tloop \\'
+        return f'\tloop'
     if cmd.num == 255:
         return f'\t(end-sfx)'
     return defop(op, stack, bytecode, game)
@@ -1623,17 +1623,17 @@ def o70_soundOps(op, stack, bytecode, game):
 def o100_soundOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 55:
-        return f'\tquick \\'
+        return f'\tquick'
     if cmd.num == 129:
-        return f'\tchannel {stack.pop()} \\'
+        return f'\tchannel {stack.pop()}'
     if cmd.num == 134:
-        return f'$ sfx {stack.pop()} \\'
+        return f'$ sfx {stack.pop()}'
     if cmd.num == 6:
-        return f'\toffset {stack.pop()} \\'
+        return f'\toffset {stack.pop()}'
     if cmd.num == 131:
-        return f'\tloop \\'
+        return f'\tloop'
     if cmd.num == 135:
-        return f'\tsoft \\'
+        return f'\tsoft'
     if cmd.num == 92:
         return f'\t(end-sfx)'
     return defop(op, stack, bytecode, game)
@@ -1965,46 +1965,46 @@ def o6_verbOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 196:
         verb = stack.pop()
-        return f'verb {verb} \\'
+        return f'verb {verb}'
     if cmd.num == 124:
         im = stack.pop()
-        return f'\timage {im} \\'
+        return f'\timage {im}'
     if cmd.num == 125:
-        return f'\tname {msg_val(op.args[1])} \\'
+        return f'\tname {msg_val(op.args[1])}'
     if cmd.num == 126:
         color = stack.pop()
-        return f'\tcolor {color} \\'
+        return f'\tcolor {color}'
     if cmd.num == 127:
         color = stack.pop()
-        return f'\thicolor {color} \\'
+        return f'\thicolor {color}'
     if cmd.num == 128:
         ypos = stack.pop()
         xpos = stack.pop()
-        return f'\tat {xpos},{ypos} \\'
+        return f'\tat {xpos},{ypos}'
     if cmd.num == 129:
-        return '\ton \\'
+        return '\ton'
     if cmd.num == 130:
-        return '\toff \\'
+        return '\toff'
     if cmd.num == 131:
-        return '\tdelete \\'
+        return '\tdelete'
     if cmd.num == 132:
-        return '\tnew \\'
+        return '\tnew'
     if cmd.num == 133:
         color = stack.pop()
-        return f'\tdimcolor {color} \\'
+        return f'\tdimcolor {color}'
     if cmd.num == 134:
-        return '\tdim \\'
+        return '\tdim'
     if cmd.num == 135:
-        return f'\tkey {stack.pop()} \\'
+        return f'\tkey {stack.pop()}'
     if cmd.num == 136:
-        return '\tcenter \\'
+        return '\tcenter'
     if cmd.num == 139:
         room =stack.pop()
         im = stack.pop()
-        return f'\timage {im} in-room {room} \\'
+        return f'\timage {im} in-room {room}'
     if cmd.num == 140:
         color = stack.pop()
-        return f'\tbakcolor {color} \\'
+        return f'\tbakcolor {color}'
     if cmd.num == 255:
         return '\t(end-verb)'
     return defop(op, stack, bytecode, game)
@@ -2024,42 +2024,42 @@ def o8_verbOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 150:
         verb = stack.pop()
-        return f'verb {verb} \\'
+        return f'verb {verb}'
     if cmd.num == 151:
-        return '\tnew \\'
+        return '\tnew'
     if cmd.num == 152:
-        return '\tdelete \\'
+        return '\tdelete'
     if cmd.num == 153:
-        return f'\tname {msg_val(op.args[1])} \\'
+        return f'\tname {msg_val(op.args[1])}'
     if cmd.num == 154:
         ypos = stack.pop()
         xpos = stack.pop()
-        return f'\tat {xpos},{ypos} \\'
+        return f'\tat {xpos},{ypos}'
     if cmd.num == 155:
-        return '\ton \\'
+        return '\ton'
     if cmd.num == 156:
-        return '\toff \\'
+        return '\toff'
     if cmd.num == 157:
         color = stack.pop()
-        return f'\tcolor {color} \\'
+        return f'\tcolor {color}'
     if cmd.num == 158:
         color = stack.pop()
-        return f'\thicolor {color} \\'
+        return f'\thicolor {color}'
     if cmd.num == 160:
         color = stack.pop()
-        return f'\tdimcolor {color} \\'
+        return f'\tdimcolor {color}'
     if cmd.num == 161:
-        return '\tdim \\'
+        return '\tdim'
     if cmd.num == 162:
-        return f'\tkey {stack.pop()} \\'
+        return f'\tkey {stack.pop()}'
     if cmd.num == 163:
         room =stack.pop()
         im = stack.pop()
-        return f'\timage {im} in-room {room} \\'
+        return f'\timage {im} in-room {room}'
     if cmd.num == 165:
-        return '\tcenter \\'
+        return '\tcenter'
     if cmd.num == 167:
-        return f'\tspacing {stack.pop()} \\'
+        return f'\tspacing {stack.pop()}'
     return defop(op, stack, bytecode, game)
 
 
@@ -2288,35 +2288,35 @@ def o100_cursorCommand(op, stack, bytecode, game):
 def o6_actorOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 76:
-        return f'\tcostume {stack.pop()} \\'
+        return f'\tcostume {stack.pop()}'
     if cmd.num == 77:
         y = stack.pop()
         x = stack.pop()
-        return f'\tstep-dist {x},{y} \\'
+        return f'\tstep-dist {x},{y}'
     if cmd.num == 78:
         return f'\tsound {get_params(stack)}'
     if cmd.num == 79:
-        return f'\twalk-animation {stack.pop()} \\'
+        return f'\twalk-animation {stack.pop()}'
     if cmd.num == 80:
         stop = stack.pop()
         start = stack.pop()
-        return f'\ttalk-animation {start} {stop} \\'
+        return f'\ttalk-animation {start} {stop}'
     if cmd.num == 81:
-        return f'\tstand-animation {stack.pop()} \\'
+        return f'\tstand-animation {stack.pop()}'
     # TODO: 82 - animation - 3 pops
     if cmd.num == 83:
         return '\tdefault'
     if cmd.num == 84:
         return f'\televation {stack.pop()}'
     if cmd.num == 85:
-        return '\tanimation default \\'
+        return '\tanimation default'
     if cmd.num == 86:
         new_color = stack.pop()
         old_color = stack.pop()
         return f'\tcolor {old_color} is {new_color}'
     if cmd.num == 87:
         color = stack.pop()
-        return f'\ttalk-color {color} \\'
+        return f'\ttalk-color {color}'
     if cmd.num == 88:
         return f'\tname {msg_val(op.args[1])}'
     if cmd.num == 89:
@@ -2330,29 +2330,29 @@ def o6_actorOps(op, stack, bytecode, game):
     if cmd.num in {94, 225}:
         return f'\talways-zclip {stack.pop()}'
     if cmd.num == 95:
-        return f'\tignore-boxes \\'
+        return f'\tignore-boxes'
     if cmd.num == 96:
-        return f'\tfollow-boxes \\'
+        return f'\tfollow-boxes'
     if cmd.num == 97:
-        return f'\tanimation-speed {stack.pop()} \\'
+        return f'\tanimation-speed {stack.pop()}'
     if cmd.num == 98:
         return f'\tspecial-draw {stack.pop()}'
     if cmd.num == 99:
         ypos = stack.pop()
         xpos = stack.pop()
-        return f'\ttext-offset {xpos},{ypos} \\'
+        return f'\ttext-offset {xpos},{ypos}'
     if cmd.num == 197:
-        return f'actor {stack.pop()} \\'
+        return f'actor {stack.pop()}'
     if cmd.num == 198:
         value = stack.pop()
         var = stack.pop()
         return f'\tanimation-var {var} {value}'
     if cmd.num == 215:
-        return f'\tignore-turns on \\'
+        return f'\tignore-turns on'
     if cmd.num == 216:
-        return f'\tignore-turns off \\'
+        return f'\tignore-turns off'
     if cmd.num == 217:
-        return f'\tnew \\'
+        return f'\tnew'
     # TODO: 227 - actor-depth - 1 pop
     # TODO: 228 - actor-walk-script 1 pop
     # TODO: 229 - actor-stop - no pops
@@ -2368,9 +2368,9 @@ def o6_actorOps(op, stack, bytecode, game):
 def o60_actorOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 218:
-        return f'\tbackground-on \\'
+        return f'\tbackground-on'
     if cmd.num == 219:
-        return f'\tbackground-off \\'
+        return f'\tbackground-off'
     return o6_actorOps(op, stack, bytecode, game)
 
 
@@ -2404,9 +2404,9 @@ def o72_actorOps(op, stack, bytecode, game):
     # TODO: 156 - charset - 1 pop
     # TODO: 175 - room palette - 1 pop
     if cmd.num == 218:
-        return f'\tbackground-on \\'
+        return f'\tbackground-on'
     if cmd.num == 219:
-        return f'\tbackground-off \\'
+        return f'\tbackground-off'
     if cmd.num == 225:
         string = pop_str(stack)
         slot = stack.pop()
@@ -2422,27 +2422,27 @@ def o100_actorOps(op, stack, bytecode, game):
         xpos = stack.pop()
         return f'\tat {xpos},{ypos}'
     if cmd.num == 9:
-        return f'\tbackground-on \\'
+        return f'\tbackground-on'
     if cmd.num == 25:
-        return f'\tcostume {stack.pop()} \\'
+        return f'\tcostume {stack.pop()}'
     if cmd.num == 74:
         y = stack.pop()
         x = stack.pop()
-        return f'\tstep-dist {x},{y} \\'
+        return f'\tstep-dist {x},{y}'
     # if cmd.num == 103:
-    #     return '\tanimation default \\'
+    #     return '\tanimation default'
     # if cmd.num == 104:
     #     return f'\tinit-animation {stack.pop()}'
     if cmd.num == 140:
         stop = stack.pop()
         start = stack.pop()
-        return f'\ttalk-animation {start} {stop} \\'
+        return f'\ttalk-animation {start} {stop}'
     # if cmd.num == 106:
-    #     return f'\twalk-animation {stack.pop()} \\'
+    #     return f'\twalk-animation {stack.pop()}'
     # if cmd.num == 107:
-    #     return f'\tstand-animation {stack.pop()} \\'
+    #     return f'\tstand-animation {stack.pop()}'
     if cmd.num == 4:
-        return f'\tanimation-speed {stack.pop()} \\'
+        return f'\tanimation-speed {stack.pop()}'
     # if cmd.num == 109:
     #     return '\tdefault'
     if cmd.num == 133:
@@ -2453,7 +2453,7 @@ def o100_actorOps(op, stack, bytecode, game):
         return f'\tcolor {old_color} is {new_color}'
     if cmd.num == 141:
         color = stack.pop()
-        return f'\ttalk-color {color} \\'
+        return f'\ttalk-color {color}'
     # if cmd.num == 113:
     #     return f'\tname {msg_val(op.args[1])}'
     if cmd.num == 131:
@@ -2465,17 +2465,17 @@ def o100_actorOps(op, stack, bytecode, game):
     if cmd.num == 87:
         return f'\talways-zclip {stack.pop()}'
     if cmd.num == 135:
-        return f'\tignore-boxes \\'
+        return f'\tignore-boxes'
     # if cmd.num == 119:
-    #     return f'\tfollow-boxes \\'
+    #     return f'\tfollow-boxes'
     # if cmd.num == 120:
     #     return f'\tspecial-draw {stack.pop()}'
     if cmd.num == 143:
         ypos = stack.pop()
         xpos = stack.pop()
-        return f'\ttext-offset {xpos},{ypos} \\'
+        return f'\ttext-offset {xpos},{ypos}'
     if cmd.num == 129:
-        return f'actor {stack.pop()} \\'
+        return f'actor {stack.pop()}'
     if cmd.num == 130:
         return f'\tsound {get_params(stack)}'
     if cmd.num == 83:
@@ -2483,25 +2483,25 @@ def o100_actorOps(op, stack, bytecode, game):
         var = stack.pop()
         return f'\tanimation-var {var} {value}'
     if cmd.num == 137:
-        return f'\tignore-turns on \\'
+        return f'\tignore-turns on'
     if cmd.num == 126:
-        return f'\tignore-turns off \\'
+        return f'\tignore-turns off'
     if cmd.num == 53:
-        return f'\tnew \\'
+        return f'\tnew'
     # if cmd.num == 127:
-    #     return f'\tdepth {stack.pop()} \\'
+    #     return f'\tdepth {stack.pop()}'
     # if cmd.num == 128:
-    #     return f'\tstop \\'
+    #     return f'\tstop'
     # if cmd.num == 129:
-    #     return f'\tface {stack.pop()} \\'
+    #     return f'\tface {stack.pop()}'
     # if cmd.num == 130:
-    #     return f'\tturn {stack.pop()} \\'
+    #     return f'\tturn {stack.pop()}'
     # if cmd.num == 135:
-    #     return f'\tvolume {stack.pop()} \\'
+    #     return f'\tvolume {stack.pop()}'
     # if cmd.num == 136:
-    #     return f'\tfrequency {stack.pop()} \\'
+    #     return f'\tfrequency {stack.pop()}'
     # if cmd.num == 137:
-    #     return f'\tpan {stack.pop()} \\'
+    #     return f'\tpan {stack.pop()}'
     if cmd.num == 78:
         string = pop_str(stack)
         slot = stack.pop()
@@ -2513,25 +2513,25 @@ def o100_actorOps(op, stack, bytecode, game):
 def o8_actorOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 100:
-        return f'\tcostume {stack.pop()} \\'
+        return f'\tcostume {stack.pop()}'
     if cmd.num == 101:
         y = stack.pop()
         x = stack.pop()
-        return f'\tstep-dist {x},{y} \\'
+        return f'\tstep-dist {x},{y}'
     if cmd.num == 103:
-        return '\tanimation default \\'
+        return '\tanimation default'
     if cmd.num == 104:
         return f'\tinit-animation {stack.pop()}'
     if cmd.num == 105:
         stop = stack.pop()
         start = stack.pop()
-        return f'\ttalk-animation {start} {stop} \\'
+        return f'\ttalk-animation {start} {stop}'
     if cmd.num == 106:
-        return f'\twalk-animation {stack.pop()} \\'
+        return f'\twalk-animation {stack.pop()}'
     if cmd.num == 107:
-        return f'\tstand-animation {stack.pop()} \\'
+        return f'\tstand-animation {stack.pop()}'
     if cmd.num == 108:
-        return f'\tanimation-speed {stack.pop()} \\'
+        return f'\tanimation-speed {stack.pop()}'
     if cmd.num == 109:
         return '\tdefault'
     if cmd.num == 110:
@@ -2542,7 +2542,7 @@ def o8_actorOps(op, stack, bytecode, game):
         return f'\tcolor {old_color} is {new_color}'
     if cmd.num == 112:
         color = stack.pop()
-        return f'\ttalk-color {color} \\'
+        return f'\ttalk-color {color}'
     if cmd.num == 113:
         return f'\tname {msg_val(op.args[1])}'
     if cmd.num == 114:
@@ -2554,41 +2554,41 @@ def o8_actorOps(op, stack, bytecode, game):
     if cmd.num == 117:
         return f'\talways-zclip {stack.pop()}'
     if cmd.num == 118:
-        return f'\tignore-boxes \\'
+        return f'\tignore-boxes'
     if cmd.num == 119:
-        return f'\tfollow-boxes \\'
+        return f'\tfollow-boxes'
     if cmd.num == 120:
         return f'\tspecial-draw {stack.pop()}'
     if cmd.num == 121:
         ypos = stack.pop()
         xpos = stack.pop()
-        return f'\ttext-offset {xpos},{ypos} \\'
+        return f'\ttext-offset {xpos},{ypos}'
     if cmd.num == 122:
-        return f'actor {stack.pop()} \\'
+        return f'actor {stack.pop()}'
     if cmd.num == 123:
         value = stack.pop()
         var = stack.pop()
         return f'\tanimation-var {var} {value}'
     if cmd.num == 124:
-        return f'\tignore-turns on \\'
+        return f'\tignore-turns on'
     if cmd.num == 125:
-        return f'\tignore-turns off \\'
+        return f'\tignore-turns off'
     if cmd.num == 126:
-        return f'\tnew \\'
+        return f'\tnew'
     if cmd.num == 127:
-        return f'\tdepth {stack.pop()} \\'
+        return f'\tdepth {stack.pop()}'
     if cmd.num == 128:
-        return f'\tstop \\'
+        return f'\tstop'
     if cmd.num == 129:
-        return f'\tface {stack.pop()} \\'
+        return f'\tface {stack.pop()}'
     if cmd.num == 130:
-        return f'\tturn {stack.pop()} \\'
+        return f'\tturn {stack.pop()}'
     if cmd.num == 135:
-        return f'\tvolume {stack.pop()} \\'
+        return f'\tvolume {stack.pop()}'
     if cmd.num == 136:
-        return f'\tfrequency {stack.pop()} \\'
+        return f'\tfrequency {stack.pop()}'
     if cmd.num == 137:
-        return f'\tpan {stack.pop()} \\'
+        return f'\tpan {stack.pop()}'
     # if cmd.num == 78:
     #     return f'\tsound {get_params(stack)}'
     # # TODO: 82 - animation - 3 pops
@@ -2616,57 +2616,57 @@ def o90_setSpriteInfo(op, stack, bytecode, game):
     if cmd.num == 42:
         value = stack.pop()
         flag = stack.pop()
-        return f'\tflag {flag} {value} \\'
+        return f'\tflag {flag} {value}'
     if cmd.num == 44:
         ypos = stack.pop()
         xpos = stack.pop()
         return f'\tmove {xpos},{ypos}'
     if cmd.num == 52:
-        return f'$ state {stack.pop()} \\'
+        return f'$ state {stack.pop()}'
     if cmd.num == 57:
-        return f'$ sprite {stack.pop()} \\'
+        return f'$ sprite {stack.pop()}'
     if cmd.num == 63:
-        return f'\timage {stack.pop()} \\'
+        return f'\timage {stack.pop()}'
     if cmd.num == 65:
         ypos = stack.pop()
         xpos = stack.pop()
         return f'\tat {xpos},{ypos}'
     if cmd.num == 68:
         erase = stack.pop()
-        return f'\terase {erase} \\'   
+        return f'\terase {erase}'   
     if cmd.num == 77:
         y = stack.pop()
         x = stack.pop()
-        return f'\tstep-dist {x},{y} \\'
+        return f'\tstep-dist {x},{y}'
     if cmd.num == 82:
         flags = stack.pop()
-        return f'\tanimation {flags} \\'
+        return f'\tanimation {flags}'
     if cmd.num == 86:
         palette = stack.pop()
-        return f'\tpalette {palette} \\'
+        return f'\tpalette {palette}'
     if cmd.num == 97:
         speed = stack.pop()
-        return f'\tanimation-speed {speed} \\'
+        return f'\tanimation-speed {speed}'
     if cmd.num == 98:
         flags = stack.pop()
-        return f'\tspecial-draw {flags} \\'
+        return f'\tspecial-draw {flags}'
     if cmd.num == 124:
         flags = stack.pop()
-        return f'\tupdate {flags} \\'
+        return f'\tupdate {flags}'
     if cmd.num == 125:
         params = get_params(stack)
-        return f'\tclass is {params} \\'
+        return f'\tclass is {params}'
     if cmd.num == 158:
-        return f'\treset \\'
+        return f'\treset'
     if cmd.num == 140:
         mask = stack.pop()
-        return f'\tmask {mask} \\'
+        return f'\tmask {mask}'
     if cmd.num == 198:
         value = stack.pop()
         unk = stack.pop()
-        return f'\tanimation-var {unk} {value} \\'
+        return f'\tanimation-var {unk} {value}'
     if cmd.num == 217:
-        return f'\tnew \\'
+        return f'\tnew'
     return defop(op, stack, bytecode, game)
 
 
@@ -2676,51 +2676,51 @@ def o100_setSpriteInfo(op, stack, bytecode, game):
     if cmd.num == 0:
         max_sprite_id = stack.pop()
         sprite_id = stack.pop()
-        return f'$ sprite {sprite_id} of {max_sprite_id} \\'
+        return f'$ sprite {sprite_id} of {max_sprite_id}'
     if cmd.num == 3:
         flags = stack.pop()
-        return f'\tanimation {flags} \\'
+        return f'\tanimation {flags}'
     if cmd.num == 4:
         speed = stack.pop()
-        return f'\tanimation-speed {speed} \\'
+        return f'\tanimation-speed {speed}'
     if cmd.num == 6:
         ypos = stack.pop()
         xpos = stack.pop()
         return f'\tat {xpos},{ypos}'
     if cmd.num == 16:
         params = get_params(stack)
-        return f'\tclass is {params} \\'
+        return f'\tclass is {params}'
     if cmd.num == 32:
-        return f'\terase {stack.pop()} \\'
+        return f'\terase {stack.pop()}'
     if cmd.num == 38:
         return f'\tgroup {stack.pop()}'
     if cmd.num == 40:
-        return f'\timage {stack.pop()} \\'
+        return f'\timage {stack.pop()}'
     if cmd.num == 49:
         ypos = stack.pop()
         xpos = stack.pop()
         return f'\tmove {xpos},{ypos}'
     if cmd.num == 53:
-        return f'\tnew \\'
+        return f'\tnew'
     if cmd.num == 54:
         ptype = stack.pop()
         value = stack.pop()
-        return f'\tset-property {value} in {ptype} \\'
+        return f'\tset-property {value} in {ptype}'
     if cmd.num == 57:
         palette = stack.pop()
-        return f'\tpalette {palette} \\'
+        return f'\tpalette {palette}'
     if cmd.num == 59:
         return f'\tpriority {stack.pop()}'
     if cmd.num == 60:
         value = stack.pop()
         flag = stack.pop()
-        return f'\tflag {flag} {value} \\'
+        return f'\tflag {flag} {value}'
     if cmd.num == 61:
-        return f'\treset \\'
+        return f'\treset'
     if cmd.num == 73:
-        return f'$ state {stack.pop()} \\'
+        return f'$ state {stack.pop()}'
     if cmd.num == 82:
-        return f'\tupdate {stack.pop()} \\'
+        return f'\tupdate {stack.pop()}'
     return defop(op, stack, bytecode, game)
 
 
@@ -2877,7 +2877,7 @@ def o90_setSpriteGroupInfo(op, stack, bytecode, game):
         dx = stack.pop()
         return f'\tmove {dx},{dy}'
     if cmd.num == 57:
-        return f'sprite-group {stack.pop()} \\'
+        return f'sprite-group {stack.pop()}'
     if cmd.num == 65:
         ypos = stack.pop()
         xpos = stack.pop()
@@ -2901,7 +2901,7 @@ def o100_setSpriteGroupInfo(op, stack, bytecode, game):
         dx = stack.pop()
         return f'\tmove {dx},{dy}'
     if cmd.num == 0:
-        return f'$ sprite-group {stack.pop()} \\'
+        return f'$ sprite-group {stack.pop()}'
     if cmd.num == 49:
         ypos = stack.pop()
         xpos = stack.pop()
@@ -2915,7 +2915,7 @@ def o100_setSpriteGroupInfo(op, stack, bytecode, game):
     if cmd.num == 53:
         return f'\tnew'
     if cmd.num == 59:
-        return f'\tpriority {stack.pop()} \\'
+        return f'\tpriority {stack.pop()}'
     return defop(op, stack, bytecode, game)
 
 
@@ -2997,13 +2997,13 @@ def o80_drawLine(op, stack, bytecode, game):
 def o90_floodFill(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     if sub.num == 57:
-        return f'$ flood-fill-box \\'
+        return f'$ flood-fill-box'
     if sub.num == 65:
         ypos = stack.pop()
         xpos = stack.pop()
-        return f'\tat {xpos},{ypos} \\'
+        return f'\tat {xpos},{ypos}'
     if sub.num == 66:
-        return f'\tflags {stack.pop()} \\'
+        return f'\tflags {stack.pop()}'
     if sub.num == 67:
         bottom = stack.pop()
         right = stack.pop()
@@ -3212,28 +3212,28 @@ def o90_wizImageOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 32:
         width = stack.pop()
-        return f'\twidth {width} \\'
+        return f'\twidth {width}'
     if cmd.num == 33:
         height = stack.pop()
-        return f'\theight {height} \\'
+        return f'\theight {height}'
     if cmd.num == 48:
-        return f'\tmode 1 \\'
+        return f'\tmode 1'
     if cmd.num == 49:
         string = pop_str(stack)
-        return f'\tfrom-file {string} \\'
+        return f'\tfrom-file {string}'
     if cmd.num == 51:
         bottom = stack.pop()
         right = stack.pop()
         top = stack.pop()
         left = stack.pop()
         comp = stack.pop()
-        return f'\tcompressed-box {comp} {left},{top} to {right},{bottom} \\'
+        return f'\tcompressed-box {comp} {left},{top} to {right},{bottom}'
     if cmd.num == 52:
         state = stack.pop()
-        return f'\tstate {state} \\'
+        return f'\tstate {state}'
     if cmd.num == 54:
         flags = stack.pop()
-        return f'\tflags {flags} \\'
+        return f'\tflags {flags}'
     if cmd.num == 56:
         flags = stack.pop()
         state = stack.pop()
@@ -3243,7 +3243,7 @@ def o90_wizImageOps(op, stack, bytecode, game):
         return f'$ draw-wiz-image {res} at {x1},{y1} state {state} flags {flags}'
     if cmd.num == 57:
         res = stack.pop()
-        return f'$ load-wiz-image {res} \\'
+        return f'$ load-wiz-image {res}'
     if cmd.num in {65, 154}:
         y1 = stack.pop()
         x1 = stack.pop()
@@ -3251,51 +3251,51 @@ def o90_wizImageOps(op, stack, bytecode, game):
             x1 = f'({x1})'
         if isinstance(y1, str):
             y1 = f'({y1})'
-        return f'\tat {x1},{y1} \\'
+        return f'\tat {x1},{y1}'
     if cmd.num == 66:
         a = stack.pop()
         b = stack.pop()
-        return f'\tpalette {b} in-slot {a} \\'
+        return f'\tpalette {b} in-slot {a}'
     if cmd.num == 67:
         bottom = stack.pop()
         right = stack.pop()
         top = stack.pop()
         left = stack.pop()
-        return f'\tbox {left},{top} to {right},{bottom} \\'
+        return f'\tbox {left},{top} to {right},{bottom}'
     if cmd.num == 86:
         palette = stack.pop()
-        return f'\tpalette {palette} \\'
+        return f'\tpalette {palette}'
     if cmd.num == 92:
         scale = stack.pop()
-        return f'\tscale {scale} \\'
+        return f'\tscale {scale}'
     if cmd.num == 98:
         shadow = stack.pop()
-        return f'\tshadow {shadow} \\'
+        return f'\tshadow {shadow}'
     if cmd.num == 133:
         color = stack.pop()
         bottom = stack.pop()
         right = stack.pop()
         top = stack.pop()
         left = stack.pop()
-        return f'\tfill-box {left},{top} to {right},{bottom} with-color {color} \\'
+        return f'\tfill-box {left},{top} to {right},{bottom} with-color {color}'
     if cmd.num == 134:
         color = stack.pop()
         bottom = stack.pop()
         right = stack.pop()
         top = stack.pop()
         left = stack.pop()
-        return f'\tfill-line {left},{top} to {right},{bottom} with-color {color} \\'
+        return f'\tfill-line {left},{top} to {right},{bottom} with-color {color}'
     if cmd.num == 137:
         res = stack.pop()
-        return f'\tresource {res} \\'
+        return f'\tresource {res}'
     if cmd.num == 217:
-        return '\tempty \\'
+        return '\tempty'
     if cmd.num == 246:
-        return f'\tpolygon {stack.pop()} \\'
+        return f'\tpolygon {stack.pop()}'
     if cmd.num == 249:
         a = stack.pop()
         b = stack.pop()
-        return f'\tpalette {b} in-slot {a} \\'
+        return f'\tpalette {b} in-slot {a}'
     if cmd.num == 255:
         return f'\t(end-wiz)'
     return defop(op, stack, bytecode, game)
@@ -3306,7 +3306,7 @@ def o100_wizImageOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 0:
         res = stack.pop()
-        return f'$ load-wiz-image {res} \\'
+        return f'$ load-wiz-image {res}'
     if cmd.num in {6, 132}:
         y1 = stack.pop()
         x1 = stack.pop()
@@ -3314,34 +3314,34 @@ def o100_wizImageOps(op, stack, bytecode, game):
             x1 = f'({x1})'
         if isinstance(y1, str):
             y1 = f'({y1})'
-        return f'\tat {x1},{y1} \\'
+        return f'\tat {x1},{y1}'
     if cmd.num == 11:
         bottom = stack.pop()
         right = stack.pop()
         top = stack.pop()
         left = stack.pop()
         comp = stack.pop()
-        return f'\tcompressed-box {comp} {left},{top} to {right},{bottom} \\'
+        return f'\tcompressed-box {comp} {left},{top} to {right},{bottom}'
     if cmd.num == 18:
         bottom = stack.pop()
         right = stack.pop()
         top = stack.pop()
         left = stack.pop()
-        return f'\tbox {left},{top} to {right},{bottom} \\'
+        return f'\tbox {left},{top} to {right},{bottom}'
     if cmd.num == 21:
         a = stack.pop()
         b = stack.pop()
-        return f'\tpalette {b} in-slot {a} \\'
+        return f'\tpalette {b} in-slot {a}'
     if cmd.num == 29:
-        return f'\tmode 1 \\'
+        return f'\tmode 1'
     if cmd.num == 39:
         height = stack.pop()
-        return f'\theight {height} \\'
+        return f'\theight {height}'
     if cmd.num == 47:
         string = pop_str(stack)
-        return f'\tfrom-file {string} \\'
+        return f'\tfrom-file {string}'
     if cmd.num == 53:
-        return '\tempty \\'
+        return '\tempty'
     if cmd.num == 55:
         flags = stack.pop()
         state = stack.pop()
@@ -3351,18 +3351,18 @@ def o100_wizImageOps(op, stack, bytecode, game):
         return f'$ draw-wiz-image {res} at {x1},{y1} state {state} flags {flags}'
     if cmd.num == 57:
         palette = stack.pop()
-        return f'\tpalette {palette} \\'
+        return f'\tpalette {palette}'
     if cmd.num == 67:
         flags = stack.pop()
-        return f'\tflags {flags} \\'
+        return f'\tflags {flags}'
     if cmd.num == 73:
         state = stack.pop()
-        return f'\tstate {state} \\'
+        return f'\tstate {state}'
     if cmd.num == 92:
         return f'\t(end-wiz)'
     if cmd.num == 135:
         res = stack.pop()
-        return f'\tresource {res} \\'
+        return f'\tresource {res}'
     return defop(op, stack, bytecode, game)
 
 
@@ -3405,28 +3405,28 @@ def o90_paletteOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 57:
         palette = stack.pop()
-        return f'$ palette {palette} \\'
+        return f'$ palette {palette}'
     if cmd.num == 63:
         ypos = stack.pop()
         xpos = stack.pop()
-        return f'\tat {xpos},{ypos} \\'
+        return f'\tat {xpos},{ypos}'
     if cmd.num == 66:
         b = stack.pop()
         g = stack.pop()
         r = stack.pop()
         unk = stack.pop()
         color = stack.pop()
-        return f'\tcolor {color} {unk} value {r},{g},{b} \\'
+        return f'\tcolor {color} {unk} value {r},{g},{b}'
     if cmd.num == 70:
         color = stack.pop()
         end = stack.pop()
         start = stack.pop()
-        return f'\tset-color {start} to {end} value {color} \\'
+        return f'\tset-color {start} to {end} value {color}'
     if cmd.num == 86:
         palette = stack.pop()
-        return f'\tcopy-from {palette} \\'
+        return f'\tcopy-from {palette}'
     if cmd.num == 217:
-        return f'\treset \\'
+        return f'\treset'
     if cmd.num == 255:
         return f'\t(end)'
     return defop(op, stack, bytecode, game)
@@ -3437,14 +3437,14 @@ def o100_paletteOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 0:
         palette = stack.pop()
-        return f'$ palette {palette} \\'
+        return f'$ palette {palette}'
     if cmd.num == 81:
         color = stack.pop()
         end = stack.pop()
         start = stack.pop()
-        return f'\tset-color {start} to {end} value {color} \\'
+        return f'\tset-color {start} to {end} value {color}'
     if cmd.num == 53:
-        return f'\treset \\'
+        return f'\treset'
     if cmd.num == 92:
         return f'\t(end)'
     return defop(op, stack, bytecode, game)
@@ -3852,21 +3852,21 @@ def o70_resourceRoutines(op, stack, bytecode, game):
 def o100_resourceRoutines(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 14:
-        return f'$ charset {stack.pop()} \\'
+        return f'$ charset {stack.pop()}'
     if cmd.num == 25:
-        return f'$ costume {stack.pop()} \\'
+        return f'$ costume {stack.pop()}'
     if cmd.num == 34:
-        return f'$ object {stack.pop()} \\'
+        return f'$ object {stack.pop()}'
     if cmd.num == 40:
-        return f'$ image {stack.pop()} \\'
+        return f'$ image {stack.pop()}'
     if cmd.num == 47:
         return f'\tload'
     if cmd.num == 62:
-        return f'$ room {stack.pop()} \\'
+        return f'$ room {stack.pop()}'
     if cmd.num == 66:
-        return f'$ script {stack.pop()} \\'
+        return f'$ script {stack.pop()}'
     if cmd.num == 72:
-        return f'$ sound {stack.pop()} \\'
+        return f'$ sound {stack.pop()}'
     if cmd.num == 128:
         return 'clear-heap'
     if cmd.num == 129:
@@ -4369,11 +4369,11 @@ def o80_getSoundVar(op, stack, bytecode, game):
 def o80_createSound(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 27:
-        return f'\tfrom {stack.pop()} \\'
+        return f'\tfrom {stack.pop()}'
     if cmd.num == 217:
-        return f'\tempty \\'
+        return f'\tempty'
     if cmd.num == 232:
-        return f'$ create-sound {stack.pop()} \\'
+        return f'$ create-sound {stack.pop()}'
     if cmd.num == 255:
         return f'\t(end-create-sound)'
     return defop(op, stack, bytecode, game)
@@ -4762,7 +4762,26 @@ def collapse_override(asts):
     return asts
 
 
+def break_lines(asts):
+    for _, seq in asts.items():
+        stats = iter(list(seq))
+        seq.clear()
+        last_line = None
+        for st in stats:
+            if last_line:
+                if isinstance(st, str) and st.startswith('\t'):
+                    assert isinstance(last_line, str), repr(last_line)
+                    last_line += ' \\'
+                seq.append(last_line)
+            last_line = st
+        if last_line:
+            seq.append(last_line)
+    return asts
+
+
 def transform_asts(indent, asts, transform=True):
+
+    asts = break_lines(asts)
 
     if not transform:
         return asts
