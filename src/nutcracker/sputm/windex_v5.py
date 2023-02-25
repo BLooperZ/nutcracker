@@ -1321,6 +1321,9 @@ def inline_complex_temp(asts):
             elif f'{value(complex_temp)} = ' in str(st):
                 complex_value = None
                 seq.append(str(st).replace(f'{value(complex_temp)} = ', ''))
+            elif str(st).startswith('print-system'):
+                complex_value = 'key-pressed'
+                seq.append(st)
             elif f'{value(complex_temp)}' in str(st):
                 assert complex_value is not None
                 if isinstance(st, ConditionalJump):
