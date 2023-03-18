@@ -1834,6 +1834,10 @@ def o60_roomOps(op, stack, bytecode, game):
         return f'palette copy-color from {from_slot} to {to_slot}'
     if cmd.num == 221:
         return f'save-game {stack.pop()} name {msg_val(op.args[1])}'
+    if cmd.num == 234:
+        obj2 = stack.pop()
+        obj1 = stack.pop()
+        return f'object-order {obj1} {obj2}'
     return o6_roomOps(op, stack, bytecode, game)
 
 
@@ -2371,6 +2375,9 @@ def o60_actorOps(op, stack, bytecode, game):
         return f'\tbackground-on'
     if cmd.num == 219:
         return f'\tbackground-off'
+    if cmd.num == 225:
+        slot = stack.pop()
+        return f'\ttalkie {slot} {msg_val(op.args[1])}\\'
     return o6_actorOps(op, stack, bytecode, game)
 
 

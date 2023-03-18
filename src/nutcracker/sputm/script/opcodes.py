@@ -123,6 +123,13 @@ def room_ops_he60(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (cmd,)
 
 
+def actor_ops_he60(stream: IO[bytes]) -> Iterable[ScriptArg]:
+    cmd = ByteValue(stream)
+    if ord(cmd.op) in {225}:
+        return (cmd, CString(stream))
+    return (cmd,)
+
+
 def array_ops_v6(stream: IO[bytes]) -> Iterable[ScriptArg]:
     cmd = ByteValue(stream)
     arr = WordValue(stream)
@@ -402,7 +409,7 @@ OPCODES_he60 = realize({
     0x70: makeop('o60_setState'),
     0x9A: None,
     0x9C: makeop('o60_roomOps', room_ops_he60),
-    0x9D: makeop('o60_actorOps', extended_b_op),
+    0x9D: makeop('o60_actorOps', actor_ops_he60),
     0xAC: None,
     0xBD: makeop('o6_stopObjectCodeReturn'),
     0xC8: makeop('o60_kernelGetFunctions'),
