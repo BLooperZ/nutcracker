@@ -33,6 +33,10 @@ def extended_w_op(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (WordValue(stream),)
 
 
+def extended_ww_op(stream: IO[bytes]) -> Iterable[ScriptArg]:
+    return (WordValue(stream), WordValue(stream))
+
+
 def extended_dw_op(stream: IO[bytes]) -> Iterable[ScriptArg]:
     return (DWordValue(stream),)
 
@@ -151,6 +155,8 @@ def array_ops_he100(stream: IO[bytes]) -> Iterable[ScriptArg]:
     arr = WordValue(stream)
     # if ord(cmd.op) in {35}:
     #     return (cmd, arr, CString(stream))
+    if ord(cmd.op) in {131}:
+        return (cmd, arr, WordValue(stream))
     if ord(cmd.op) in {132}:
         return (cmd, arr, WordValue(stream), WordValue(stream))
     return (cmd, arr)
@@ -575,13 +581,13 @@ OPCODES_he90: OpTable = realize({
     0x36: makeop('o90_cond'),
     0x37: makeop('o90_dim2dim2Array', extended_bw_op),
     0x38: makeop('o90_redim2dimArray', extended_bw_op),
-    # TODO: 0x39: makeop('o90_getLinesIntersectionPoint'),
+    0x39: makeop('o90_getLinesIntersectionPoint', extended_ww_op),
     0x3A: makeop('o90_sortArray', extended_bw_op),
     0x44: makeop('o90_getObjectData', extended_b_op),
     0x69: makeop('disabled_windowOps', extended_b_op),
     0x94: makeop('o90_getPaletteData', extended_b_op),
     0x9E: makeop('o90_paletteOps', extended_b_op),
-    # TODO: 0xa5: makeop('o90_fontUnk'),
+    0xA5: makeop('o90_fontUnk', extended_b_op),
     # TODO: 0xab: makeop('o90_getActorAnimProgress'),
     # TODO: 0xc8: makeop('o90_kernelGetFunctions'),
     # TODO: 0xc9: makeop('o90_kernelSetFunctions'),,
@@ -741,15 +747,15 @@ OPCODES_he100: OpTable = realize({
 	# TODO: 0x9d: makeop('o6_getActorWidth'),
 	0x9E: makeop('o6_getObjectX'),
 	0x9F: makeop('o6_getObjectY'),
-	# TODO: 0xa0: makeop('o90_atan2'),
-	# TODO: 0xa1: makeop('o90_getSegmentAngle'),
+	0xA0: makeop('o90_atan2'),
+	0xA1: makeop('o90_getSegmentAngle'),
 	# TODO: 0xa2: makeop('o90_getActorAnimProgress'),
 	0xA3: makeop('o90_getDistanceBetweenPoints', extended_b_op),
 	0xA4: makeop('o6_ifClassOfIs'),
 	0xA6: makeop('o90_cond'),
 	0xA7: makeop('o90_cos'),
-	0xA8: makeop('o100_debugInput'),
-	# TODO: 0xa9: makeop('o80_getFileSize'),
+	0xA8: makeop('o100_debugInput', extended_b_op),
+	0xA9: makeop('o80_getFileSize'),
 	0xAA: makeop('o6_getActorFromXY'),
 	0xAB: makeop('o72_findAllObjects'),
 	# TODO: 0xac: makeop('o90_findAllObjectsWithClassOf'),
@@ -809,13 +815,17 @@ OPCODES_he100: OpTable = realize({
 	# TODO: 0xe3: makeop('o71_concatString'),
 	0xE4: makeop('o70_getStringLen'),
 	0xE5: makeop('o71_getStringLenForWidth'),
-	# TODO: 0xe6: makeop('o80_stringToInt'),
+	0xE6: makeop('o80_stringToInt'),
 	# TODO: 0xe7: makeop('o71_getCharIndexInString'),
 	0xE8: makeop('o71_getStringWidth'),
 	# TODO: 0xe9: makeop('o60_readFilePos'),
 	0xEA: makeop('o72_getTimer', extended_b_op),
 	0xEB: makeop('o6_getVerbEntrypoint'),
 	# TODO: 0xec: makeop('o100_getVideoData'),
+})
+
+OPCODES_he101: OpTable = realize({
+    0xA8: makeop('o72_debugInput'),
 })
 
 OPCODES_v8: OpTable = realize({

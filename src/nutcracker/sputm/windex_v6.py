@@ -14,10 +14,9 @@ from nutcracker.sputm.script.parser import CString, DWordValue
 from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
 
-from nutcracker.sputm.script.bytecode import script_map, descumm
+from nutcracker.sputm.script.bytecode import descumm
 from nutcracker.sputm.script.opcodes import ByteValue, RefOffset, WordValue
-from nutcracker.sputm.strings import RAW_ENCODING, EncodingSetting, get_optable
-
+from nutcracker.sputm.strings import RAW_ENCODING, EncodingSetting, get_optable, get_script_map
 
 
 class Value:
@@ -871,6 +870,50 @@ def o100_arrayOps(op, stack, bytecode, game):
         base = stack.pop()
         params = get_params(stack)
         return f'{arr}[{base}] = {params}'
+    if sub.num == 130:
+        params = get_params(stack)
+        dim1end = stack.pop()
+        dim1start = stack.pop()
+        dim2end = stack.pop()
+        dim2start = stack.pop()
+        return f'$complex {arr}[{dim2start}..{dim2end}][{dim1start}..{dim1end}] = {params}'
+    if sub.num == 131:
+        a2_dim1end = stack.pop()
+        a2_dim1start = stack.pop()
+        a2_dim2end = stack.pop()
+        a2_dim2start = stack.pop()
+        arr2 = get_var(op.args[2])
+        dim1end = stack.pop()
+        dim1start = stack.pop()
+        dim2end = stack.pop()
+        dim2start = stack.pop()
+        return f'$complex {arr}[{dim2start}..{dim2end}][{dim1start}..{dim1end}] = {arr2}[{a2_dim2start}..{a2_dim2end}][{a2_dim1start}..{a2_dim1end}]'
+    if sub.num == 132:
+        arr2 = get_var(op.args[2])
+        arr1 = get_var(op.args[3])
+        OPS = {
+            1: '+',
+            2: '-',
+            3: '&',
+            4: '|',
+            5: '^'
+        }
+        operation_byte = stack.pop()
+        assert isinstance(operation_byte.orig, ByteValue)
+        operation = OPS[operation_byte.num]
+        a1_dim1end = stack.pop()
+        a1_dim1start = stack.pop()
+        a1_dim2end = stack.pop()
+        a1_dim2start = stack.pop()
+        a2_dim1end = stack.pop()
+        a2_dim1start = stack.pop()
+        a2_dim2end = stack.pop()
+        a2_dim2start = stack.pop()
+        dim1end = stack.pop()
+        dim1start = stack.pop()
+        dim2end = stack.pop()
+        dim2start = stack.pop()
+        return f'$complex {arr}[{dim2start}..{dim2end}][{dim1start}..{dim1end}] = ({arr2}[{a2_dim2start}..{a2_dim2end}][{a2_dim1start}..{a2_dim1end}] {operation} {arr1}[{a1_dim2start}..{a1_dim2end}][{a1_dim1start}..{a1_dim1end}])'
     if sub.num == 133:
         b = stack.pop()
         c = stack.pop()
@@ -1504,6 +1547,25 @@ def o90_redim2dimArray(op, stack, bytecode, game):
     dim2start = stack.pop()
     return f'$ redim {types[cmd.num]} array {arr}[{dim1start}..{dim1end}][{dim2start}..{dim2end}]'
 
+@regop
+def o100_redim2dimArray(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    types = {
+        # 41: 'bit',
+        # 44: 'nibble',
+        45: 'byte',
+        42: 'int',
+        # 43: 'dword',
+        # 77: 'string',
+    }
+    arr = get_var(op.args[1])
+
+    dim1end = stack.pop()
+    dim1start = stack.pop()
+    dim2end = stack.pop()
+    dim2start = stack.pop()
+    return f'$ redim {types[cmd.num]} array {arr}[{dim1start}..{dim1end}][{dim2start}..{dim2end}]'
+
 
 @regop
 def o70_isResourceLoaded(op, stack, bytecode, game):
@@ -1626,14 +1688,20 @@ def o100_soundOps(op, stack, bytecode, game):
         return f'\tquick'
     if cmd.num == 129:
         return f'\tchannel {stack.pop()}'
+    if cmd.num == 132:
+        return f'$ set-sfx {stack.pop()}'
     if cmd.num == 134:
         return f'$ sfx {stack.pop()}'
     if cmd.num == 6:
         return f'\toffset {stack.pop()}'
     if cmd.num == 131:
         return f'\tloop'
+    if cmd.num == 133:
+        return f'\tpan {stack.pop()}'
     if cmd.num == 135:
         return f'\tsoft'
+    if cmd.num == 136:
+        return f'\tvolume {stack.pop()}'
     if cmd.num == 92:
         return f'\t(end-sfx)'
     return defop(op, stack, bytecode, game)
@@ -2357,14 +2425,16 @@ def o6_actorOps(op, stack, bytecode, game):
         return f'\tignore-turns off'
     if cmd.num == 217:
         return f'\tnew'
-    # TODO: 227 - actor-depth - 1 pop
+    if cmd.num == 227:
+        return f'\tto-zplane {stack.pop()}'
     # TODO: 228 - actor-walk-script 1 pop
     # TODO: 229 - actor-stop - no pops
     # TODO: 230 - direction - 1 pop
     # TODO: 231 - turn-to - 1 pop
     # TODO: 233 - stop-walk - no pops
     # TODO: 234 - resume-walk - no pops
-    # TODO: 235 - talk-script - 1 pop
+    if cmd.num == 235:
+        return f'\ttalk-script {stack.pop()}'
     return defop(op, stack, bytecode, game)
 
 
@@ -2379,6 +2449,12 @@ def o60_actorOps(op, stack, bytecode, game):
         slot = stack.pop()
         return f'\ttalkie {slot} {msg_val(op.args[1])}\\'
     return o6_actorOps(op, stack, bytecode, game)
+
+
+@regop
+def o6_getActorLayer(op, stack, bytecode, game):
+    stack.append(f'actor-zplane {stack.pop()}')
+    return
 
 
 @regop
@@ -2663,6 +2739,10 @@ def o90_setSpriteInfo(op, stack, bytecode, game):
     if cmd.num == 125:
         params = get_params(stack)
         return f'\tclass is {params}'
+    if cmd.num == 139:
+        ptype = stack.pop()
+        value = stack.pop()
+        return f'\tset-property {value} in {ptype}'
     if cmd.num == 158:
         return f'\treset'
     if cmd.num == 140:
@@ -2703,6 +2783,8 @@ def o100_setSpriteInfo(op, stack, bytecode, game):
         return f'\tgroup {stack.pop()}'
     if cmd.num == 40:
         return f'\timage {stack.pop()}'
+    if cmd.num == 48:
+        return f'\tmask {stack.pop()}'
     if cmd.num == 49:
         ypos = stack.pop()
         xpos = stack.pop()
@@ -2724,10 +2806,16 @@ def o100_setSpriteInfo(op, stack, bytecode, game):
         return f'\tflag {flag} {value}'
     if cmd.num == 61:
         return f'\treset'
+    if cmd.num == 70:
+        return f'\tshadow {stack.pop()}'
     if cmd.num == 73:
         return f'$ state {stack.pop()}'
     if cmd.num == 82:
         return f'\tupdate {stack.pop()}'
+    if cmd.num == 83:
+        value = stack.pop()
+        unk = stack.pop()
+        return f'\tanimation-var {unk} {value}'
     return defop(op, stack, bytecode, game)
 
 
@@ -2837,9 +2925,30 @@ def o100_getSpriteInfo(op, stack, bytecode, game):
         sprite = stack.pop()
         stack.append(f'$ sprite-display-y {sprite}')
         return
+    if sub.num == 33:
+        flags = get_params(stack)
+        typ = stack.pop()
+        group = stack.pop()
+        y = stack.pop()
+        x = stack.pop()
+        stack.append(f'$ sprite-by-class at {x},{y} group {group} type {typ} {flags}')
+        return
+    if sub.num == 38:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-get-group {sprite}')
+        return
+    if sub.num == 39:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-image-y {sprite}')
+        return
     if sub.num == 40:
         sprite = stack.pop()
         stack.append(f'$ sprite-image {sprite}')
+        return
+    if sub.num == 54:
+        flags = stack.pop()
+        sprite = stack.pop()
+        stack.append(f'$ sprite-property {sprite} flags {flags}')
         return
     if sub.num == 59:
         sprite = stack.pop()
@@ -2848,6 +2957,15 @@ def o100_getSpriteInfo(op, stack, bytecode, game):
     if sub.num == 73:
         sprite = stack.pop()
         stack.append(f'$ sprite-state {sprite}')
+        return
+    if sub.num == 83:
+        unk = stack.pop()
+        sprite = stack.pop()
+        stack.append(f'$ sprite-animation-var {sprite} {unk}')
+        return
+    if sub.num == 84:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-image-x {sprite}')
         return
     if sub.num == 85:
         sprite = stack.pop()
@@ -2894,7 +3012,9 @@ def o90_setSpriteGroupInfo(op, stack, bytecode, game):
         right = stack.pop()
         top = stack.pop()
         left = stack.pop()
-        return f'\tbox {left},{top} to {right},{bottom}'
+        return f'\tclip {left},{top} to {right},{bottom}'
+    if cmd.num == 93:
+        return f'\tclip off'
     if cmd.num == 217:
         return f'\tnew'
     return defop(op, stack, bytecode, game)
@@ -2918,11 +3038,15 @@ def o100_setSpriteGroupInfo(op, stack, bytecode, game):
         right = stack.pop()
         top = stack.pop()
         left = stack.pop()
-        return f'\tbox {left},{top} to {right},{bottom}'
+        return f'\tclip {left},{top} to {right},{bottom}'
     if cmd.num == 53:
         return f'\tnew'
     if cmd.num == 59:
         return f'\tpriority {stack.pop()}'
+    if cmd.num == 60:
+        typ = stack.pop()
+        value = stack.pop()
+        return f'\tpropery {value} {typ}'
     return defop(op, stack, bytecode, game)
 
 
@@ -3359,17 +3483,34 @@ def o100_wizImageOps(op, stack, bytecode, game):
     if cmd.num == 57:
         palette = stack.pop()
         return f'\tpalette {palette}'
+    if cmd.num == 64:
+        fname = pop_str(stack)
+        mode = stack.pop()
+        return f'\tfrom-file {fname} {mode}'
+    if cmd.num == 65:
+        scale = stack.pop()
+        return f'\tscale {scale}'
     if cmd.num == 67:
         flags = stack.pop()
         return f'\tflags {flags}'
     if cmd.num == 73:
         state = stack.pop()
         return f'\tstate {state}'
+    if cmd.num == 84:
+        width = stack.pop()
+        return f'\twidth {width}'
     if cmd.num == 92:
         return f'\t(end-wiz)'
     if cmd.num == 135:
         res = stack.pop()
         return f'\tresource {res}'
+    if cmd.num == 138:
+        color = stack.pop()
+        bottom = stack.pop()
+        right = stack.pop()
+        top = stack.pop()
+        left = stack.pop()
+        return f'$ draw-box {left},{top} to {right}, {bottom} color {color}'
     return defop(op, stack, bytecode, game)
 
 
@@ -3393,6 +3534,17 @@ def o90_getPaletteData(op, stack, bytecode, game):
 @regop
 def o100_getPaletteData(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
+    if cmd.num == 13:
+        component = stack.pop()
+        slot = stack.pop()
+        stack.append(f'$ from-slot {slot} component {component}')
+        return
+    if cmd.num == 53:
+        b = stack.pop()
+        g = stack.pop()
+        r = stack.pop()
+        stack.append(f'$ from-rgb {r} {g} {b}')
+        return
     if cmd.num == 73:
         component = stack.pop()
         color = stack.pop()
@@ -3450,6 +3602,10 @@ def o100_paletteOps(op, stack, bytecode, game):
         end = stack.pop()
         start = stack.pop()
         return f'\tset-color {start} to {end} value {color}'
+    if cmd.num == 40:
+        state = stack.pop()
+        res = stack.pop()
+        return f'\tfrom-image {res} state {state}'
     if cmd.num == 53:
         return f'\treset'
     if cmd.num == 92:
@@ -3486,6 +3642,8 @@ def o6_wait(op, stack, bytecode, game):
         return 'wait-for-message'
     if sub.num == 170:
         return 'wait-for-camera'
+    if sub.num == 171:
+        return 'wait-for-sentence'
     return defop(op, stack, bytecode, game)
 
 
@@ -3740,9 +3898,12 @@ def o6_resourceRoutines(op, stack, bytecode, game):
     if cmd.num == 117:
         return f'load-charset {stack.pop()}'
     if cmd.num == 119:
-        room = stack.pop()
+        if game.version < 7:
+            room = stack.pop()
+            obj = stack.pop()
+            return f'load-object {obj} in-room {room}'
         obj = stack.pop()
-        return f'load-object {obj} in-room {room}'
+        return f'load-object {obj}'
     return defop(op, stack, bytecode, game)
 
 
@@ -5088,6 +5249,7 @@ def parse_verb_meta(meta):
 
 
 def decompile_script(elem, game, verbose=False, transform=True):
+    script_map = get_script_map(game)
     if elem.tag == 'OBCD':
         obcd = elem
         elem = sputm.find('VERB', obcd)
