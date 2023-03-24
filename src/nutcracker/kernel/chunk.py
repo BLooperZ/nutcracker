@@ -97,7 +97,7 @@ class SizeFixedChunk(StructuredChunk):
 
     def unpack_from(self, buffer: BufferLike, offset: int = 0) -> ChunkHeader:
         etag, size = self._struct.unpack_from(buffer, offset)
-        if set(etag) == {0} and size == 0:
+        if set(etag) == {0}:
             return ChunkHeader(NULL_TAG, len(buffer) - offset)
         return ChunkHeader(etag, size + self.size_fix)
 

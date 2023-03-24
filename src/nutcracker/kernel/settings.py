@@ -30,11 +30,13 @@ class _ChunkSetting(ChunkFactory):
     align: int = 2
     chunk: ChunkFactory = IFF_CHUNK_EX
     skip_byte: Optional[int] = None
+    logger: logging.Logger = logging.root
 
     def untag(self, buffer: BufferLike, offset: int = 0) -> Chunk:
         """Read chunk from given buffer."""
         chunk = self.chunk.untag(buffer, offset=offset)
-        assert self.chunk.mktag(chunk.tag, chunk.data) == bytes(chunk)
+        if self.chunk.mktag(chunk.tag, chunk.data) != bytes(chunk):
+            self.logger.warning('Possible mismatch when re-encoding {}'.format(chunk))
         return chunk
 
     def mktag(self, tag: str, data: bytes) -> bytes:
@@ -60,4 +62,3 @@ class _IndexSetting(_ChunkSetting):
     schema: Mapping[str, Set[str]] = field(default_factory=dict)
     strict: bool = False
     max_depth: Optional[int] = None
-    logger: logging.Logger = logging.root
