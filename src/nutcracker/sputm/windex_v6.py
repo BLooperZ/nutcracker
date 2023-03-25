@@ -2218,7 +2218,7 @@ def o6_cursorCommand(op, stack, bytecode, game):
     elif cmd.num == 0x97:
         return 'userput soft-off'
     elif cmd.num == 0x99:
-        if game.he_version >= 70:
+        if game.he_version >= 70 or game.version >= 7:
             # TODO: Figure out object?
             return f'cursor {stack.pop()}'
         # TODO: another pop for non HE or HE < 70 games
@@ -2427,12 +2427,17 @@ def o6_actorOps(op, stack, bytecode, game):
         return f'\tnew'
     if cmd.num == 227:
         return f'\tto-zplane {stack.pop()}'
-    # TODO: 228 - actor-walk-script 1 pop
+    if cmd.num == 228:
+        return f'\tactor-walk-script {stack.pop()}'
     # TODO: 229 - actor-stop - no pops
-    # TODO: 230 - direction - 1 pop
-    # TODO: 231 - turn-to - 1 pop
-    # TODO: 233 - stop-walk - no pops
-    # TODO: 234 - resume-walk - no pops
+    if cmd.num == 230:
+        return f'\tdirection {stack.pop()}'
+    if cmd.num == 231:
+        return f'\tturn-to {stack.pop()}'
+    if cmd.num == 233:
+        return f'\tstop-walk'
+    if cmd.num == 234:
+        return f'\tresume-walk'
     if cmd.num == 235:
         return f'\ttalk-script {stack.pop()}'
     return defop(op, stack, bytecode, game)
@@ -3644,6 +3649,10 @@ def o6_wait(op, stack, bytecode, game):
         return 'wait-for-camera'
     if sub.num == 171:
         return 'wait-for-sentence'
+    if sub.num == 226:
+        return f'wait-for-animation {stack.pop()} [ref {adr(op.args[1])}]'
+    if sub.num == 232:
+        return f'wait-for-turn {stack.pop()} [ref {adr(op.args[1])}]'
     return defop(op, stack, bytecode, game)
 
 
