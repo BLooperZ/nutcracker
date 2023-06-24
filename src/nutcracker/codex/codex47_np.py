@@ -1,3 +1,5 @@
+# TODO: rename to blocky8
+
 import io
 import logging
 import struct
@@ -320,7 +322,7 @@ def decode47(src, width, height):
             bomp.decode_line(gfx_data, decoded_size), dtype=np.uint8
         ).reshape(_height, _width)
     else:
-        raise ValueError(f'Unknow compression: {compression}')
+        raise ValueError(f'Unknown compression: {compression}')
 
     assert npoff(out) == npoff(_bcurr)
 
