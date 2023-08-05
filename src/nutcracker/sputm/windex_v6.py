@@ -2444,6 +2444,22 @@ def o6_actorOps(op, stack, bytecode, game):
 
 
 @regop
+def o90_getLinesIntersectionPoint(op, stack, bytecode, game):
+    xvar = get_var(op.args[0])
+    yvar = get_var(op.args[1])
+    line2_y2 = stack.pop()
+    line2_x2 = stack.pop()
+    line2_y1 = stack.pop()
+    line2_x1 = stack.pop()
+    line1_y2 = stack.pop()
+    line1_x2 = stack.pop()
+    line1_y1 = stack.pop()
+    line1_x1 = stack.pop()
+    stack.append(f'intersection ({line1_x1},{line1_y1} to {line1_x2},{line1_y2}), ({line2_x1},{line2_y1} to {line2_x2},{line2_y2}) in {xvar},{yvar}')
+    return
+
+
+@regop
 def o60_actorOps(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 218:
@@ -2697,6 +2713,10 @@ def o72_resetCutscene(op, stack, bytecode, game):
 @regop
 def o90_setSpriteInfo(op, stack, bytecode, game):
     cmd = Value(op.args[0], signed=False)
+    if cmd.num == 34:
+        return f'\tstep-dist-x {stack.pop()}'
+    if cmd.num == 35:
+        return f'\tstep-dist-y {stack.pop()}'
     if cmd.num == 37:
         return f'\tgroup {stack.pop()}'
     if cmd.num == 43:
@@ -2732,6 +2752,9 @@ def o90_setSpriteInfo(op, stack, bytecode, game):
     if cmd.num == 86:
         palette = stack.pop()
         return f'\tpalette {palette}'
+    if cmd.num == 92:
+        scale = stack.pop()
+        return f'\tscale {scale}'
     if cmd.num == 97:
         speed = stack.pop()
         return f'\tanimation-speed {speed}'
@@ -2843,6 +2866,14 @@ def o90_getSpriteInfo(op, stack, bytecode, game):
         sprite = stack.pop()
         stack.append(f'$ sprite-height {sprite}')
         return
+    if sub.num == 34:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-step-dist-x {sprite}')
+        return
+    if sub.num == 35:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-step-dist-y {sprite}')
+        return
     if sub.num == 36:
         sprite = stack.pop()
         stack.append(f'$ sprite-num-states {sprite}')
@@ -2897,9 +2928,9 @@ def o90_getSpriteInfo(op, stack, bytecode, game):
         sprite = stack.pop()
         stack.append(f'$ sprite-flags {sprite}')
         return
-    if sub.num == 63:
+    if sub.num == 92:
         sprite = stack.pop()
-        stack.append(f'$ sprite-image {sprite}')
+        stack.append(f'$ sprite-scale {sprite}')
         return
     if sub.num == 125:
         params = get_params(stack)
@@ -4291,9 +4322,15 @@ def o72_writeFile(op, stack, bytecode, game):
     res = stack.pop()
     slot = stack.pop()
     sub = Value(op.args[0], signed=False)
+    types = {
+        4: 'byte',
+        5: 'int',
+        6: 'dword',
+        8: 'array',
+    }
     if sub.num == 8:
         return f'$ write-file {Value(op.args[1])} {slot} {res}'
-    return defop(op, stack, bytecode, game)
+    return f'$ write-file {slot} {types[sub.num]} {res}'
 
 
 @regop
@@ -4319,16 +4356,20 @@ def o100_writeFile(op, stack, bytecode, game):
 @regop
 def o72_readFile(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
-    if sub.num == 5:
-        slot = stack.pop()
-        stack.append(f'$ read-word {slot}')
-        return
+    types = {
+        4: 'byte',
+        5: 'int',
+        6: 'dword',
+        8: 'array',
+    }
     if sub.num == 8:
         size = stack.pop()
         slot = stack.pop()
         stack.append(f'$ read-file {Value(op.args[1])} {slot} size {size}')
         return
-    return defop(op, stack, bytecode, game)
+    slot = stack.pop()
+    stack.append(f'$ read-file {slot} {types[sub.num]}')
+    return
 
 
 @regop
