@@ -535,9 +535,7 @@ def o5_stop_wd(op):
 @regop(0x01)
 def o5_put_act_wd(op):
     assert op.opcode & 0x1F == 0x01
-    actor = op.args[0]
-    posx = op.args[1]
-    posy = op.args[2]
+    actor, posx, posy = op.args
     return f'put-actor {value(actor, sem="object")} at {value(posx)},{value(posy)}'
 
 
@@ -561,28 +559,18 @@ def o5_mus_wd(op):
 
 @regop(0x03)
 def o5_face_wd(op):
+    var, actor = op.args
+    assert isinstance(var, Variable)
     if op.opcode in {0x63, 0xE3}:
-        var = op.args[0]
-        actor = op.args[1]
-        assert isinstance(var, Variable)
         assert isinstance(actor, Variable if op.opcode & PARAM_1 else ByteValue)
         return f'{value(var)} = actor-facing {value(actor, sem="object")}'
     if op.opcode in {0x03, 0x83}:
-        var = op.args[0]
-        actor = op.args[1]
-        assert isinstance(var, Variable)
         assert isinstance(actor, Variable if op.opcode & PARAM_1 else ByteValue)
         return f'{value(var)} = actor-room {value(actor, sem="object")}'
     if op.opcode in {0x43, 0xC3}:
-        var = op.args[0]
-        actor = op.args[1]
-        assert isinstance(var, Variable)
         assert isinstance(actor, Variable if op.opcode & PARAM_1 else WordValue)
         return f'{value(var)} = actor-x {value(actor, sem="object")}'
     if op.opcode in {0x23, 0xA3}:
-        var = op.args[0]
-        actor = op.args[1]
-        assert isinstance(var, Variable)
         assert isinstance(actor, Variable if op.opcode & PARAM_1 else WordValue)
         return f'{value(var)} = actor-y {value(actor, sem="object")}'
 
@@ -630,27 +618,24 @@ def o5_greater_wd(op):
 @regop(0x05)
 def o5_draw_wd(op):
     if op.opcode in {0x05, 0x45, 0x85, 0xC5}:
-        obj = op.args[0]
+        obj, *rest = op.args
         # assert op.args[-1].op[0] == 0xFF
-        rest_params = ' '.join(build_draw(op.args[1:]))
+        rest_params = ' '.join(build_draw(rest))
         return f'draw-object {value(obj, sem="object")} {rest_params}'
     if op.opcode in {0x25, 0x65, 0xA5, 0xE5}:
-        obj = op.args[0]
-        room = op.args[1]
+        obj, room = op.args
         return f'pick-up-object {value(obj, sem="object")} in-room {value(room, sem="room")}'
 
 
 @regop(0x06)
 def o5_elavation_wd(op):
     if op.opcode in {0x06, 0x86}:
-        target = op.args[0]
-        actor = op.args[1]
+        target, actor = op.args
         return f'{value(target)} = actor-elevation {value(actor, sem="object")}'
     if op.opcode in {0x26, 0xA6}:
-        target = op.args[0]
-        num = op.args[1]
-        assert len(op.args[2:]) == num.op[0]
-        values = ' '.join(value(val) for val in op.args[2:])
+        target, num, *rest = op.args
+        assert len(rest) == num.op[0]
+        values = ' '.join(value(val) for val in rest)
         return f'{value(target)} = {values}'
     if op.opcode == 0x46:
         return f'++{value(op.args[0])}'
@@ -723,15 +708,13 @@ def o5_compare_wd(op):
 @regop(0x09)
 def o5_put_owner_wd(op):
     if op.opcode in {0x29, 0x69, 0xA9, 0xE9}:
-        obj = op.args[0]
-        actor = op.args[1]
+        obj, actor = op.args
         return f'owner-of {value(obj, sem="object")} is {value(actor, sem="object")}'
     if op.opcode in {0x09, 0x49, 0x89, 0xC9}:
         # windex shows actor {} face-towards {}
         # SCUMM reference shows: do-animation actor-name face-towards actor-name
         # NOTE: obj value might be actually actor, as seen in: ... face-towards selected-actor
-        actor = op.args[0]
-        obj = op.args[1]
+        actor, obj = op.args
         return f'do-animation {value(actor, sem="object")} face-towards {value(obj, sem="object")}'
         # return f'actor {value(actor)} face-towards {value(obj)}'
 
@@ -739,9 +722,9 @@ def o5_put_owner_wd(op):
 @regop(0x0A)
 def o5_start_script_wd(op):
     assert op.opcode & 0x1F == 0x0A
-    scr = op.args[0]
-    assert op.args[-1].op[0] == 0xFF
-    params = f"({','.join(build_script(op.args[1:]))})"
+    scr, *rest = op.args
+    assert rest[-1].op[0] == 0xFF
+    params = f"({','.join(build_script(rest))})"
     background = 'bak ' if op.opcode & 0x20 else ''
     recursive = 'rec ' if op.opcode & 0x40 else ''
     return f'start-script {background}{recursive}{value(scr, sem="script")} {params}'
@@ -864,24 +847,20 @@ def o5_resource_wd(op):
 @regop(0x0D)
 def o5_put_wd(op):
     if op.opcode in {0x0D, 0x4D, 0x8D, 0xCD}:
-        actor = op.args[0]
-        actor2 = op.args[1]
-        rng = op.args[2]
+        actor, actor2, rng = op.args
         # windex: walk #2 to-actor #1 with-in 40
         # SCUMM reference: walk actor-name to actor-name within number
         return f'walk {value(actor, sem="object")} to-actor {value(actor2, sem="object")} within {value(rng)}'
 
     if op.opcode in {0x2D, 0x6D, 0xAD, 0xED}:
-        actor = op.args[0]
-        room = op.args[1]
+        actor, room = op.args
         return f'put-actor {value(actor, sem="object")} in-room {value(room, sem="room")}'
 
 
 @regop(0x0E)
 def o5_delay_wd(op):
     if op.opcode in {0x0E, 0x4E, 0x8E, 0xCE}:
-        actor = op.args[0]
-        obj = op.args[1]
+        actor, obj = op.args
         return f'put-actor {value(actor, sem="object")} at-object {value(obj, sem="object")}'
     if op.opcode == 0x2E:
         delay = int.from_bytes(
@@ -907,8 +886,7 @@ def o5_delay_wd(op):
 @regop(0x0F)
 def o5_stateof_wd(op):
     if op.opcode in {0x0F, 0x8F}:
-        var = op.args[0]
-        obj = op.args[1]
+        var, obj = op.args
         return f'{value(var)} = state-of {value(obj, sem="object")}'
 
 
