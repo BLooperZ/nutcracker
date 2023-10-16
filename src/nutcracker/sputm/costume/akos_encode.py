@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 import io
 import os
-from typing import Iterator, NamedTuple, Tuple
+import pathlib
+import struct
+from typing import Iterable, Iterator, NamedTuple, Tuple
 
 import numpy as np
+from PIL import Image
 
 from nutcracker.codex import bomp, rle, smap, bpp_cost
 from nutcracker.graphics.image import convert_to_pil_image
+from nutcracker.utils.fileio import write_file
 from nutcracker.utils.funcutils import flatten
 
 from nutcracker.sputm.room.pproom import get_rooms, read_room_settings
@@ -164,6 +168,7 @@ def read_akos_resource(akos, room_palette):
     # print(akof, akci, akcd)
 
     ends = akof[1:] + [(len(akcd.data), len(akci.data))]
+    print(akof)
     for (cd_start, ci_start), (cd_end, ci_end) in zip(akof, ends):
         ci = akci.data[ci_start : ci_start + 8]
         # print(len(ci))
@@ -172,10 +177,13 @@ def read_akos_resource(akos, room_palette):
         cd = akcd.data[cd_start:cd_end]
         locs, decoded = decode_frame(akhd, ci, cd, akpl)
         decoded.putpalette(palette)
-        yield locs, decoded
+        yield akhd.codec, akpl, locs, decoded
 
     return akhd, akpl, rgbs, aksq
 
+
+def create_akof(offsets: Iterable[tuple[int, int]]):
+    return b''.join(struct.Struct('<IH').pack(*offs) for offs in offsets)
 
 if __name__ == '__main__':
     import argparse
@@ -209,10 +217,43 @@ if __name__ == '__main__':
                 _, palette, _, _ = read_room_settings(lflf)
 
                 for akos in sputm.findall('AKOS', lflf):
+                    if akos.attribs['gid'] not in {59, 60, 61, 564}:
+                        continue
+
                     print(akos, akos.attribs["path"])
 
-                    for idx, ((xoff, yoff), im) in enumerate(
+                    offset = 0
+                    ci_offset = 0
+                    offsets = []
+                    cdata = bytearray()
+
+                    for idx, (codec, akpl, (xoff, yoff), im) in enumerate(
                         read_akos_resource(akos, palette),
                     ):
+                        offsets.append((offset, ci_offset))
                         imname = f'{os.path.basename(lflf.attribs["path"])}_{os.path.basename(akos.attribs["path"])}_aframe_{idx}.png'
-                        im.save(f'AKOS_out/{basename}/{imname}')
+                        fullpath = pathlib.Path('AKOS_out', basename, imname)
+                        if fullpath.exists():
+                            im = Image.open(fullpath)
+
+                        if codec == 1:
+                            cdata += bpp_cost.encode1(np.asarray(im), len(akpl.data))
+                        else:
+                            raise ValueError(codec)
+
+                        offset = len(cdata)
+                        ci_offset += 4
+
+                    os.makedirs(os.path.dirname(f'{basename}/{akos.attribs["path"]}'), exist_ok=True)
+                    write_file(
+                        f'{basename}/{akos.attribs["path"]}',
+                        sputm.mktag(
+                            akos.tag,
+                            sputm.write_chunks(
+                                sputm.mktag(e.tag, create_akof(offsets)) if e.tag == 'AKOF'
+                                else sputm.mktag(e.tag, cdata) if e.tag == 'AKCD'
+                                else sputm.mktag(e.tag, e.data)
+                                for e in akos
+                            )
+                        ),
+                    )

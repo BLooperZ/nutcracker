@@ -56,6 +56,8 @@ def encode1(
     for group in grouped:
         glen = len(group)
         value = group[0]
+        if value >= num_colors:
+            raise ValueError(f'Invalid color value: {value} >= {num_colors}')
         while glen > 255:
             output += bytes([value << shift, 255])
             glen -= 255
