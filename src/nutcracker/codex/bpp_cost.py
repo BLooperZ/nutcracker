@@ -1,9 +1,17 @@
 
 import itertools
+from typing import IO, Any
 import numpy as np
 
 
-def decode1(width, height, num_colors, stream, strict=True):
+def decode1(
+    width: int,
+    height: int,
+    num_colors: int,
+    stream: IO[bytes],
+    *,
+    strict: bool = True,
+) -> np.ndarray[Any, np.uint8]:
 
     masks = {16: (4, 0x0F), 32: (3, 0x07), 64: (2, 0x03)}
     shift, mask = masks[num_colors]
@@ -33,24 +41,26 @@ def decode1(width, height, num_colors, stream, strict=True):
         )
 
 
-def encode1(image, num_colors):
+def encode1(
+    image: np.ndarray[Any, np.uint8],
+    num_colors: int,
+) -> bytes:
     masks = {16: (4, 0x0F), 32: (3, 0x07), 64: (2, 0x03)}
     assert num_colors in masks, num_colors
     shift, mask = masks[num_colors]
 
-    buffer = image.T.tolist()
+    buffer = image.T.tobytes()
     output = bytearray()
 
-    for line in buffer:
-        grouped = [list(group) for _, group in itertools.groupby(line)]
-        for group in grouped:
-            glen = len(group)
-            value = group[0]
-            while glen > 255:
-                output += bytes([value << shift, 255])
-                glen -= 255
-            if glen < mask:
-                output += bytes([value << shift | glen])
-            else:
-                output += bytes([value << shift, glen])
+    grouped = [list(group) for _, group in itertools.groupby(buffer)]
+    for group in grouped:
+        glen = len(group)
+        value = group[0]
+        while glen > 255:
+            output += bytes([value << shift, 255])
+            glen -= 255
+        if glen > mask:
+            output += bytes([value << shift, glen])
+        else:
+            output += bytes([value << shift | glen])
     return bytes(output)
