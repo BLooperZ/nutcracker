@@ -286,6 +286,8 @@ def push_str(stack, msg):
 
 def pop_str(stack):
     arr = stack.pop()
+    if isinstance(arr.orig, str):
+        return arr
     return ops['_strings'].pop() if Value(arr.orig, signed=True).num == -1 else arr
 
 
@@ -734,6 +736,36 @@ def o100_getHeap(op, stack, bytecode, game):
 
 
 @regop
+def o100_videoOps(op, stack, bytecode, game):
+    sub = Value(op.args[0], signed=False)
+    if sub.num == 0:
+        return f'video {stack.pop()}'
+    if sub.num == 19:
+        return '\tstop'
+    if sub.num == 40:
+        return f'\timage {stack.pop()}'
+    if sub.num == 47:
+        return f'\tload {pop_str(stack)}'
+    if sub.num == 67:
+        return f'\tflags {stack.pop()}'
+    if sub.num == 92:
+        return '\t(end)'
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o100_getVideoData(op, stack, bytecode, game):
+    sub = Value(op.args[0], signed=False)
+    if sub.num == 26:
+        stack.append(f'video-count {stack.pop()}')
+        return
+    if sub.num == 73:
+        stack.append(f'video-state {stack.pop()}')
+        return
+    return defop(op, stack, bytecode, game)
+
+
+@regop
 def o6_arrayOps(op, stack, bytecode, game):
     sub = Value(op.args[0], signed=False)
     arr = get_var(op.args[1])
@@ -1054,7 +1086,7 @@ def o72_rename(op, stack, bytecode, game):
 @regop
 def o72_debugInput(op, stack, bytecode, game):
     string = pop_str(stack)
-    stack.append(f'$ debug-input {string}')
+    stack.append(f'debug-input {string}')
 
 
 @regop
@@ -1555,7 +1587,7 @@ def o100_redim2dimArray(op, stack, bytecode, game):
         # 44: 'nibble',
         45: 'byte',
         42: 'int',
-        # 43: 'dword',
+        43: 'dword',
         # 77: 'string',
     }
     arr = get_var(op.args[1])
@@ -2802,6 +2834,8 @@ def o100_setSpriteInfo(op, stack, bytecode, game):
         ypos = stack.pop()
         xpos = stack.pop()
         return f'\tat {xpos},{ypos}'
+    if cmd.num == 7:
+        return f'\tsource-image {stack.pop()}'
     if cmd.num == 16:
         params = get_params(stack)
         return f'\tclass is {params}'
@@ -2834,6 +2868,9 @@ def o100_setSpriteInfo(op, stack, bytecode, game):
         return f'\tflag {flag} {value}'
     if cmd.num == 61:
         return f'\treset'
+    if cmd.num == 65:
+        scale = stack.pop()
+        return f'\tscale {scale}'
     if cmd.num == 70:
         return f'\tshadow {stack.pop()}'
     if cmd.num == 73:
@@ -3075,6 +3112,8 @@ def o100_setSpriteGroupInfo(op, stack, bytecode, game):
         top = stack.pop()
         left = stack.pop()
         return f'\tclip {left},{top} to {right},{bottom}'
+    if cmd.num == 40:
+        return f'\timage {stack.pop()}'
     if cmd.num == 53:
         return f'\tnew'
     if cmd.num == 59:
@@ -3083,6 +3122,8 @@ def o100_setSpriteGroupInfo(op, stack, bytecode, game):
         typ = stack.pop()
         value = stack.pop()
         return f'\tpropery {value} {typ}'
+    if cmd.num == 89:
+        return f'\tnever-zclip'
     return defop(op, stack, bytecode, game)
 
 
@@ -3144,6 +3185,16 @@ def o90_getSpriteGroupInfo(op, stack, bytecode, game):
     if sub.num == 43:
         group = stack.pop()
         stack.append(f'$ sprite-group-priority {group}')
+        return
+    return defop(op, stack, bytecode, game)
+
+
+@regop
+def o100_getSpriteGroupInfo(op, stack, bytecode, game):
+    sub = Value(op.args[0], signed=False)
+    if sub.num == 5:
+        group = stack.pop()
+        stack.append(f'$ sprite-group-var {group}')
         return
     return defop(op, stack, bytecode, game)
 
@@ -4598,6 +4649,19 @@ def o80_createSound(op, stack, bytecode, game):
 
 
 @regop
+def o100_createSound(op, stack, bytecode, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 128:
+        return f'\tfrom {stack.pop()}'
+    if cmd.num == 53:
+        return f'\tempty'
+    if cmd.num == 0:
+        return f'$ create-sound {stack.pop()}'
+    if cmd.num == 92:
+        return f'\t(end-create-sound)'
+    return defop(op, stack, bytecode, game)
+
+@regop
 def o6_getActorCostume(op, stack, bytecode, game):
     act = stack.pop()
     stack.append(f'actor-costume {act}')
@@ -4712,11 +4776,18 @@ def o71_polygonOps(op, stack, bytecode, game):
 
 @regop
 def o100_debugInput(op, stack, bytecode, game):
-    if game.he_version == 101:
-        string = pop_str(stack)
-        stack.append(f'debug-input {string}')
-        return
     cmd = Value(op.args[0], signed=False)
+    if cmd.num == 0:
+        return f's_debug = debug-input {pop_str(stack)}'
+    if cmd.num == 26:
+        return f'\tcount {stack.pop()}'
+    if cmd.num == 27:
+        return f'\tdefault {pop_str(stack)}'
+    if cmd.num == 80:
+        return f'\ttitle {pop_str(stack)}'
+    if cmd.num == 92:
+        stack.append('s_debug')
+        return
     return defop(op, stack, bytecode, game)
 
 
