@@ -17,10 +17,31 @@ def get_argtype(args: Iterable[ScriptArg], argtype: Type[S_Arg]) -> Iterable[S_A
             yield arg
 
 
-def descumm(data: bytes, opcodes: OpTable) -> ByteCode:
+class BytecodeParseError(ValueError):
+    def __init__(
+        self,
+        cause: Exception,
+        buffer: bytes,
+        opcode: int,
+        bytecode: ByteCode,
+        offset: int,
+        base_offset: int = 0,
+    ) -> None:
+        super().__init__(
+            f'Could not parse opcode 0x{opcode:02X} at offset [{base_offset + offset:08d}]: {cause!r}'
+        )
+        self.buffer = buffer
+        self.opcode = opcode
+        self.offset = offset
+        self.bytecode = bytecode
+        self.base_offset = base_offset
+
+
+def descumm_iter(data: bytes, opcodes: OpTable, base_offset: int = 0) -> Iterable[Tuple[int, Statement]]:
     with io.BytesIO(data) as stream:
         bytecode = {}
         while True:
+            offset = stream.tell()
             next_byte = stream.read(1)
             if not next_byte:
                 break
@@ -32,8 +53,11 @@ def descumm(data: bytes, opcodes: OpTable) -> ByteCode:
 
             except Exception as e:
                 print(f'{type(e)}: {str(e)}')
-                print(f'0x{stream.tell():04x}', f'0x{opcode:02x}')
-                raise e
+                print(f'0x{offset:04x}', f'0x{opcode:02x}')
+                raise BytecodeParseError(e, data, opcode, bytecode, offset, base_offset) from e
+
+            else:
+                yield op.offset, bytecode[op.offset]
 
         for _off, stat in bytecode.items():
             for arg in get_argtype(stat.args, RefOffset):
@@ -44,7 +68,10 @@ def descumm(data: bytes, opcodes: OpTable) -> ByteCode:
             to_bytes(refresh_offsets(bytecode)),
             data,
         )
-        return bytecode
+
+
+def descumm(data: bytes, opcodes: OpTable) -> ByteCode:
+    return dict(descumm_iter(data, opcodes))
 
 
 def print_bytecode(bytecode: ByteCode) -> None:
