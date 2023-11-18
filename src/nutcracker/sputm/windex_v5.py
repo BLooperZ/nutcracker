@@ -16,14 +16,42 @@ from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
 
 from .script.bytecode import refresh_offsets, script_map, to_bytes
-from .script.opcodes import ByteValue, RefOffset, WordValue
-from .script.opcodes_v5 import PARAM_1, PARAM_2, OPCODES_v5, Variable, value as ovalue
+from .script.opcodes import ByteValue, RefOffset
+from .script.opcodes_v5 import OPCODES_v5, Variable, value as ovalue
 
 
 USE_SEMANTIC_CONTEXT = False
 
 l_vars = {}
 semlog = defaultdict(dict)
+
+
+def fstat(stat, *args, **kwargs):
+    return stat.format(*[PrintArg(arg) for arg in args], **kwargs)
+
+
+def build_params(mapping, args):
+    for subop in args:
+        if isinstance(subop, ByteValue) and ord(subop.op) == 0xFF:
+            break
+        fmt = mapping.get(subop.name)
+        if fmt is None:
+            yield str(subop)
+            continue
+        yield fstat(fmt, *subop.args)
+
+
+def builder(mapping, sep=' '):
+    def inner(args):
+        return sep.join(build_params(mapping, args))
+    return inner
+
+
+def build_varargs(args, sep=' '):
+    return builder({
+        'ARG': '{0}',
+    }, sep=sep)(args)
+
 
 def value(arg, sem=None):
     res = ovalue(arg)
@@ -35,6 +63,22 @@ def value(arg, sem=None):
             semlog[sem][res] = f'{sem}-{res}'
         return semlog[sem][res]
     return res
+
+
+class PrintArg:
+    def __init__(self, arg) -> None:
+        self.arg = arg
+    
+    def __format__(self, format_spec) -> str:
+        if format_spec == 'msg':
+            return msg_val(self.arg)
+        if format_spec == 'cvargs':
+            return build_varargs(self.arg.args, sep=',')
+        if format_spec == 'csvargs':
+            return build_varargs(self.arg.args, sep=', ')
+        if format_spec == 'svargs':
+            return build_varargs(self.arg.args, sep=' ')
+        return str(value(self.arg, sem=format_spec))
 
 
 def print_locals(indent):
@@ -124,91 +168,6 @@ def colored(arg):
     return value(arg)
 
 
-def build_print(args, version=5):
-    args = iter(args)
-    while True:
-        arg = next(args)
-        if isinstance(arg, ByteValue):
-            if arg.op[0] == 0xFF:
-                break
-            masked = arg.op[0] & 0x1F
-            if masked == 0x00:
-                posx = next(args)
-                posy = next(args)
-                assert isinstance(posx, Variable if arg.op[0] & 0x80 else WordValue), (hex(arg.op[0]), type(posx))
-                assert isinstance(posy, Variable if arg.op[0] & 0x40 else WordValue), (hex(arg.op[0]), type(posy))
-                yield f'at {value(posx)},{value(posy)}'
-                continue
-            if masked == 0x01:
-                color = next(args)
-                yield f'color {colored(color)}'
-                continue
-            if masked == 0x02:
-                clip = next(args)
-                yield f'clipped {value(clip)}'
-                continue
-            if masked == 0x04:
-                assert not arg.op[0] & 0x80
-                yield 'center'
-                continue
-            if masked == 0x06:
-                if version == 3:
-                    yield f'height {value(next(args))}'
-                    continue
-                assert not arg.op[0] & 0x80
-                yield 'left'
-                continue
-            if masked == 0x07:
-                assert not arg.op[0] & 0x80
-                yield 'overhead'
-                continue
-            if masked == 0x08:
-                yield f'voice {value(next(args))} delay {value(next(args))}'
-                continue
-            if masked == 0x0F:
-                assert not arg.op[0] & 0x80
-                yield f'{msg_val(next(args))}'
-                assert not next(args, None)
-                break
-        yield str(arg)
-
-
-def build_expr(args):
-    args = iter(args)
-    while True:
-        arg = next(args)
-        if isinstance(arg, ByteValue):
-            if arg.op[0] == 0xFF:
-                break
-            masked = arg.op[0] & 0x1F
-            if masked == 0x01:
-                val = next(args)
-                yield str(value(val))
-                continue
-            if masked == 0x02:
-                assert not arg.op[0] & 0x80
-                yield '+'
-                continue
-            if masked == 0x03:
-                assert not arg.op[0] & 0x80
-                yield '-'
-                continue
-            if masked == 0x04:
-                assert not arg.op[0] & 0x80
-                yield '*'
-                continue
-            if masked == 0x05:
-                assert not arg.op[0] & 0x80
-                yield '/'
-                continue
-            if masked == 0x06:
-                assert not arg.op[0] & 0x80
-                op = next(args)
-                yield f'({ops.get(op.opcode & 0x1F, str)(op) or str(op)})'
-                continue
-        yield str(arg)
-
-
 def resolve_expr(exp):
     if isinstance(exp, list):
         return f"({' '.join(resolve_expr(e) for e in exp)})"
@@ -227,274 +186,7 @@ def rpn_to_infix(exp):
     return s[0]
 
 
-def build_verb(args):
-    args = iter(args)
-    while True:
-        arg = next(args)
-        if isinstance(arg, ByteValue):
-            if arg.op[0] == 0xFF:
-                break
-            masked = arg.op[0] & 0x1F
-            if masked == 0x01:
-                yield f'image {value(next(args))}'
-                continue
-            if masked == 0x02:
-                assert not arg.op[0] & 0x80
-                yield f'name {msg_val(next(args))}'
-                continue
-            if masked == 0x03:
-                color = next(args)
-                assert isinstance(color, Variable if arg.op[0] & 0x80 else ByteValue)
-                yield f'color {colored(color)}'
-                continue
-            if masked == 0x04:
-                color = next(args)
-                assert isinstance(color, Variable if arg.op[0] & 0x80 else ByteValue)
-                yield f'hicolor {colored(color)}'
-                continue
-            if masked == 0x05:
-                posx = next(args)
-                posy = next(args)
-                assert isinstance(posx, Variable if arg.op[0] & 0x80 else WordValue), (hex(arg.op[0]), type(posx))
-                assert isinstance(posy, Variable if arg.op[0] & 0x40 else WordValue), (hex(arg.op[0]), type(posy))
-                yield f'at {value(posx)},{value(posy)}'
-                continue
-            if masked == 0x06:
-                assert not arg.op[0] & 0x80
-                yield 'on'
-                continue
-            if masked == 0x07:
-                assert not arg.op[0] & 0x80
-                yield 'off'
-                continue
-            if masked == 0x08:
-                assert not arg.op[0] & 0x80
-                yield 'delete'
-                continue
-            if masked == 0x09:
-                assert not arg.op[0] & 0x80
-                yield 'new'
-                continue
-            if masked == 0x10:
-                color = next(args)
-                assert isinstance(color, Variable if arg.op[0] & 0x80 else ByteValue)
-                yield f'dimcolor {colored(color)}'
-                continue
-            if masked == 0x11:
-                assert not arg.op[0] & 0x80
-                yield 'dim'
-                continue
-            if masked == 0x12:
-                key = next(args)
-                assert isinstance(key, Variable if arg.op[0] & 0x80 else ByteValue)
-                yield f'key {value(key)}'
-                continue
-            if masked == 0x13:
-                assert not arg.op[0] & 0x80
-                yield 'center'
-                continue
-            if masked == 0x14:
-                # windex displays ?????????
-                string = next(args)
-                yield f'name *{value(string)}'
-                continue
-            if masked == 0x16:
-                # assert not arg.op[0] & 0x80
-                yield f'image {value(next(args), sem="image")} in-room {value(next(args), sem="room")}'
-                continue
-            if masked == 0x17:
-                color = next(args)
-                assert isinstance(color, Variable if arg.op[0] & 0x80 else ByteValue)
-                yield f'bakcolor {colored(color)}'
-                continue
-        yield str(arg)
-
-
-def build_sound(args):
-    args = iter(args)
-    while True:
-        arg = next(args)
-        if isinstance(arg, ByteValue):
-            if arg.op[0] == 0xFF:
-                break
-            masked = arg.op[0] & 0x1F
-            if masked == 0x01:
-                yield str(value(next(args)))
-                continue
-        yield str(arg)
-
-
-def build_charset_color(args):
-    args = iter(args)
-    while True:
-        arg = next(args)
-        if isinstance(arg, ByteValue):
-            if arg.op[0] == 0xFF:
-                break
-            masked = arg.op[0] & 0x1F
-            if masked == 0x01:
-                yield str(value(next(args)))
-                continue
-        yield str(arg)
-
-def build_script(args):
-    args = iter(args)
-    while True:
-        arg = next(args)
-        if isinstance(arg, ByteValue):
-            if arg.op[0] == 0xFF:
-                break
-            masked = arg.op[0] & 0x1F
-            if masked == 0x01:
-                yield str(value(next(args)))
-                continue
-        yield str(arg)
-
-actor_convert = [
-    1, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 20,
-]
-
-def build_actor(args, version=5):
-    args = iter(args)
-    while True:
-        # [00000008] actor #12 costome #208 BYTE hex=0x15 dec=21 BYTE hex=0x13 dec=19 BYTE hex=0x02 dec=2 BYTE hex=0x02 dec=2 default BYTE hex=0x02 dec=2
-        # actor #12 costume #208 follow-boxes always-zclip #2 step-dist #8,#2
-        arg = next(args)
-        if isinstance(arg, ByteValue):
-            if arg.op[0] == 0xFF:
-                break
-            op = arg.op[0]
-            if version < 5:
-                op = (op & 0xE0) | actor_convert[(op & 0x1F) - 1]
-            masked = op & 0x1F
-            if masked == 0x01:
-                yield f'costume {value(next(args), sem="costume")}'
-                continue
-            if masked == 0x02:
-                yield f'step-dist {value(next(args))},{value(next(args))}'
-                continue
-            if masked == 0x03:
-                yield f'sound {value(next(args), sem="sound")}'
-                continue
-            if masked == 0x04:
-                yield f'walk-animation {value(next(args), sem="chore")}'
-                continue
-            if masked == 0x05:
-                yield f'talk-animation {value(next(args), sem="chore")},{value(next(args), sem="chore")}'
-                continue
-            if masked == 0x06:
-                yield f'stand-animation {value(next(args), sem="chore")}'
-                continue
-            if masked == 0x07:  # SO_ANIMATION  # text-offset, stop, turn, face????
-                yield f'text-offset {value(next(args))},{value(next(args))}'
-                continue
-            if masked == 0x08:
-                yield 'default'
-                continue
-            if masked == 0x09:
-                yield f'elevation {value(next(args))}'
-                continue
-            if masked == 0x0A:
-                yield 'animation default'
-                continue
-            if masked == 0x0B:
-                # yield f'color {value(next(args))} is {value(next(args))}'
-                yield f'palette {colored(next(args))} in-slot {colored(next(args))}'
-                continue
-            if masked == 0x0C:
-                yield f'talk-color {colored(next(args))}'
-                continue
-            if masked == 0x0D:
-                yield f'name {msg_val(next(args))}'
-                continue
-            if masked == 0x0E:
-                yield f'init-animation {value(next(args), sem="chore")}'
-                continue
-            if masked == 0x10:
-                yield f'width {value(next(args))}'
-                continue
-            if masked == 0x11:
-                ax1 = next(args)
-                if version < 5:
-                    yield f'scale {value(ax1)}'
-                    continue
-                ax2 = next(args)
-                assert isinstance(
-                    ax1, Variable if arg.op[0] & PARAM_1 else ByteValue
-                ) and isinstance(ax2, Variable if arg.op[0] & PARAM_2 else ByteValue)
-                yield f'scale {value(ax1)} {value(ax2)}'
-                continue
-            if masked == 0x12:
-                yield 'never-zclip'
-                continue
-            if masked == 0x13:
-                yield f'always-zclip {value(next(args))}'
-                continue
-            if masked == 0x14:
-                yield 'ignore-boxes'
-                continue
-            if masked == 0x15:
-                yield 'follow-boxes'
-                continue
-            if masked == 0x16:
-                yield f'animation-speed {value(next(args))}'
-                continue
-            if masked == 0x17:  # SO_SHADOW
-                yield f'special-draw {value(next(args), sem="effect")}'
-                continue
-        yield str(arg)
-
-
-def build_classes(args):
-    args = iter(args)
-    while True:
-        arg = next(args)
-        if isinstance(arg, ByteValue):
-            if arg.op[0] == 0xFF:
-                break
-            masked = arg.op[0] & 0x1F
-            if masked == 0x01:
-                yield str(value(next(args)))
-                continue
-        yield str(arg)
-
-
-def build_draw(args):
-    args = iter(args)
-    while True:
-        try:
-            arg = next(args)
-        except StopIteration:
-            break
-        if isinstance(arg, ByteValue):
-            if arg.op[0] == 0xFF:
-                break
-            masked = arg.op[0] & 0x1F
-            if masked == 0x1:
-                yield f'at {value(next(args))},{value(next(args))}'
-                continue
-            if masked == 0x2:
-                yield f'image {value(next(args), sem="image")}'
-                continue
-        yield str(arg)
-
-
-def build_obj(args):
-    args = iter(args)
-    while True:
-        arg = next(args)
-        if isinstance(arg, ByteValue):
-            if arg.op[0] == 0xFF:
-                break
-            masked = arg.op[0] & 0x1F
-            if masked == 0x01:
-                yield str(value(next(args)))
-                continue
-        yield str(arg)
-
-
 ops = {}
-
 
 def regop(mask):
     def inner(op):
@@ -513,66 +205,40 @@ class BreakHere:
         return f'break-here{num_str}'
 
 
-@regop(0x00)
-def o5_stop_wd(op):
-    if op.opcode == 0x00:
-        return 'end-object'
-    if op.opcode == 0x80:
-        return BreakHere()
-    if op.opcode == 0x60:
-        scr = op.args[0]
-        if scr.op[0] == 0:
-            return 'unfreeze-scripts'
-        return f'freeze-scripts {value(scr, sem="script")}'
-    if op.opcode == 0xA0:
-        return 'end-script'
-    if op.opcode == 0x40:
-        return 'cut-scene'
-    if op.opcode == 0xC0:
-        return 'end-cut-scene'
+string_params = builder(
+    {
+        'SO_AT': 'at {0},{1}',
+        'SO_COLOR': 'color {0}',
+        'SO_CLIPPED': 'clipped {0}',
+        'SO_CENTER': 'center',
+        'HEIGHT': 'height {0}',
+        'SO_LEFT': 'left',
+        'SO_OVERHEAD': 'overhead',
+        'SO_SAY_VOICE': 'voice {0} delay {1}',
+        'SO_TEXTSTRING': '{0:msg}',
+    }
+)
 
 
-@regop(0x01)
-def o5_put_act_wd(op):
-    assert op.opcode & 0x1F == 0x01
-    actor, posx, posy = op.args
-    return f'put-actor {value(actor, sem="object")} at {value(posx)},{value(posy)}'
-
-
-@regop(0x02)
-def o5_mus_wd(op):
-    if op.opcode in {0x02, 0x82}:
-        return f'start-music {value(op.args[0], sem="music")}'
-    if op.opcode in {0x62, 0xE2}:
-        return f'stop-script {value(op.args[0], sem="script")}'
-    if op.opcode in {0x42, 0xC2}:
-        scr = op.args[0]
-        assert op.args[-1].op[0] == 0xFF
-        params = f"({','.join(build_script(op.args[1:]))})"
-        # TODO: how to detect background/recursive in chain script?
-        background = ''
-        recursive = ''
-        # background = 'bak ' if op.opcode & 0x20 else ''
-        # recursive = 'rec ' if op.opcode & 0x40 else ''
-        return f'chain-script {background}{recursive}{value(scr, sem="script")} {params}'
-
-
-@regop(0x03)
-def o5_face_wd(op):
-    var, actor = op.args
-    assert isinstance(var, Variable)
-    if op.opcode in {0x63, 0xE3}:
-        assert isinstance(actor, Variable if op.opcode & PARAM_1 else ByteValue)
-        return f'{value(var)} = actor-facing {value(actor, sem="object")}'
-    if op.opcode in {0x03, 0x83}:
-        assert isinstance(actor, Variable if op.opcode & PARAM_1 else ByteValue)
-        return f'{value(var)} = actor-room {value(actor, sem="object")}'
-    if op.opcode in {0x43, 0xC3}:
-        assert isinstance(actor, Variable if op.opcode & PARAM_1 else WordValue)
-        return f'{value(var)} = actor-x {value(actor, sem="object")}'
-    if op.opcode in {0x23, 0xA3}:
-        assert isinstance(actor, Variable if op.opcode & PARAM_1 else WordValue)
-        return f'{value(var)} = actor-y {value(actor, sem="object")}'
+def parse_expr(args):
+    for subop in args:
+        if isinstance(subop, ByteValue) and ord(subop.op) == 0xFF:
+            break
+        if subop.name == 'OPERATION':
+            op = subop.args[0]
+            yield f'({ops.get(op.name, str)(op) or str(op)})'
+            continue
+        fmt = {
+            'ARG': '{0}',
+            'ADD': '+',
+            'SUBSTRACT': '-',
+            'MULTIPLY': '*',
+            'DIVIDE': '/',
+        }.get(subop.name)
+        if fmt is None:
+            yield str(subop)
+            continue
+        yield fstat(fmt, *subop.args)
 
 
 @dataclass
@@ -591,642 +257,753 @@ class UnconditionalJump:
         return f'jump {adr(self.ref)}'
 
 
-@regop(0x04)
-def o5_greater_wd(op):
-    if op.opcode in {0x04, 0x84}:
-        assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return ConditionalJump(
-            f'{value(op.args[0])} <= {value(op.args[1])}',
-            op.args[2]
-        )
-    if op.opcode in {0x24, 0x64, 0xA4, 0xE4}:
-        # TODO: don't display optional  'walk-to x,y' part when x,y are -1,-1
-        # windex:   come-out #161 in-room #13 walk-to #202,#202 (actual value #202,#116)
-        #           come-out #1035 in-room #76
-        # SCUMM refrence: come-out-door object-name in-room room-name [walk x-coord,y-coord]
-        return (
-            f'come-out {value(op.args[0], sem="object")} in-room {value(op.args[1], sem="room")} walk-to {value(op.args[2])},{value(op.args[3])}'
-        )
-    if op.opcode in {0x44, 0xC4}:
-        assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return ConditionalJump(
-            f'{value(op.args[0])} > {value(op.args[1])}',
-            op.args[2]
-        )
+@regop('o5_stopObjectCode')
+def o5_stopObjectCode_wd(op):
+    return 'end-object' if op.opcode == 0x00 else 'end-script'
 
 
-@regop(0x05)
-def o5_draw_wd(op):
-    if op.opcode in {0x05, 0x45, 0x85, 0xC5}:
-        obj, *rest = op.args
-        # assert op.args[-1].op[0] == 0xFF
-        rest_params = ' '.join(build_draw(rest))
-        return f'draw-object {value(obj, sem="object")} {rest_params}'
-    if op.opcode in {0x25, 0x65, 0xA5, 0xE5}:
-        obj, room = op.args
-        return f'pick-up-object {value(obj, sem="object")} in-room {value(room, sem="room")}'
+@regop('o5_cutscene')
+def o5_cutscene_wd(op):
+    return fstat('cut-scene {0:svargs}', *op.args)
 
 
-@regop(0x06)
-def o5_elavation_wd(op):
-    if op.opcode in {0x06, 0x86}:
-        target, actor = op.args
-        return f'{value(target)} = actor-elevation {value(actor, sem="object")}'
-    if op.opcode in {0x26, 0xA6}:
-        target, num, *rest = op.args
-        assert len(rest) == num.op[0]
-        values = ' '.join(value(val) for val in rest)
-        return f'{value(target)} = {values}'
-    if op.opcode == 0x46:
-        return f'++{value(op.args[0])}'
-    if op.opcode == 0xC6:
-        return f'--{value(op.args[0])}'
+@regop('o5_freezeScripts')
+def o5_freezeScripts_wd(op):
+    scr = op.args[0]
+    if ord(scr.op) == 0:
+        return 'unfreeze-scripts'
+    return fstat('freeze-scripts {0:script}', *op.args)
 
 
-@regop(0x07)
-def o5_state_wd(op):
-    if op.opcode in {0x07, 0x47, 0x87, 0xC7}:
-        return f'state-of {value(op.args[0], sem="object")} is {value(op.args[1], sem="state")}'
-    if op.opcode == 0x27:
-        sub = op.args[0]
-        masked = sub.op[0] & 0x1F
-        if masked == 0x01:
-            return f'*{value(op.args[1])} = {msg_val(op.args[2])}'
+@regop('o5_breakHere')
+def o5_breakHere_wd(op):
+    return BreakHere()
 
-        # 0x27 o5_setState { BYTE hex=0x02 dec=2 BYTE hex=0x2f dec=47 BYTE hex=0x30 dec=48 }
-        # *#47 = *#48
-        if masked == 0x02:
-            return f'*{value(op.args[1])} = *{value(op.args[2])}'
 
-        # 0x27 o5_setState { BYTE hex=0x03 dec=3 BYTE hex=0x15 dec=21 BYTE hex=0x00 dec=0 VAR_9991 }
-        # *#21[#0] = #7
-        if masked == 0x03:
-            return f'*{value(op.args[1])}[{value(op.args[2])}] = {value(op.args[3])}'
+@regop('o5_endCutscene')
+def o5_endCutscene_wd(op):
+    return 'end-cut-scene'
 
-        if masked == 0x04:
+
+@regop('o5_putActor')
+def o5_putActor_wd(op):
+    return fstat('put-actor {0:object} at {1},{2}', *op.args)
+
+
+@regop('o5_startMusic')
+def o5_startMusic_wd(op):
+    return fstat('start-music {0:music}', *op.args)
+
+
+@regop('o5_chainScript')
+def o5_chainScript_wd(op):
+    # TODO: how to detect background/recursive in chain script?
+    return fstat(
+        'chain-script {background}{recursive}{0:script} ({1:cvargs})',
+        *op.args,
+        background='',  # 'bak ' if op.opcode & 0x20 else ''
+        recursive='',  # 'rec ' if op.opcode & 0x40 else ''
+    )
+
+
+@regop('o5_stopScript')
+def o5_stopScript_wd(op):
+    return fstat('stop-script {0:script}', *op.args)
+
+
+@regop('o5_getActorRoom')
+def o5_getActorRoom_wd(op):
+    return fstat('{0} = actor-room {1:object}', *op.args)
+
+
+@regop('o5_getActorY')
+def o5_getActorY_wd(op):
+    return fstat('{0} = actor-y {1:object}', *op.args)
+
+
+@regop('o5_getActorX')
+def o5_getActorX_wd(op):
+    return fstat('{0} = actor-x {1:object}', *op.args)
+
+
+@regop('o5_getActorFacing')
+def o5_getActorFacing_wd(op):
+    return fstat('{0} = actor-facing {1:object}', *op.args)
+
+@regop('o5_isGreaterEqual')
+def o5_isGreaterEqual_wd(op):
+    *args, offset = op.args
+    return ConditionalJump(
+        fstat('{0} <= {1}', *args),
+        offset,
+    )
+
+
+@regop('o5_isLess')
+def o5_isLess_wd(op):
+    *args, offset = op.args
+    return ConditionalJump(
+        fstat('{0} > {1}', *args),
+        offset,
+    )
+
+
+@regop('o5_loadRoomWithEgo')
+def o5_loadRoomWithEgo_wd(op):
+    # TODO: don't display optional  'walk-to x,y' part when x,y are -1,-1
+    # windex:   come-out #161 in-room #13 walk-to #202,#202 (actual value #202,#116)
+    #           come-out #1035 in-room #76
+    # SCUMM refrence: come-out-door object-name in-room room-name [walk x-coord,y-coord]
+    return fstat('come-out {0:object} in-room {1:room} walk-to {2},{3}', *op.args)
+
+
+@regop('o5_drawObject')
+def o5_drawObject_wd(op):
+    obj, *args = op.args
+    params = builder({
+        'AT': 'at {0},{1}',
+        'STATE': 'image {0:state}',
+    })
+    return fstat('draw-object {0:object} {params}', obj, params=params(args))
+
+
+@regop('o5_pickupObject')
+def o5_pickUpObject_wd(op):
+    return fstat('pick-up-object {0:object} in-room {1:room}', *op.args)
+
+
+@regop('o5_getActorElevation')
+def o5_getActorElevation_wd(op):
+    return fstat('{0} = actor-elevation {1:object}', *op.args)
+
+
+@regop('o5_setVarRange')
+def o5_setVarRange_wd(op):
+    target, num, *rest = op.args
+    assert len(rest) == num.op[0]
+    values = ' '.join(value(val) for val in rest)
+    return fstat('{0} = {values}', target, values=values)
+
+
+@regop('o5_increment')
+def o5_increment_wd(op):
+    return fstat('++{0}', *op.args)
+
+
+@regop('o5_decrement')
+def o5_decrement_wd(op):
+    return fstat('--{0}', *op.args)
+
+
+@regop('o5_setState')
+def o5_setState_wd(op):
+    return fstat('state-of {0:object} is {1:state}', *op.args)
+
+
+@regop('o5_stringOps')
+def o5_stringOps_wd(op):
+    return builder({
+        'ASSIGN-STRING': '*{0} = {1:msg}',
+        'ASSIGN-STRING-VAR': (
+            # 0x27 o5_setState { BYTE hex=0x02 dec=2 BYTE hex=0x2f dec=47 BYTE hex=0x30 dec=48 }
+            # *#47 = *#48
+            '*{0} = *{1}'
+        ),
+        'ASSIGN-INDEX': (
+            # 0x27 o5_setState { BYTE hex=0x03 dec=3 BYTE hex=0x15 dec=21 BYTE hex=0x00 dec=0 VAR_9991 }
+            # *#21[#0] = #7
+            '*{0}[{1}] = {2}'
+        ),
+        'ASSIGN-VAR': (
             # 0x27 o5_setState { BYTE hex=0x44 dec=68 L.2 BYTE hex=0x1e dec=30 L.0 }
             # L.{0} = *#30[L.{0}]
-            return f'{value(op.args[1])} = *{value(op.args[2])}[{value(op.args[3])}]'
-
-        if masked == 0x05:
-            return f'*{value(op.args[1])}[{value(op.args[2])}]'
-
-    else:
-        return str(op)
+            '{0} = *{1}[{2}]'
+        ),
+        'STRING-INDEX': '*{0}[{1}]',
+    })(op.args)
 
 
-@regop(0x08)
-def o5_compare_wd(op):
-    if op.opcode in {0x08, 0x88}:
-        assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return ConditionalJump(
-            f'{value(op.args[0])} is-not {value(op.args[1])}',
-            # f'{value(op.args[0])} != {value(op.args[1])}',
-            op.args[2]
-        )
-    if op.opcode in {0x48, 0xC8}:
-        assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return ConditionalJump(
-            f'{value(op.args[0])} is {value(op.args[1])}',
-            # f'{value(op.args[0])} == {value(op.args[1])}',
-            op.args[2]
-        )
-    if op.opcode == 0x28:
-        return ConditionalJump(
-            f'!{value(op.args[0])}',
-            op.args[1]
-        )
-    if op.opcode == 0xA8:
-        return ConditionalJump(
-            f'{value(op.args[0])}',
-            op.args[1]
-        )
-    if op.opcode in {0x68, 0xE8}:
-        return f'{value(op.args[0])} = script-running {value(op.args[1], sem="script")}'
+@regop('o5_getStringWidth')
+def o5_getStringWidth_wd(op):
+    return fstat('{0} = $ string-width {1}', *op.args)
 
 
-@regop(0x09)
-def o5_put_owner_wd(op):
-    if op.opcode in {0x29, 0x69, 0xA9, 0xE9}:
-        obj, actor = op.args
-        return f'owner-of {value(obj, sem="object")} is {value(actor, sem="object")}'
-    if op.opcode in {0x09, 0x49, 0x89, 0xC9}:
-        # windex shows actor {} face-towards {}
-        # SCUMM reference shows: do-animation actor-name face-towards actor-name
-        # NOTE: obj value might be actually actor, as seen in: ... face-towards selected-actor
-        actor, obj = op.args
-        return f'do-animation {value(actor, sem="object")} face-towards {value(obj, sem="object")}'
-        # return f'actor {value(actor)} face-towards {value(obj)}'
+@regop('o5_isNotEqual')
+def o5_isNotEqual_wd(op):
+    *args, offset = op.args
+    return ConditionalJump(
+        fstat('{0} is-not {1}', *args),
+        offset,
+    )
 
 
-@regop(0x0A)
+@regop('o5_equalZero')
+def o5_equalZero_wd(op):
+    var, offset = op.args
+    return ConditionalJump(
+        fstat('!{0}', var),
+        offset,
+    )
+
+
+@regop('o5_notEqualZero')
+def o5_notEqualZero_wd(op):
+    var, offset = op.args
+    return ConditionalJump(
+        fstat('{0}', var),
+        offset,
+    )
+
+
+@regop('o5_isEqual')
+def o5_isEqual_wd(op):
+    *args, offset = op.args
+    return ConditionalJump(
+        fstat('{0} is {1}', *args),
+        offset,
+    )
+
+
+@regop('o5_isScriptRunning')
+def o5_isScriptRunning_wd(op):
+    return fstat('{0} = script-running {1:script}', *op.args)
+
+
+@regop('o5_faceActor')
+def o5_faceActor_wd(op):
+    # windex shows actor {} face-towards {}
+    # SCUMM reference shows: do-animation actor-name face-towards actor-name
+    # NOTE: obj value might be actually actor, as seen in: ... face-towards selected-actor
+    return fstat('do-animation {0:object} face-towards {1:object}', *op.args)
+
+
+@regop('o5_setOwnerOf')
+def o5_setOwnerOf_wd(op):
+    return fstat('owner-of {0:object} is {1:object}', *op.args)
+
+
+@regop('o5_startScript')
 def o5_start_script_wd(op):
-    assert op.opcode & 0x1F == 0x0A
-    scr, *rest = op.args
-    assert rest[-1].op[0] == 0xFF
-    params = f"({','.join(build_script(rest))})"
-    background = 'bak ' if op.opcode & 0x20 else ''
-    recursive = 'rec ' if op.opcode & 0x40 else ''
-    return f'start-script {background}{recursive}{value(scr, sem="script")} {params}'
+    return fstat(
+        'start-script {background}{recursive}{0:script} ({1:cvargs})',
+        *op.args,
+        background='bak ' if op.opcode & 0x20 else '',
+        recursive='rec ' if op.opcode & 0x40 else ''
+    )
 
 
-@regop(0x0B)
-def o5_wait_wd(op):
-    if op.opcode == 0x2B:
-        return f'sleep-for {value(op.args[0])} jiffies'
-    if op.opcode in {0x0B, 0x4B, 0x8B, 0xCB}:
-        return (
-            f'{value(op.args[0])} = valid-verb {value(op.args[1], sem="object")}, {value(op.args[2], sem="verb")}'
-        )
-    if op.opcode == 0xAB:
-        action = op.args[0]
-        if action.op[0] == 1:
-            return f'save-verbs {value(op.args[1])} to {value(op.args[2])} set {value(op.args[3])}'
-        if action.op[0] == 2:
-            return f'restore-verbs {value(op.args[1])} to {value(op.args[2])} set {value(op.args[3])}'
-    if op.opcode in {0x6B, 0xEB}:
-        return f'debug {value(op.args[0])}'
+@regop('o5_getVerbEntrypoint')
+def o5_getVerbEntrypoint_wd(op):
+    return fstat('{0} = valid-verb {1:object}, {2:verb}', *op.args)
 
 
-@regop(0x0C)
-def o5_resource_wd(op):
-    if op.opcode in {
-        0x0C,
-        # 0x8C  # TODO: commented out to check if this really happens
-    }:
-        sub = op.args[0]
-        masked = ord(sub.op) & 0x1F
-        if masked == 0x01:
-            return f'load-script {value(op.args[1], sem="script")}'
-        if masked == 0x02:
-            return f'load-sound {value(op.args[1], sem="sound")}'
-        if masked == 0x03:
-            return f'load-costume {value(op.args[1], sem="costume")}'
-        if masked == 0x04:
-            return f'load-room {value(op.args[1], sem="room")}'
-        if masked == 0x05:
-            return f'nuke-script {value(op.args[1], sem="script")}'
-        if masked == 0x06:
-            return f'nuke-sound {value(op.args[1], sem="sound")}'
-        if masked == 0x07:
-            return f'nuke-costume {value(op.args[1], sem="costume")}'
-        if masked == 0x08:
-            return f'nuke-room {value(op.args[1], sem="room")}'
-        if masked == 0x09:
-            return f'lock-script {value(op.args[1], sem="script")}'
-        if masked == 0x0A:
-            return f'lock-sound {value(op.args[1], sem="sound")}'
-        if masked == 0x0B:
-            return f'lock-costume {value(op.args[1], sem="costume")}'
-        if masked == 0x0C:
-            return f'lock-room {value(op.args[1], sem="room")}'
-        if masked == 0x0D:
-            return f'unlock-script {value(op.args[1], sem="script")}'
-        if masked == 0x0E:
-            return f'unlock-sound {value(op.args[1], sem="sound")}'
-        if masked == 0x0F:
-            return f'unlock-costume {value(op.args[1], sem="costume")}'
-        if masked == 0x10:
-            return f'unlock-room {value(op.args[1], sem="room")}'
-        if masked == 0x11:
-            return 'clear-heap'
-        if masked == 0x12:
-            # for some reason, places which should have logical nuke-charset
-            # also go here (probably bug in original scripts) (should go to 0x13)
-            return f'load-charset {value(op.args[1], sem="charset")}'
-        if masked == 0x14:
+@regop('o5_delayVariable')
+def o5_delayVariable_wd(op):
+    return fstat('sleep-for {0} jiffies', *op.args)
+
+
+@regop('o5_debug')
+def o5_debug_wd(op):
+    return fstat('debug {0}', *op.args)
+
+
+@regop('o5_saveRestoreVerbs')
+def o5_saveRestoreVerbs_wd(op):
+    return builder({
+        'SO_SAVE_VERBS': 'save-verbs {0} to {1} set {2}',
+        'SO_RESTORE_VERBS': 'restore-verbs {0} to {1} set {2}',
+    })(op.args)
+
+
+@regop('o5_resourceRoutines')
+def o5_resourceRoutines_wd(op):
+    return builder({
+        'SO_LOAD_SCRIPT': 'load-script {0:script}',
+        'SO_LOAD_SOUND': 'load-sound {0:sound}',
+        'SO_LOAD_COSTUME': 'load-costume {0:costume}',
+        'SO_LOAD_ROOM': 'load-room {0:room}',
+        'SO_NUKE_SCRIPT': 'nuke-script {0:script}',
+        'SO_NUKE_SOUND': 'nuke-sound {0:sound}',
+        'SO_NUKE_COSTUME': 'nuke-costume {0:costume}',
+        'SO_NUKE_ROOM': 'nuke-room {0:room}',
+        'SO_LOCK_SCRIPT': 'lock-script {0:script}',
+        'SO_LOCK_SOUND': 'lock-sound {0:sound}',
+        'SO_LOCK_COSTUME': 'lock-costume {0:costume}',
+        'SO_LOCK_ROOM': 'lock-room {0:room}',
+        'SO_UNLOCK_SCRIPT': 'unlock-script {0:script}',
+        'SO_UNLOCK_SOUND': 'unlock-sound {0:sound}',
+        'SO_UNLOCK_COSTUME': 'unlock-costume {0:costume}',
+        'SO_UNLOCK_ROOM': 'unlock-room {0:room}',
+        'SO_CLEAR_HEAP': 'clear-heap',
+        'SO_LOAD_CHARSET': 'load-charset {0:charset}',
+        'SO_LOAD_OBJECT': 'load-object {1:object} in-room {0:room}',
+    })(op.args)
+
+
+@regop('o5_cursorCommand')
+def o5_cursorCommand_wd(op):
+    return builder({
+        'SO_CURSOR_ON': 'cursor on',
+        'SO_CURSOR_OFF': 'cursor off',
+        'SO_USERPUT_ON': 'userput on',
+        'SO_USERPUT_OFF': 'userput off',
+        'SO_CURSOR_SOFT_ON': 'cursor soft-on',
+        'SO_CURSOR_SOFT_OFF': 'cursor soft-off',
+        'SO_USERPUT_SOFT_ON': 'userput soft-on',
+        'SO_USERPUT_SOFT_OFF': 'userput soft-off',
+        'SO_CURSOR_IMAGE': 'cursor {0:cursor} image {1:state}',
+        'SO_CURSOR_HOTSPOT': 'cursor {0:cursor} hotspot {1},{2}',
+        'SO_CURSOR_SET': 'cursor {0:cursor}',
+        'SO_CHARSET_SET': 'charset {0:charset}',
+        'CHARSET-COLOR': (
             # windex just says '???'
-            return f'load-object {value(op.args[2], sem="object")} in-room {value(op.args[1], sem="room")}'
-    if op.opcode == 0x2C:
-        sub = op.args[0]
-        masked = ord(sub.op) & 0x1F
-        if masked == 0x01:
-            return 'cursor on'
-        if masked == 0x02:
-            return 'cursor off'
-        if masked == 0x03:
-            return 'userput on'
-        if masked == 0x04:
-            return 'userput off'
-        if masked == 0x05:
-            return 'cursor soft-on'
-        if masked == 0x06:
-            return 'cursor soft-off'
-        if masked == 0x07:
-            return 'userput soft-on'
-        if masked == 0x08:
-            return 'userput soft-off'
-        if masked == 0x0A:
-            return f'cursor {value(op.args[1])} image {value(op.args[2])}'
-        if masked == 0x0B:
-            return f'cursor {value(op.args[1])} hotspot {value(op.args[2])},{value(op.args[3])}'
-        if masked == 0x0C:
-            return f'cursor {value(op.args[1])}'
-        if masked == 0x0D:
-            return f'charset {value(op.args[1], sem="charset")}'
-        if masked == 0x0E:
-            # windex just says '???'
-            assert op.args[-1].op[0] == 0xFF
-            colors = ', '.join(build_charset_color(op.args[1:]))
-            return f'charset color {colors}'
-    if op.opcode == 0x4C:
-        params = ' '.join(build_sound(op.args))
-        return f'sound-kludge {params}'
-    if op.opcode == 0xCC:
-        assert op.args[-1].op[0] == 0
-        rooms = ' '.join(value(val, sem="room") for val in op.args[1:-1])
-        return f'pseudo-room {value(op.args[0], sem="room")} is {rooms}'
-    if op.opcode == 0xAC:
-        rpn = list(build_expr(op.args[1:]))
-        infix = rpn_to_infix(rpn)
-        return f'{value(op.args[0])} = {resolve_expr(infix)}'
-    if op.opcode in {0x6C, 0xEC}:
-        return f'{value(op.args[0])} = actor-width {value(op.args[1], sem="object")}'
+            'charset color {0:csvargs}'
+        ),
+    })(op.args)
 
 
-@regop(0x0D)
-def o5_put_wd(op):
-    if op.opcode in {0x0D, 0x4D, 0x8D, 0xCD}:
-        actor, actor2, rng = op.args
-        # windex: walk #2 to-actor #1 with-in 40
-        # SCUMM reference: walk actor-name to actor-name within number
-        return f'walk {value(actor, sem="object")} to-actor {value(actor2, sem="object")} within {value(rng)}'
-
-    if op.opcode in {0x2D, 0x6D, 0xAD, 0xED}:
-        actor, room = op.args
-        return f'put-actor {value(actor, sem="object")} in-room {value(room, sem="room")}'
+@regop('o5_expression')
+def o5_expression(op):
+    var, *args = op.args
+    rpn = list(parse_expr(args))
+    infix = rpn_to_infix(rpn)
+    return fstat('{0} = {expr}', var, expr=resolve_expr(infix))
 
 
-@regop(0x0E)
+@regop('o5_soundKludge')
+def o5_soundKludge_wd(op):
+    return fstat('sound-kludge {0:svargs}', *op.args)
+
+
+@regop('o5_pseudoRoom')
+def o5_pseudoRoom_wd(op):
+    room, *rooms, term = op.args
+    assert ord(term.op) == 0
+    rooms = ' '.join(value(val, sem="room") for val in rooms)
+    return fstat('pseudo-room {0:room} is {rooms}', room, rooms=rooms)
+
+
+@regop('o5_getActorWidth')
+def o5_getActorWidth_wd(op):
+    return fstat('{0} = actor-width {1:object}', *op.args)
+
+
+@regop('o5_walkActorToActor')
+def o5_walkActorToActor_wd(op):
+    # windex: walk #2 to-actor #1 with-in 40
+    # SCUMM reference: walk actor-name to actor-name within number
+    return fstat(
+        'walk {0:object} to-actor {1:object} within {2}',
+        *op.args,
+    )
+
+
+@regop('o5_putActorInRoom')
+def o5_putActorInRoom_wd(op):
+    return fstat('put-actor {0:object} in-room {1:room}', *op.args)
+
+
+@regop('o5_putActorAtObject')
+def o5_putActorAtObject_wd(op):
+    return fstat('put-actor {0:object} at-object {1:object}', *op.args)
+
+
+@regop('o5_delay')
 def o5_delay_wd(op):
-    if op.opcode in {0x0E, 0x4E, 0x8E, 0xCE}:
-        actor, obj = op.args
-        return f'put-actor {value(actor, sem="object")} at-object {value(obj, sem="object")}'
-    if op.opcode == 0x2E:
-        delay = int.from_bytes(
-            op.args[2].op + op.args[1].op + op.args[0].op,
-            byteorder='big',
-            signed=False,
-        )
-        return f'sleep-for {delay} jiffies'
-    if op.opcode == 0xAE:
-        sub = op.args[0]
-        masked = sub.op[0] & 0x1F
-        if masked == 0x01:
-            actor = op.args[1]
-            return f'wait-for-actor {value(actor, sem="object")}'
-        if masked == 0x02:
-            return 'wait-for-message'
-        if masked == 0x03:
-            return 'wait-for-camera'
-        if masked == 0x04:
-            return 'wait-for-sentence'
+    delay = int.from_bytes(
+        op.args[2].op + op.args[1].op + op.args[0].op,
+        byteorder='big',
+        signed=False,
+    )
+    return fstat('sleep-for {delay} jiffies', delay=delay)
 
 
-@regop(0x0F)
-def o5_stateof_wd(op):
-    if op.opcode in {0x0F, 0x8F}:
-        var, obj = op.args
-        return f'{value(var)} = state-of {value(obj, sem="object")}'
+@regop('o5_wait')
+def o5_wait_wd(op):
+    return builder({
+        'SO_WAIT_FOR_ACTOR': 'wait-for-actor {0:object}',
+        'SO_WAIT_FOR_MESSAGE': 'wait-for-message',
+        'SO_WAIT_FOR_CAMERA': 'wait-for-camera',
+        'SO_WAIT_FOR_SENTENCE': 'wait-for-sentence',
+    })(op.args)
 
 
-@regop(0x10)
-def o5_owner_wd(op):
-    if op.opcode in {0x10, 0x90}:
-        var = op.args[0]
-        obj = op.args[1]
-        if op.opcode & 0x80:
-            assert isinstance(var, Variable) and isinstance(obj, Variable)
-        # elif op.opcode & 0x40:
-        #     assert isinstance(var, WordValue) and isinstance(obj, Variable)
-        else:
-            assert isinstance(var, Variable) and isinstance(obj, WordValue), (
-                type(var),
-                type(obj),
-            )
-        return f'{value(var)} = owner-of {value(obj, sem="object")}'
-    if op.opcode in {0x30, 0xB0}:
-        assert not op.opcode & 0x80
-        sub = op.args[0]
-        masked = sub.op[0] & 0x1F
-        if masked == 1:
-            return f'set-box {value(op.args[1])} to {value(op.args[2], sem="box-status")}'
-        if masked == 4:
-            return 'set-box-path'
+@regop('o5_getObjectState')
+def o5_getObjectState_wd(op):
+    return fstat('{0} = state-of {1:object}', *op.args)
 
 
-@regop(0x11)
-def o5_inv_wd(op):
-    if op.opcode in {0x11, 0x51, 0x91, 0xD1}:
-        actor = op.args[0]
-        chore = op.args[1]
-        assert isinstance(
-            actor, Variable if op.opcode & PARAM_1 else ByteValue
-        ) and isinstance(chore, Variable if op.opcode & PARAM_2 else ByteValue)
-        return f'do-animation {value(actor, sem="object")} {value(chore, sem="chore")}'
-    if op.opcode == 0xB1:
-        return f'{value(op.args[0])} = inventory-size {value(op.args[1], sem="object")}'
-    if op.opcode in {0x71, 0xF1}:
-        return f'{value(op.args[0])} = actor-costume {value(op.args[1], sem="object")}'
+@regop('o5_getObjectOwner')
+def o5_getObjectOwner_wd(op):
+    return fstat('{0} = owner-of {1:object}', *op.args)
 
 
-@regop(0x12)
-def o5_camera_wd(op):
-    if op.opcode in {0x12, 0x92}:
-        return f'camera-pan-to {value(op.args[0])}'
-    if op.opcode in {0x32, 0xB2}:
-        return f'camera-at {value(op.args[0])}'
-    if op.opcode in {0x72, 0xF2}:
-        return f'current-room {value(op.args[0], sem="room")}'
-    if op.opcode in {0x52, 0xD2}:
-        return f'camera-follow {value(op.args[0], sem="object")}'
+@regop('o5_matrixOps')
+def o5_matrixOps_wd(op):
+    return builder({
+        'SET-BOX-STATUS': 'set-box {0} to {1:box-status}',
+        'SET-BOX-PATH': 'set-box-path',
+    })(op.args)
 
 
-@regop(0x13)
-def o5_room_wd(op):
-    if op.opcode in {0x13, 0x53, 0x93, 0xD3}:
-        actor = op.args[0]
-        assert op.args[-1].op[0] == 0xFF
-        rest_params = ' '.join(build_actor(op.args[1:]))
-        return f'actor {value(actor, sem="object")} {rest_params}'
-    if op.opcode in {0x33, 0x73, 0xB3, 0xF3}:
-        sub = op.args[0]
-        masked = sub.op[0] & 0x1F
-        if masked == 0x01:
-            return f'room-scroll {value(op.args[1])} to {value(op.args[2])}'
-        if masked == 0x02:
-            return f'room-color {value(op.args[1])} in-slot {value(op.args[2])}'
-        if masked == 0x03:
-            return f'set-screen {value(op.args[1])} to {value(op.args[2])}'
-        if masked == 0x04:
-            return f'palette {value(op.args[1])} in-slot {value(op.args[2])}'
-        if masked == 0x05:
-            return f'shake on'
-        if masked == 0x06:
-            return f'shake off'
-        if masked == 0x08:
+@regop('o5_lights')
+def o5_lights_wd(op):
+    # WINDEX shows: lights...
+    # TODO: SCUMM reference shows: lights are light-status
+    # or: lights beam-size is width [,height]
+    return fstat('lights {0} {1} {2}', *op.args)
+
+
+@regop('o5_animateActor')
+def o5_animateActor_wd(op):
+    return fstat('do-animation {0:object} {1:chore}', *op.args)
+
+
+@regop('o5_getActorCostume')
+def o5_getActorCostume_wd(op):
+    return fstat('{0} = actor-costume {1:object}', *op.args)
+
+
+@regop('o5_getInventoryCount')
+def o5_getInventoryCount_wd(op):
+    return fstat('{0} = inventory-size {1:object}', *op.args)
+
+
+@regop('o5_panCameraTo')
+def o5_panCameraTo_wd(op):
+    return fstat('camera-pan-to {0}', *op.args)
+
+
+@regop('o5_setCameraAt')
+def o5_setCameraAt_wd(op):
+    return fstat('camera-at {0}', *op.args)
+
+
+@regop('o5_actorFollowCamera')
+def o5_actorFollowCamera_wd(op):
+    return fstat('camera-follow {0:object}', *op.args)
+
+
+@regop('o5_loadRoom')
+def o5_loadRoom_wd(op):
+    return fstat('current-room {0:room}', *op.args)
+
+
+@regop('o5_actorOps')
+def o5_actorOps_wd(op, version=5):
+    # [00000008] actor #12 costume #208 BYTE hex=0x15 dec=21 BYTE hex=0x13 dec=19 BYTE hex=0x02 dec=2 BYTE hex=0x02 dec=2 default BYTE hex=0x02 dec=2
+    # actor #12 costume #208 follow-boxes always-zclip #2 step-dist #8,#2
+    actor, *args = op.args
+    params = builder({
+        'SO_COSTUME': 'costume {0:costume}',
+        'SO_STEP_DIST': 'step-dist {0},{1}',
+        'SO_SOUND': 'sound {0:sound}',
+        'SO_WALK_ANIMATION': 'walk-animation {0:chore}',
+        'SO_TALK_ANIMATION': 'talk-animation {0:chore},{1:chore}',
+        'SO_STAND_ANIMATION': 'stand-animation {0:chore}',
+        'SO_ANIMATION': (
+            # SO_ANIMATION  # text-offset, stop, turn, face????
+            'text-offset {0},{1}'
+        ),
+        'SO_DEFAULT': 'default',
+        'SO_ELEVATION': 'elevation {0}',
+        'SO_ANIMATION_DEFAULT': 'animation default',
+        'SO_PALETTE': (
+            # yield f'color {0:color} is {1:color}'
+            'palette {0:color} in-slot {1:color}'
+        ),
+        'SO_TALK_COLOR': 'talk-color {0:color}',
+        'SO_ACTOR_NAME': 'name {0:msg}',
+        'SO_INIT_ANIMATION': 'init-animation {0:chore}',
+        'SO_ACTOR_WIDTH': 'width {0}',
+        'SO_ACTOR_SCALE': 'scale {0}' if version == 4 else 'scale {0} {1}',
+        'SO_NEVER_ZCLIP': 'never-zclip',
+        'SO_ALWAYS_ZCLIP': 'always-zclip {0}',
+        'SO_IGNORE_BOXES': 'ignore-boxes',
+        'SO_FOLLOW_BOXES': 'follow-boxes',
+        'SO_ANIMATION_SPEED': 'animation-speed {0}',
+        'SO_SHADOW': 'special-draw {0:effect}',
+    })
+
+    return fstat('actor {0:object} {params}', actor, params=params(args))
+
+
+@regop('o5_roomOps')
+def o5_roomOps_wd(op, version=5):
+    return builder({
+        'SO_ROOM_SCROLL': 'room-scroll {0} to {1}',
+        'SO_ROOM_COLOR': 'room-color {0} in-slot {1}',
+        'SO_ROOM_SCREEN': 'set-screen {0} to {1}',
+        'SO_ROOM_PALETTE': 'palette {0} in-slot {1}' if version < 5 else 'palette {0} {1} {2} in-slot {4}',
+        'SO_ROOM_SHAKE_ON': 'shake on {0} {1}' if version == 3 else 'shake on',
+        'SO_ROOM_SHAKE_OFF': 'shake off {0} {1}' if version == 3 else 'shake off',
+        'SO_ROOM_INTENSITY': (
             # windex displays empty string here for some reason
-            return f'palette intensity {value(op.args[1])} in-slot {value(op.args[2])} to {value(op.args[3])}'
-        if masked == 0x09:
+            'palette intensity {0} in-slot {1} to {2}'
+        ),
+        'SO_ROOM_SAVEGAME': (
             # windex output: saveload-game #1 in-slot #26
             # according to SCUMM reference, original scripts might have save-game / load-game according to first arg (1 for save 2 for load)
-            return f'saveload-game {value(op.args[1])} in-slot {value(op.args[2])}'
-        if masked == 0x0A:
+            'saveload-game {0} in-slot {1}'
+        ),
+        'SO_ROOM_FADE': (
             # TODO: map fades value to name
-            return f'fades {value(op.args[1], sem="fade")}'
-        if masked == 0x0B:
+            'fades {0:fade}'
+        ),
+        'SO_RGB_ROOM_INTENSITY': (
             # windex displays empty string here for some reason
             # not found in SCUMM refrence, string is made up
-            return f'palette intensity [rgb] {value(op.args[1])} {value(op.args[2])} {value(op.args[3])} in-slot {value(op.args[5])} to {value(op.args[6])}'
-        if masked == 0x0C:
+            'palette intensity [rgb] {0} {1} {2} in-slot {4} to {5}'
+        ),
+        'SO_ROOM_SHADOW': (
             # windex displays empty string here for some reason
             # not found in SCUMM refrence, string is made up
-            return f'room-shadow [rgb] {value(op.args[1])} {value(op.args[2])} {value(op.args[3])} in-slot {value(op.args[5])} to {value(op.args[6])}'
-        if masked == 0x0D:
-            return f'save-string {value(op.args[1])} {msg_val(op.args[2])}'
-        if masked == 0x0E:
-            return f'load-string {value(op.args[1])} {msg_val(op.args[2])}'
-        if masked == 0x0F:
+            'room-shadow [rgb] {0} {1} {2} in-slot {4} to {5}'
+        ),
+        'SO_SAVE_STRING': 'save-string {0} {1:msg}',
+        'SO_LOAD_STRING': 'load-string {0} {1:msg}',
+        'SO_ROOM_TRANSFORM': (
             # windex displays empty string here for some reason
-            number = op.args[1]
-            start = op.args[3]
-            end = op.args[4]
-            time = op.args[6]
-            return f'palette transform {value(number)} {value(start)} to {value(end)} within {value(time)}'
-        if masked == 0x10:
+            'palette transform {0} {2} to {3} within {5}'
+        ),
+        'SO_CYCLE_SPEED': (
             # unverified
-            slot = op.args[1]
-            speed = op.args[2]
-            return f'palette cycle-speed {value(slot)} is {value(speed)}'
+            'palette cycle-speed {0} is {1}'
+        ),
+    })(op.args)
 
 
+@regop('o5_print')
+def o5_print_wd(op):
+    # 0x14 o5_print { BYTE hex=0xfd dec=253 BYTE hex=0x0f dec=15 MSG b'\xff\n\x02#\xff\n\xad\x04\xff\n\x08\x00\xff\n\x00\x00' }
+    # -> print-debug "....."
 
-@regop(0x14)
-def o5_print_wd(op, version=5):
-    if op.opcode in {0x14, 0x94}:
-        # 0x14 o5_print { BYTE hex=0xfd dec=253 BYTE hex=0x0f dec=15 MSG b'\xff\n\x02#\xff\n\xad\x04\xff\n\x08\x00\xff\n\x00\x00' }
-        # -> print-debug "....."
+    # 0x14 o5_print { BYTE hex=0xff dec=255 BYTE hex=0x00 dec=0 WORD hex=0x00a0 dec=160 WORD hex=0x0008 dec=8 BYTE hex=0x04 dec=4 BYTE hex=0x07 dec=7 BYTE hex=0xff dec=255 }
+    # -> print-line at #160,#8 center overhead
 
-        # 0x14 o5_print { BYTE hex=0xff dec=255 BYTE hex=0x00 dec=0 WORD hex=0x00a0 dec=160 WORD hex=0x0008 dec=8 BYTE hex=0x04 dec=4 BYTE hex=0x07 dec=7 BYTE hex=0xff dec=255 }
-        # -> print-line at #160,#8 center overhead
-        actor = op.args[0]
-        params = ' '.join(build_print(op.args[1:], version=version))
-        if isinstance(actor, ByteValue):
-            if actor.op[0] == 0xFC:
-                return f'print-system {params}'
-            if actor.op[0] == 0xFD:
-                return f'print-debug {params}'
-            if actor.op[0] == 0xFE:
-                return f'print-text {params}'
-            if actor.op[0] == 0xFF:
-                return f'print-line {params}'
-        return f'say-line {value(actor, sem="object")} {params}'
-    if op.opcode in {0x54, 0xD4}:
-        return f'new-name-of {value(op.args[0])} is {msg_val(op.args[1])}'
-    if op.opcode in {0x34, 0x74, 0xB4, 0xF4}:
-        var = op.args[0]
-        return f'{value(var)} = proximity {value(op.args[1], sem="object")},{value(op.args[2], sem="object")}'
-    else:
-        return str(op)
+    actor, *args = op.args
+    return fstat(
+        {
+            0xFC: 'print-system {params}',
+            0xFD: 'print-debug {params}',
+            0xFE: 'print-text {params}',
+            0xFF: 'print-line {params}',
+        }.get(
+            ord(actor.op) if isinstance(actor, ByteValue) else None,
+            'say-line {0:object} {params}'
+        ),
+        actor,
+        params=string_params(args)
+    )
 
 
-@regop(0x15)
-def o5_pos_wd(op):
-    if op.opcode in {0x35, 0x75, 0xB5, 0xF5}:
-        obj = op.args[0]
-        return f'{value(obj)} = find-object {value(op.args[1])},{value(op.args[2])}'
-    if op.opcode in {0x15, 0x55, 0x95, 0xD5}:
-        obj = op.args[0]
-        return f'{value(obj)} = find-actor {value(op.args[1])},{value(op.args[2])}'
+@regop('o5_setObjectName')
+def o5_setObjectName_wd(op):
+    return fstat('new-name-of {0:object} is {1:msg}', *op.args)
+
+@regop('o5_getDist')
+def o5_getDist_wd(op):
+    return fstat('{0} = proximity {1:object},{2:object}', *op.args)
 
 
-@regop(0x16)
-def o5_random_wd(op):
-    if op.opcode in {0x16, 0x96}:
-        assert isinstance(op.args[1], Variable if op.opcode & 0x80 else ByteValue)
-        return f'{value(op.args[0])} = random {value(op.args[1])}'
-    if op.opcode in {0x56, 0xD6}:
-        assert isinstance(op.args[1], Variable if op.opcode & 0x80 else ByteValue)
-        return f'{value(op.args[0])} = actor-moving {value(op.args[1], sem="object")}'
-    if op.opcode in {0x36, 0x76, 0xB6, 0xF6}:
-        actor = op.args[0]
-        obj = op.args[1]
-        return f'walk {value(actor, sem="object")} to-object {value(obj, sem="object")}'
+@regop('o5_actorFromPos')
+def o5_actorFromPos_wd(op):
+    return fstat('{0} = find-actor {1},{2}', *op.args)
 
 
-@regop(0x17)
+@regop('o5_findObject')
+def o5_findObject_wd(op):
+    return fstat('{0} = find-object {1},{2}', *op.args)
+
+
+@regop('o5_getRandomNr')
+def o5_getRandomNr_wd(op):
+    return fstat('{0} = random {1}', *op.args)
+
+
+@regop('o5_getActorMoving')
+def o5_getActorMoving_wd(op):
+    return fstat('{0} = actor-moving {1:object}', *op.args)
+
+
+@regop('o5_walkActorToObject')
+def o5_walkActorToObject_wd(op):
+    return fstat('walk {0:object} to-object {1:object}', *op.args)
+
+
+@regop('o5_and')
 def o5_and_wd(op):
-    if op.opcode in {0x17, 0x97}:
-        var = op.args[0]
-        val = op.args[1]
-        return f'{value(var)} &= {value(val)}'
-    if op.opcode in {0x57, 0xD7}:
-        var = op.args[0]
-        val = op.args[1]
-        return f'{value(var)} |= {value(val)}'
-    if op.opcode in {0x37, 0x77, 0xB7, 0xF7}:
-        scr = op.args[0]
-        ver = op.args[1]
-        assert op.args[-1].op[0] == 0xFF
-        params = f"({','.join(build_obj(op.args[2:]))})"
-        return f'start-object {value(scr, sem="object")} verb {value(ver, sem="verb")} {params}'
+    return fstat('{0} &= {1}', *op.args)
 
 
-@regop(0x18)
-def o5_jump_wd(op):
-    if op.opcode == 0x18:
-        return UnconditionalJump(op.args[0])
-        # return f'jump {adr(op.args[0])}'
-    if op.opcode == 0x58:
-        assert isinstance(op.args[0], ByteValue)
-        if op.args[0].op[0] != 0:
-            assert op.args[0].op[0] == 1, op.args[0]
-            return f'override {value(op.args[0])}'
-        else:
-            return 'override off'
-    if op.opcode in {0x38, 0xB8}:
-        assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return ConditionalJump(
-            f'{value(op.args[0])} >= {value(op.args[1])}',
-            op.args[2]
-        )
-    if op.opcode in {0x78, 0xF8}:
-        assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return ConditionalJump(
-            f'{value(op.args[0])} < {value(op.args[1])}',
-            op.args[2]
-        )
-    if op.opcode == 0xD8:
-        params = ' '.join(build_print(op.args))
-        return f'say-line {params}'
-    if op.opcode == 0x98:
-        return ['restart', 'pause', 'quit'][op.args[0].op[0] - 1]
+@regop('o5_or')
+def o5_or_wd(op):
+    return fstat('{0} |= {1}', *op.args)
 
 
-@regop(0x19)
-def o5_do_sentence_wd(op):
-    var = op.args[0]
-    if isinstance(var, ByteValue) and var.op[0] == 254:
-        return 'stop-sentence'
-    return f'do-sentence {value(var, sem="verb")} {value(op.args[1], sem="object")} with {value(op.args[2], sem="object")}'
+@regop('o5_startObject')
+def o5_startObject_wd(op):
+    return fstat('start-object {0:object} verb {1:verb} ({2:cvargs})', *op.args)
 
 
-@regop(0x1A)
+@regop('o5_jumpRelative')
+def o5_jumpRelative_wd(op):
+    return UnconditionalJump(op.args[0])
+
+
+@regop('o5_beginOverride')
+def o5_beginOverride_wd(op):
+    return builder({
+        'OFF': 'override off',
+        'ON': 'override 1',
+    })(op.args)
+
+
+@regop('o5_systemOps')
+def o5_systemOps_wd(op):
+    return builder({
+        'SO_RESTART': 'restart',
+        'SO_PAUSE': 'pause',
+        'SO_QUIT': 'quit',
+    })(op.args)
+
+
+@regop('o5_printEgo')
+def o5_printEgo_wd(op):
+    return fstat('say-line {params}', params=string_params(op.args))
+
+
+@regop('o5_isLessEqual')
+def o5_isLessEqual_wd(op):
+    *args, offset = op.args
+    return ConditionalJump(
+        fstat('{0} >= {1}', *args),
+        offset,
+    )
+
+
+@regop('o5_isGreater')
+def o5_isGreater_wd(op):
+    *args, offset = op.args
+    return ConditionalJump(
+        fstat('{0} < {1}', *args),
+        offset,
+    )
+
+
+@regop('o5_doSentence')
+def o5_doSentence_wd(op):
+    verb, *args = op.args
+    if isinstance(verb, ByteValue) and ord(verb.op) == 0xFE:
+        return fstat('stop-sentence')
+    return fstat('do-sentence {0:verb} {1:object} with {2:object}', verb, *args)
+
+
+@regop('o5_move')
 def o5_move_wd(op):
-    if op.opcode == 0x1A:  # VAR = WORD
-        # assert isinstance(op.args[1], WordValue), op.args[1]
-        return f'{value(op.args[0])} = {value(op.args[1])}'
-    if op.opcode == 0x9A:  # VAR = VAR
-        # assert isinstance(op.args[1], Variable), op.args[1]
-        return f'{value(op.args[0])} = {value(op.args[1])}'
-    if op.opcode in {0x7A, 0xFA}:
-        verb = op.args[0]
-        assert isinstance(op.args[0], Variable if op.opcode & 0x80 else ByteValue)
-        assert op.args[-1].op[0] == 0xFF
-        rest_params = ' '.join(build_verb(op.args[1:]))
-        return f'verb {value(verb, sem="verb")} {rest_params}'
-    if op.opcode in {0x3A, 0xBA}:
-        assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return f'{value(op.args[0])} -= {value(op.args[1])}'
-    if op.opcode in {0x5A, 0xDA}:
-        assert isinstance(op.args[1], Variable if op.opcode & 0x80 else WordValue)
-        return f'{value(op.args[0])} += {value(op.args[1])}'
-    else:
-        return str(op)
+    return fstat('{0} = {1}', *op.args)
 
 
-@regop(0x1B)
-def o5_mult_wd(op):
-    if op.opcode in {0x1B, 0x9B}:
-        left = op.args[0]
-        right = op.args[1]
-        if op.opcode & 0x80:
-            assert isinstance(left, Variable) and isinstance(right, Variable)
-        else:
-            assert isinstance(left, Variable) and isinstance(right, WordValue)
-        return f'{left} *= {value(right)}'
-    if op.opcode in {0x5B, 0xDB}:
-        left = op.args[0]
-        right = op.args[1]
-        if op.opcode & 0x80:
-            assert isinstance(left, Variable) and isinstance(right, Variable)
-        else:
-            assert isinstance(left, Variable) and isinstance(right, WordValue)
-        return f'{left} /= {value(right)}'
-    if op.opcode in {0x3B, 0xBB}:
-        var = op.args[0]
-        actor = op.args[1]
-        return f'{value(var)} = actor-scale {value(actor, sem="object")}'
-    if op.opcode in {0x7B, 0xFB}:
-        var = op.args[0]
-        actor = op.args[1]
-        return f'{value(var)} = actor-box {value(actor, sem="object")}'
+@regop('o5_subtract')
+def o5_subtract_wd(op):
+    return fstat('{0} -= {1}', *op.args)
 
 
-@regop(0x1C)
-def o5_sound_wd(op):
-    if op.opcode in {0x1C, 0x9C}:
-        sound = op.args[0]
-        assert isinstance(sound, Variable if op.opcode & 0x80 else ByteValue)
-        return f'start-sound {value(sound, sem="sound")}'
-    if op.opcode in {0x3C, 0xBC}:
-        sound = op.args[0]
-        assert isinstance(sound, Variable if op.opcode & 0x80 else ByteValue)
-        return f'stop-sound {value(sound, sem="sound")}'
-    if op.opcode in {0x7C, 0xFC}:
-        var = op.args[0]
-        scr = op.args[1]
-        return f'{value(var)} = sound-running {value(scr, sem="sound")}'
+@regop('o5_add')
+def o5_add_wd(op):
+    return fstat('{0} += {1}', *op.args)
 
 
-@regop(0x1D)
-def o5_class_wd(op):
-    if op.opcode in {0x5D, 0xDD}:
-        obj = op.args[0]
-        assert isinstance(obj, Variable if op.opcode & 0x80 else WordValue)
-        assert op.args[-1].op[0] == 0xFF
-        classes = ' '.join(build_classes(op.args[1:]))
-        return f'class-of {value(obj, sem="object")} is {classes}'
-    if op.opcode in {0x1D, 0x9D}:
-        obj = op.args[0]
-        assert op.args[-2].op[0] == 0xFF
-        classes = ' '.join(build_classes(op.args[1:-1]))
-        return ConditionalJump(
-            f'class-of {value(obj, sem="object")} is {classes}',
-            op.args[-1]
-        )
-    if op.opcode in {0x3D, 0x7D, 0xBD, 0xFD}:
-        var = op.args[0]
-        posx = op.args[1]
-        posy = op.args[2]
-        return f'{value(var)} = find-inventory {value(posx)},{value(posy)}'
+@regop('o5_verbOps')
+def o5_verbOps_wd(op):
+    verb, *args = op.args
+    params = builder({
+        'SO_VERB_IMAGE': 'image {0}',
+        'SO_VERB_NAME': 'name {0:msg}',
+        'SO_VERB_COLOR': 'color {0:color}',
+        'SO_VERB_HICOLOR': 'hicolor {0:color}',
+        'SO_VERB_AT': 'at {0},{1}',
+        'SO_VERB_ON': 'on',
+        'SO_VERB_OFF': 'off',
+        'SO_VERB_DELETE': 'delete',
+        'SO_VERB_NEW': 'new',
+        'SO_VERB_DIMCOLOR': 'dimcolor {0:color}',
+        'SO_VERB_DIM': 'dim',
+        'SO_VERB_KEY': 'key {0}',
+        'SO_VERB_CENTER': 'center',
+        'SO_VERB_NAME_STR': (
+            # windex displays ?????????
+            'name *{0}'
+        ),
+        'IMAGE-ROOM': 'image {0:object} in-room {1:room}',
+        'BAKCOLOR': 'bakcolor {0:color}',
+    })
+
+    return fstat('verb {0:verb} {params}', verb, params=params(args))
 
 
-@regop(0x1E)
-def o5_walk_wd(op):
-    assert op.opcode & 0x1F == 0x1E
-    actor = op.args[0]
-    posx = op.args[1]
-    posy = op.args[2]
-    return f'walk {value(actor, sem="object")} to {value(posx)},{value(posy)}'
+@regop('o5_multiply')
+def o5_multiply_wd(op):
+    return fstat('{0} *= {1}', *op.args)
 
 
-@regop(0x1F)
-def o5_box_wd(op):
-    if op.opcode in {
-        0x3F,  # o5_drawBox
-        0x7F,  # o5_drawBox
-        0xBF,  # o5_drawBox
-        0xFF,  # o5_drawBox
-    }:
-        x = op.args[0]
-        y = op.args[1]
+@regop('o5_getActorScale')
+def o5_getActorScale_wd(op):
+    return fstat('{0} = actor-scale {1:object}', *op.args)
 
-        _opcode = op.args[2]
-        x2 = op.args[3]
-        y2 = op.args[4]
-        color = op.args[5]
-        return f'draw-box {value(x)},{value(y)} to {value(x2)},{value(y2)} color {colored(color)}'
+
+@regop('o5_divide')
+def o5_divide_wd(op):
+    return fstat('{0} /= {1}', *op.args)
+
+
+@regop('o5_getActorWalkBox')
+def o5_getActorWalkBox_wd(op):
+    return fstat('{0} = actor-box {1:object}', *op.args)
+
+
+@regop('o5_startSound')
+def o5_startSound_wd(op):
+    return fstat('start-sound {0:sound}', *op.args)
+
+
+@regop('o5_stopSound')
+def o5_stopSound_wd(op):
+    return fstat('stop-sound {0:sound}', *op.args)
+
+
+@regop('o5_isSoundRunning')
+def o5_isSoundRunning_wd(op):
+    return fstat('{0} = sound-running {1:sound}', *op.args)
+
+
+@regop('o5_ifClassOfIs')
+def o5_ifClassOfIs_wd(op):
+    *args, offset = op.args
+    return ConditionalJump(
+        fstat('class-of {0:object} is {1:svargs}', *args),
+        offset,
+    )
+
+
+@regop('o5_findInventory')
+def o5_findInventory_wd(op):
+    return fstat('{0} = find-inventory {1},{2}', *op.args)
+
+
+@regop('o5_setClass')
+def o5_setClass_wd(op):
+    return fstat('class-of {0:object} is {1:svargs}', *op.args)
+
+
+@regop('o5_walkActorTo')
+def o5_walkActorTo_wd(op):
+    return fstat('walk {0:object} to {1},{2}', *op.args)
+
+
+@regop('o5_drawBox')
+def o5_drawBox_wd(op):
+    return fstat('draw-box {0},{1} to {3},{4} color {5:color}', *op.args)
 
 
 def descumm_v5(data: bytes, opcodes):
@@ -1675,7 +1452,7 @@ def decompile_script(elem, transform=True):
             curref = f'_[{off + 8:08d}]'
         if off in refs:
             curref = f'[{off + 8:08d}]'
-        res = ops.get(stat.opcode & 0x1F, str)(stat) or stat
+        res = ops.get(stat.name, str)(stat) or stat
         sts.append(res)
         asts[curref].append(res)
     yield from print_locals(indent)
@@ -1690,7 +1467,6 @@ if __name__ == '__main__':
     import argparse
 
     from nutcracker.sputm.tree import open_game_resource, narrow_schema
-    from nutcracker.sputm.schema import SCHEMA
     from nutcracker.sputm.windex.scu import dump_script_file
 
     parser = argparse.ArgumentParser(description='read smush file')

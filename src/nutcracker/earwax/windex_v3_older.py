@@ -8,7 +8,7 @@ from nutcracker.earwax.windex_v3 import OPCODES_v3, descumm_v4, ops
 from nutcracker.earwax.windex_v4 import get_room_scripts, get_global_scripts, global_script
 from nutcracker.kernel.element import Element
 from nutcracker.sputm.script.bytecode import verb_script
-from nutcracker.sputm.script.parser import ByteValue, RefOffset
+from nutcracker.sputm.script.parser import RefOffset
 from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, print_asts, print_locals, l_vars, semantic_key
 from nutcracker.utils.funcutils import flatten
 
@@ -124,7 +124,7 @@ def decompile_script(elem):
             curref = f'_[{coff:08d}]'
         if off in refs:
             curref = f'[{coff:08d}]'
-        res = ops.get(stat.opcode & 0x1F, str)(stat) or stat
+        res = ops.get(stat.name, str)(stat) or stat
         sts.append(res)
         asts[curref].append(res)
     yield from print_locals(indent)

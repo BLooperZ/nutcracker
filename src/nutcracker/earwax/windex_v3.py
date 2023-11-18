@@ -2,111 +2,110 @@
 from collections import defaultdict, deque
 import os
 from nutcracker.earwax.older import open_game_resource, read_config
-from nutcracker.earwax.windex_v4 import OPCODES_v4, descumm_v4, dump_script_file, o4_actorOps, o4_mus_wd, o4_owner_wd, o4_room_wd, parse_verb_meta_v4, script_map
-from nutcracker.sputm.script.opcodes_v5 import BYTE, WORD, get_params, get_result_pos, o5_getObjectOwner, o5_jumpRelative, o5_multiply, o5_print, o5_resourceRoutines, o5_startMusic, realize_v5, xop
-from nutcracker.sputm.script.parser import ByteValue, RefOffset
-from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, o5_mult_wd, o5_print_wd, o5_resource_wd, print_asts, print_locals, ops, semantic_key, value, l_vars
+from nutcracker.earwax.windex_v4 import OPCODES_v4, descumm_v4, dump_script_file, o4_actorOps, o4_pickupObject, o4_roomOps_wd, o4_saveLoadGame, parse_verb_meta_v4, script_map
+from nutcracker.sputm.script.opcodes_v5 import BYTE, IMBYTE, PARAMS, RESULT, SUBMASK, WORD, flatop, mop, o5_jumpRelative, o5_multiply, o5_print, o5_resourceRoutines, realize_v5
+from nutcracker.sputm.script.parser import RefOffset
+from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, fstat, print_asts, print_locals, ops, semantic_key, l_vars
 from nutcracker.utils.funcutils import flatten
 
 
-def o3_resource_wd(op):
-    if op.opcode == 0x4C:
-        return 'wait-for-sentence'
-    return o5_resource_wd(op)
+def o3_startMusic_wd(op):
+    return fstat('{0} = music {1:music}', *op.args)
 
 
-def o3_room_wd(op):
+def o3_waitForSentence_wd(op):
+    return fstat('wait-for-sentence', *op.args)
+
+
+def o3_setBoxFlags_wd(op):
+    return fstat('set-box {0} to {1:box-status}', *op.args)
+
+
+def o3_roomOps_wd(op):
     orig = tuple(op.args)
     if op.opcode in {0x33}:
-        op.args = (op.args[-1], *op.args[:-1])
+        *words, sub = op.args
+        assert sub.args == (), sub
+        sub.args = words
+        op.args = (sub,)
     try:
-        return o4_room_wd(op)
+        return o4_roomOps_wd(op, version=3)
     finally:
+        sub.args = ()
         op.args = orig
 
-def o3_mult_wd(op):
-    if op.opcode in {0x3B, 0xBB}:
-        actor = op.args[1]
-        return f'wait-for-actor {value(actor, sem="object")}'
-    return o5_mult_wd(op)
+
+def o3_waitForActor_wd(op):
+    return fstat('wait-for-actor {0:object}', *op.args)
 
 
-def o3_print_wd(op):
-    return o5_print_wd(op, version=3)
-
-def o3_owner_wd(op):
-    if op.opcode in {0x30, 0xB0}:
-        return f'set-box {value(op.args[0])} to {value(op.args[1], sem="box-status")}'
-    return o4_owner_wd(op)
-
-
-def o3_mus_wd(op):
-    if op.opcode in {0x02, 0x82}:
-        return f'{value(op.args[0])} = music {value(op.args[1], sem="music")}'
-    return o4_mus_wd(op)
-
-
-ops[0x02] = o3_mus_wd
-ops[0x0C] = o3_resource_wd
-ops[0x10] = o3_owner_wd
-ops[0x13] = o3_room_wd
-ops[0x1B] = o3_mult_wd
-ops[0x14] = o3_print_wd
-
-
-def o3_roomOps(opcode, stream):
-    if opcode in {0x33, 0x73, 0xB3, 0xF3}:  # o5_roomOps
-        yield from get_params(opcode, stream, 2 * WORD)
-        sub = ByteValue(stream)
-        yield sub
-    else:
-        yield from o4_actorOps(opcode, stream)
-
-
-def o3_waitForSentence(opcode, stream):
-    if opcode in {0x4C}:
-        return
-    yield from o5_resourceRoutines(opcode, stream)
-
-
-def o3_waitForActor(opcode, stream):
-    if opcode in {0x3B, 0xBB}:
-        # TODO: Indy3 special case
-        return
-    yield from o5_multiply(opcode, stream)
-
-def o3_print(opcode, stream):
-    yield from o5_print(opcode, stream, version=3)
-
-def o3_jumpRelative(opcode, stream):
-    yield from o5_jumpRelative(opcode, stream, version=3)
-
-def o3_getObjectOwner(opcode, stream):
-    yield from o5_getObjectOwner(opcode, stream, version=3)
+ops['o3_startMusic'] = o3_startMusic_wd
+ops['o3_waitForSentence'] = o3_waitForSentence_wd
+ops['o3_setBoxFlags'] = o3_setBoxFlags_wd
+ops['o3_roomOps'] = o3_roomOps_wd
+ops['o3_waitForActor'] = o3_waitForActor_wd
 
 
 def o3_startMusic(opcode, stream):
-    if opcode in {
-        0x02,
-        0x82,  # o5_startMusic
-    }:
-        yield get_result_pos(opcode, stream)
-        yield from get_params(opcode, stream, BYTE)
-        return
-    yield from o5_startMusic(opcode, stream)
+    return flatop(
+        ('o3_startMusic', {0x02, 0x82}, RESULT, PARAMS(BYTE)),
+        fallback=o4_saveLoadGame,
+    )(opcode, stream)
+
+
+def o3_waitForSentence(opcode, stream):
+    return flatop(
+        ('o3_waitForSentence', {0x4C}),
+        fallback=o5_resourceRoutines,
+    )(opcode, stream)
+
+
+def o3_getObjectOwner(opcode, stream):
+    return flatop(
+        ('o3_setBoxFlags', {0x30, 0xB0}, PARAMS(BYTE), IMBYTE),
+        fallback=o4_pickupObject,
+    )(opcode, stream)
+
+
+def o3_roomOps(opcode, stream):
+    return flatop(
+        ('o3_roomOps', {0x33, 0x73, 0xB3, 0xF3}, PARAMS(2 * WORD), SUBMASK(0x1F, {
+            0x01: mop('SO_ROOM_SCROLL'),
+            0x02: mop('SO_ROOM_COLOR'),
+            0x03: mop('SO_ROOM_SCREEN'),
+            0x04: mop('SO_ROOM_PALETTE'),
+            0x05: mop('SO_ROOM_SHAKE_ON'),
+            0x06: mop('SO_ROOM_SHAKE_OFF'),
+        })),
+        fallback=o4_actorOps,
+    )(opcode, stream)
+
+
+def o3_print(opcode, stream):
+    return o5_print(opcode, stream, version=3)
+
+
+def o3_jumpRelative(opcode, stream):
+    return o5_jumpRelative(opcode, stream, version=3)
+
+
+def o3_waitForActor(opcode, stream):
+    return flatop(
+        ('o3_waitForActor', {0x3B, 0xBB}),
+        fallback=o5_multiply,
+    )(opcode, stream)
 
 
 OPCODES_v3 = realize_v5({
     **OPCODES_v4,
-    0x02: xop(o3_startMusic),
-    0x0C: xop(o3_waitForSentence),
-    0x10: xop(o3_getObjectOwner),
-    0x13: xop(o3_roomOps),
-    0x14: xop(o3_print),
-    0x18: xop(o3_jumpRelative),
-    0x1B: xop(o3_waitForActor),
+    0x02: o3_startMusic,
+    0x0C: o3_waitForSentence,
+    0x10: o3_getObjectOwner,
+    0x13: o3_roomOps,
+    0x14: o3_print,
+    0x18: o3_jumpRelative,
+    0x1B: o3_waitForActor,
 })
-
 
 
 def decompile_script(elem):
@@ -166,7 +165,7 @@ def decompile_script(elem):
             curref = f'_[{coff:08d}]'
         if off in refs:
             curref = f'[{coff:08d}]'
-        res = ops.get(stat.opcode & 0x1F, str)(stat) or stat
+        res = ops.get(stat.name, str)(stat) or stat
         sts.append(res)
         asts[curref].append(res)
     yield from print_locals(indent)
