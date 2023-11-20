@@ -15,7 +15,7 @@ from nutcracker.sputm.strings import RAW_ENCODING, EncodingSetting
 from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
 
-from .script.bytecode import refresh_offsets, script_map, to_bytes
+from .script.bytecode import descumm, script_map
 from .script.opcodes import ByteValue, RefOffset
 from .script.opcodes_v5 import OPCODES_v5, Variable, value as ovalue
 
@@ -1006,43 +1006,6 @@ def o5_drawBox_wd(op):
     return fstat('draw-box {0},{1} to {3},{4} color {5:color}', *op.args)
 
 
-def descumm_v5(data: bytes, opcodes):
-    with io.BytesIO(data) as stream:
-        bytecode = {}
-        while True:
-            next_byte = stream.read(1)
-            if not next_byte:
-                break
-            opcode = ord(next_byte)
-            try:
-                op = opcodes[opcode & 0x1F](opcode, stream)
-                bytecode[op.offset] = op
-                # print(
-                #     '=============', f'0x{op.offset:04x}', f'0x{op.offset + 8:04d}', op
-                # )
-                # print(
-                #     f'[{op.offset + 8:08d}]', ops.get(op.opcode & 0x1F, str)(op) or op
-                # )
-
-            except Exception as e:
-                print(f'{type(e)}: {str(e)}')
-                print(f'{stream.tell():04x}', f'0x{opcode:02x}')
-                raise e
-
-        for _off, stat in bytecode.items():
-            for arg in stat.args:
-                if isinstance(arg, RefOffset):
-                    assert arg.abs in bytecode, hex(arg.abs)
-
-        assert to_bytes(bytecode) == data
-        assert to_bytes(refresh_offsets(bytecode)) == data, (
-            to_bytes(refresh_offsets(bytecode)),
-            data,
-        )
-        return bytecode
-
-
-
 obj_names = {}
 
 
@@ -1423,7 +1386,7 @@ def decompile_script(elem, transform=True):
         assert scr_id is None or scr_id == gid
         gid_str = '' if gid is None else f' {semantic_key(gid, "script")}'
         yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
-    bytecode = descumm_v5(script_data, OPCODES_v5)
+    bytecode = descumm(script_data, OPCODES_v5)
     # print_bytecode(bytecode)
 
     refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]

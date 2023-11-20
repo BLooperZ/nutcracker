@@ -4,10 +4,10 @@ import io
 import os
 from typing import IO, Callable, Iterable, Iterator, Tuple
 from nutcracker.earwax.older_sizeonly import open_game_resource
-from nutcracker.earwax.windex_v3 import OPCODES_v3, descumm_v4, ops
+from nutcracker.earwax.windex_v3 import OPCODES_v3, ops
 from nutcracker.earwax.windex_v4 import get_room_scripts, get_global_scripts, global_script
 from nutcracker.kernel.element import Element
-from nutcracker.sputm.script.bytecode import verb_script
+from nutcracker.sputm.script.bytecode import descumm, verb_script
 from nutcracker.sputm.script.parser import RefOffset
 from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, print_asts, print_locals, l_vars, semantic_key
 from nutcracker.utils.funcutils import flatten
@@ -94,7 +94,7 @@ def decompile_script(elem):
         yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
 
     print('============', elem)
-    bytecode = descumm_v4(script_data, OPCODES_v3)
+    bytecode = descumm(script_data, OPCODES_v3)
     # print_bytecode(bytecode)
 
     refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]

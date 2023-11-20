@@ -2,7 +2,8 @@
 from collections import defaultdict, deque
 import os
 from nutcracker.earwax.older import open_game_resource, read_config
-from nutcracker.earwax.windex_v4 import OPCODES_v4, descumm_v4, dump_script_file, o4_actorOps, o4_pickupObject, o4_roomOps_wd, o4_saveLoadGame, parse_verb_meta_v4, script_map
+from nutcracker.earwax.windex_v4 import OPCODES_v4, dump_script_file, o4_actorOps, o4_pickupObject, o4_roomOps_wd, o4_saveLoadGame, parse_verb_meta_v4, script_map
+from nutcracker.sputm.script.bytecode import descumm
 from nutcracker.sputm.script.opcodes_v5 import BYTE, IMBYTE, PARAMS, RESULT, SUBMASK, WORD, flatop, mop, o5_jumpRelative, o5_multiply, o5_print, o5_resourceRoutines, realize_v5
 from nutcracker.sputm.script.parser import RefOffset
 from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, fstat, print_asts, print_locals, ops, semantic_key, l_vars
@@ -135,7 +136,7 @@ def decompile_script(elem):
         yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
 
     print('============', elem)
-    bytecode = descumm_v4(script_data, OPCODES_v3)
+    bytecode = descumm(script_data, OPCODES_v3)
     # print_bytecode(bytecode)
 
     refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]

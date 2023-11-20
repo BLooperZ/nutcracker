@@ -5,7 +5,7 @@ import os
 from typing import IO, Callable, Iterable, Iterator, Tuple
 from nutcracker.earwax.resource import open_game_resource, read_config
 from nutcracker.kernel.element import Element
-from nutcracker.sputm.script.bytecode import local_script, refresh_offsets, to_bytes, verb_script
+from nutcracker.sputm.script.bytecode import descumm, local_script, refresh_offsets, to_bytes, verb_script
 from nutcracker.sputm.script.opcodes_v5 import BYTE, OFFSET, PARAMS, SUBMASK, WORD, RESULT, OPCODES_v5, flatop, mop, o5_actorOps, o5_getObjectOwner, o5_isActorInBox, o5_setState, o5_startMusic, o5_startSound, realize_v5
 from nutcracker.sputm.script.parser import RefOffset
 from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, builder, fstat, o5_actorOps_wd, o5_roomOps_wd, print_asts, print_locals, ops, semantic_key, l_vars
@@ -166,47 +166,6 @@ def get_global_scripts(root: Iterable[Element]) -> Iterator[Element]:
                 yield from get_global_scripts(elem.children)
 
 
-def descumm_v4(data: bytes, opcodes):
-    with io.BytesIO(data) as stream:
-        bytecode = {}
-        while True:
-            next_byte = stream.read(1)
-            if not next_byte:
-                break
-            opcode = ord(next_byte)
-            try:
-                op = opcodes[opcode & 0x1F](opcode, stream)
-                bytecode[op.offset] = op
-                # print(
-                #     '=============', f'0x{op.offset:04x}', f'0x{op.offset + 8:04d}', op
-                # )
-                print(
-                    f'[{op.offset + 8:08d}]', ops.get(op.name, str)(op) or op
-                )
-
-            except Exception as e:
-                print(f'{type(e)}: {str(e)}')
-                print(f'{stream.tell():04x}', f'0x{opcode:02x}')
-                raise e
-
-        for _off, stat in bytecode.items():
-            for arg in stat.args:
-                if isinstance(arg, RefOffset):
-                    # assert arg.abs in bytecode, (hex(arg.abs), arg.abs)
-                    if arg.abs not in bytecode:
-                        print('COULD NOT FOUND OFFSET', hex(arg.abs), arg.abs)
-                        for off, stat in bytecode.items():
-                            print(off, stat)
-                        exit(1)
-
-        assert to_bytes(bytecode) == data
-        assert to_bytes(refresh_offsets(bytecode)) == data, (
-            to_bytes(refresh_offsets(bytecode)),
-            data,
-        )
-        return bytecode
-
-
 def get_room_scripts(root: Iterable[Element]) -> Iterator[Element]:
     for elem in root:
         if elem.tag in {'LE', 'LF', 'RO', 'OC', *script_map}:
@@ -265,7 +224,7 @@ def decompile_script(elem):
         yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
 
     print('============', elem)
-    bytecode = descumm_v4(script_data, OPCODES_v4)
+    bytecode = descumm(script_data, OPCODES_v4)
     # print_bytecode(bytecode)
 
     refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]
