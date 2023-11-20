@@ -1,7 +1,7 @@
 from collections import deque
 import io
 import itertools
-from typing import Iterator, Mapping
+from typing import Iterator, Mapping, Union
 from nutcracker.sputm.script.bytecode import BytecodeParseError
 from nutcracker.sputm.script.opcodes_v5 import SomeOp
 
@@ -30,7 +30,7 @@ def parse_verb_meta(meta):
         assert stream.read() == b''
 
 
-def canonical_bytecode(bytecode: Mapping[int, Statement | SomeOp], base_offset: int = 0) -> Iterator[str]:
+def canonical_bytecode(bytecode: Mapping[int, Union[Statement, SomeOp]], base_offset: int = 0) -> Iterator[str]:
     for off, stat in bytecode.items():
         byte_width = 4
         hexdump = ' |\n\t            '.join(
