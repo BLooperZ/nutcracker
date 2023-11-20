@@ -2,6 +2,7 @@ import io
 from typing import Iterable, Iterator, Mapping, Tuple, Type, TypeVar
 
 from nutcracker.sputm.script.opcodes import OpTable
+from nutcracker.sputm.script.opcodes_v5 import SomeOp
 from nutcracker.sputm.types import Element
 from nutcracker.utils.funcutils import flatten
 
@@ -13,7 +14,9 @@ ByteCode = Mapping[int, Statement]
 
 def get_argtype(args: Iterable[ScriptArg], argtype: Type[S_Arg]) -> Iterable[S_Arg]:
     for arg in args:
-        if isinstance(arg, argtype):
+        if isinstance(arg, SomeOp):
+            yield from get_argtype(arg.args, argtype)
+        elif isinstance(arg, argtype):
             yield arg
 
 
