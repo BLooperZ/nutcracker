@@ -1,16 +1,16 @@
 import functools
 import io
-import itertools
 import os
 import operator
 from collections import deque, OrderedDict
 from dataclasses import dataclass
 from string import printable
-from typing import Iterable, Iterator, Mapping, Optional
+from typing import Iterable, Optional
 from nutcracker.kernel.element import Element
 
 from nutcracker.sputm.preset import sputm
-from nutcracker.sputm.script.parser import CString, DWordValue, Statement
+from nutcracker.sputm.script.parser import CString, DWordValue
+from nutcracker.sputm.script.shared import BytecodeError, ScriptError, create_refs, realize_refs
 
 from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
@@ -23,7 +23,6 @@ from nutcracker.sputm.strings import (
     get_optable,
     get_script_map,
 )
-from nutcracker.utils.funcutils import grouper
 
 
 class Value:
@@ -5450,80 +5449,6 @@ def parse_verb_meta(meta):
             yield key, entry - len(meta)
 
 
-def canonical_bytecode(bytecode: Mapping[int, Statement], base_offset: int = 0) -> Iterator[str]:
-    for off, stat in bytecode.items():
-        byte_width = 4
-        hexdump = ' |\n\t            '.join(
-            bytes(x for x in part if x is not None)[::-1]
-            .hex(" ")
-            .upper()
-            .rjust(3 * byte_width - 1)
-            for part in reversed(list(grouper(stat.to_bytes()[::-1], byte_width)))
-        )
-        yield f'[{base_offset + off:08d}]: {hexdump} | {stat}'
-
-
-class BytecodeError(ValueError):
-    def __init__(self, cause: BytecodeParseError, path, asts):
-        block = '\n'.join(print_asts('\t', asts))
-        bytecode_str = '\n\t'.join(canonical_bytecode(cause.bytecode, cause.base_offset))
-        msg = (
-            '\n'
-            f'Script path: {path}\n'
-            f'Block:\n{block}\n'
-            f'Bytecode:\n\t{bytecode_str}\n'
-            f'Next:\n\t[{cause.base_offset + cause.offset:08d}]: {cause.buffer[cause.offset:cause.offset+16].hex(" ").upper()}\n'
-            f'Error summary: {cause}'
-        )
-        super().__init__(
-            msg,
-        )
-        self.cause = cause
-        self.path = path
-        self.asts = asts
-
-
-class ScriptError(ValueError):
-    def __init__(self, cause, path, asts, stat, stack):
-        block = '\n'.join(print_asts('\t', asts))
-        msg = (
-            '\n'
-            f'Script path: {path}\n'
-            f'Block:\n{block}\n'
-            f'Next statement: {stat} called with stack: {stack}\n'
-            f'Error summary: {repr(cause)}'
-        )
-        super().__init__(
-            msg,
-        )
-        self.cause = cause
-        self.path = path
-        self.asts = asts
-        self.stat = stat
-        self.stack = stack
-
-
-def realize_refs(refs, seq):
-    refs = dict(sorted(refs.items()))
-    assert refs
-    if len(refs) == 1:
-        nref = next(iter(refs))
-    else:
-        for ref, nref in itertools.pairwise(refs):
-            label = f'[{ref + 8:08d}]' if refs[ref] == 'strong' else f'_[{ref + 8:08d}]'
-            stats = deque(stat for off, stat in seq if off < nref)
-            # TODO: investigate what is the meaning of empty ref block
-            if stats:
-                yield label, stats
-            seq = deque((off, stat) for off, stat in seq if off >= nref)
-    label = f'[{nref + 8:08d}]' if refs[nref] == 'strong' else f'_[{nref + 8:08d}]'
-    yield label, deque(stat for _, stat in seq)
-
-
-def create_refs(soft, strong):
-    return {**{ref: 'soft' for ref in soft}, **{ref: 'strong' for ref in strong}}
-
-
 def decompile_script(elem, game, verbose=False, transform=True):
     script_map = get_script_map(game)
     if elem.tag == 'OBCD':
@@ -5546,8 +5471,8 @@ def decompile_script(elem, game, verbose=False, transform=True):
         'VERB': 'verb',
     }
     if elem.tag == 'VERB':
-        yield ' '.join([f'object', f'{obj_id}', '{', os.path.dirname(respath_comment)])
-        yield ' '.join([f'\tname is', f'"{obj_names[obj_id]}"'])
+        yield ' '.join(['object', f'{obj_id}', '{', os.path.dirname(respath_comment)])
+        yield ' '.join(['\tname is', f'"{obj_names[obj_id]}"'])
     else:
         scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
         gid = elem.attribs['gid']
@@ -5624,8 +5549,6 @@ def decompile_script(elem, game, verbose=False, transform=True):
             )
         if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
             softrefs.add(off)
-        # if off in refs:
-        #     curref = f'[{off + 8:08d}]'
         stack_backup = list(stack)
         try:
             res = ops.get(stat.name, defop)(stat, stack, game)

@@ -1,13 +1,14 @@
 
-from collections import defaultdict, deque
+from collections import deque
 import io
 import os
 from typing import IO, Callable, Iterable, Iterator, Tuple
 from nutcracker.earwax.resource import open_game_resource, read_config
 from nutcracker.kernel.element import Element
-from nutcracker.sputm.script.bytecode import descumm, local_script, refresh_offsets, to_bytes, verb_script
+from nutcracker.sputm.script.bytecode import BytecodeParseError, descumm_iter, local_script, verb_script
 from nutcracker.sputm.script.opcodes_v5 import BYTE, OFFSET, PARAMS, SUBMASK, WORD, RESULT, OPCODES_v5, flatop, mop, o5_actorOps, o5_getObjectOwner, o5_isActorInBox, o5_setState, o5_startMusic, o5_startSound, realize_v5
 from nutcracker.sputm.script.parser import RefOffset
+from nutcracker.sputm.script.shared import BytecodeError, ScriptError, create_refs, realize_refs
 from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, builder, fstat, o5_actorOps_wd, o5_roomOps_wd, print_asts, print_locals, ops, semantic_key, l_vars
 from nutcracker.utils.funcutils import flatten
 
@@ -212,10 +213,10 @@ def decompile_script(elem):
         'EX': 'exit',
     }
     if elem.tag == 'OC':
-        yield ' '.join([f'object', semantic_key(obj_id, sem='object'), '{', respath_comment])
+        yield ' '.join(['object', semantic_key(obj_id, sem='object'), '{', respath_comment])
         obj_name, script_data = script_data.split(b'\0', maxsplit=1)
         obj_name_str = obj_name.decode('ascii', errors='ignore')
-        yield ' '.join([f'\tname is', f'"{obj_name_str}"'])
+        yield ' '.join(['\tname is', f'"{obj_name_str}"'])
     else:
         scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
         gid = elem.attribs['gid']
@@ -224,26 +225,41 @@ def decompile_script(elem):
         yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
 
     print('============', elem)
-    bytecode = descumm(script_data, OPCODES_v4)
-    # print_bytecode(bytecode)
+    bytecode = descumm_iter(script_data, OPCODES_v4, base_offset=8)
 
-    refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]
-    curref = f'_[{0 + 8:08d}]'
-    sts = deque()
-    asts = defaultdict(deque)
+    refs = set()
+    softrefs = {0}
+    asts = deque()
     if elem.tag == 'OC':
         entries = {(off - len(obj_name) + 1): idx[0] for idx, off in pref}
     res = None
-    for off, stat in bytecode.items():
+    while True:
+        try:
+            off, stat = next(bytecode)
+        except StopIteration:
+            break
+        except BytecodeParseError as exc:
+            raise BytecodeError(
+                exc,
+                elem.attribs['path'],
+                dict(realize_refs(create_refs(softrefs, refs), asts)),
+            )
+        for roff in stat.args:
+            if isinstance(roff, RefOffset):
+                refs.add(roff.abs)
         coff = off + 8
         if elem.tag == 'OC' and coff in entries:
             if coff in entries:
                 if coff > min(entries.keys()):
                     yield from print_locals(indent)
                 l_vars.clear()
-                yield from print_asts(indent, asts)  # transform_asts(indent, asts))
-                curref = f'_[{coff:08d}]'
-                asts = defaultdict(deque)
+                yield from print_asts(
+                    indent,
+                    dict(realize_refs(create_refs(softrefs, refs), asts)),
+                )
+                softrefs = {off}
+                refs = {ref for ref in refs if ref >= off}
+                asts = deque()
             if coff > min(entries.keys()):
                 yield '\t}'
                 l_vars.clear()
@@ -251,15 +267,24 @@ def decompile_script(elem):
             yield f'\tverb {semantic_key(entries[coff], sem="verb")} {{'
             indent = 2 * '\t'
         if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
-            curref = f'_[{coff:08d}]'
-        if off in refs:
-            curref = f'[{coff:08d}]'
-        res = ops.get(stat.name, str)(stat) or stat
-        sts.append(res)
-        asts[curref].append(res)
+            softrefs.add(off)
+        try:
+            res = ops.get(stat.name, str)(stat) or stat
+        except Exception as exc:
+            raise ScriptError(
+                exc,
+                elem.attribs['path'],
+                dict(realize_refs(create_refs(softrefs, refs), asts)),
+                stat,
+                None,
+            ) from exc
+        asts.append((off, res))
     yield from print_locals(indent)
     l_vars.clear()
-    yield from print_asts(indent, asts)  # transform_asts(indent, asts))
+    yield from print_asts(
+        indent,
+        dict(realize_refs(create_refs(softrefs, refs), asts)),
+    )
     if elem.tag == 'OC' and entries:
         yield '\t}'
     yield '}'

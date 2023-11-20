@@ -11,11 +11,12 @@ from typing import Iterable, Optional, OrderedDict
 from nutcracker.kernel.element import Element
 
 from nutcracker.sputm.preset import sputm
+from nutcracker.sputm.script.shared import BytecodeError, ScriptError, create_refs, parse_verb_meta, print_asts, realize_refs
 from nutcracker.sputm.strings import RAW_ENCODING, EncodingSetting
 from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
 
-from .script.bytecode import descumm, script_map
+from .script.bytecode import BytecodeParseError, descumm_iter, script_map
 from .script.opcodes import ByteValue, RefOffset
 from .script.opcodes_v5 import OPCODES_v5, Variable, value as ovalue
 
@@ -1331,27 +1332,6 @@ def transform_asts(indent, asts, transform=True):
     return asts
 
 
-def print_asts(indent, asts):
-    for label, seq in asts.items():
-        if not label.startswith('_'):  # or True:
-            yield f'{label}:'
-        for st in seq:
-            yield f'{indent}{st}'
-
-
-def parse_verb_meta(meta):
-    with io.BytesIO(meta) as stream:
-        while True:
-            key = stream.read(1)
-            if key in {b'\0'}:  # , b'\xFF'}:
-                break
-            entry = int.from_bytes(
-                stream.read(2), byteorder='little', signed=False
-            )
-            yield key, entry - len(meta)
-        assert stream.read() == b''
-
-
 def semantic_key(name, sem=None):
     if USE_SEMANTIC_CONTEXT and sem:
         return f'{sem}-{name}'
@@ -1378,33 +1358,52 @@ def decompile_script(elem, transform=True):
         'VERB': 'verb',
     }
     if elem.tag == 'VERB':
-        yield ' '.join([f'object', semantic_key(obj_id, sem='object'), '{', os.path.dirname(respath_comment)])
-        yield ' '.join([f'\tname is', f'"{obj_names[obj_id]}"'])
+        yield ' '.join(['object', semantic_key(obj_id, sem='object'), '{', os.path.dirname(respath_comment)])
+        yield ' '.join(['\tname is', f'"{obj_names[obj_id]}"'])
     else:
         scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
         gid = elem.attribs['gid']
         assert scr_id is None or scr_id == gid
         gid_str = '' if gid is None else f' {semantic_key(gid, "script")}'
         yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
-    bytecode = descumm(script_data, OPCODES_v5)
-    # print_bytecode(bytecode)
+    bytecode = descumm_iter(script_data, OPCODES_v5, base_offset=8)
 
-    refs = [off.abs for stat in bytecode.values() for off in stat.args if isinstance(off, RefOffset)]
-    curref = f'_[{0 + 8:08d}]'
-    sts = deque()
-    asts = defaultdict(deque)
+    refs = set()
+    softrefs = {0}
+    asts = deque()
     if elem.tag == 'VERB':
         entries = {off: idx[0] for idx, off in pref}
     res = None
-    for off, stat in bytecode.items():
+    while True:
+        try:
+            off, stat = next(bytecode)
+        except StopIteration:
+            break
+        except BytecodeParseError as exc:
+            raise BytecodeError(
+                exc,
+                elem.attribs['path'],
+                dict(realize_refs(create_refs(softrefs, refs), asts)),
+            )
+        for roff in stat.args:
+            if isinstance(roff, RefOffset):
+                refs.add(roff.abs)
         if elem.tag == 'VERB' and off + 8 in entries:
             if off + 8 in entries:
                 if off + 8 > min(entries.keys()):
                     yield from print_locals(indent)
                 l_vars.clear()
-                yield from print_asts(indent, transform_asts(indent, asts, transform=transform))
-                curref = f'_[{off + 8:08d}]'
-                asts = defaultdict(deque)
+                yield from print_asts(
+                    indent,
+                    transform_asts(
+                        indent,
+                        dict(realize_refs(create_refs(softrefs, refs), asts)),
+                        transform=transform,
+                    ),
+                )
+                softrefs = {off}
+                refs = {ref for ref in refs if ref >= off}
+                asts = deque()
             if off + 8 > min(entries.keys()):
                 yield '\t}'
                 l_vars.clear()
@@ -1412,15 +1411,28 @@ def decompile_script(elem, transform=True):
             yield f'\tverb {semantic_key(entries[off + 8], sem="verb")} {{'
             indent = 2 * '\t'
         if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
-            curref = f'_[{off + 8:08d}]'
-        if off in refs:
-            curref = f'[{off + 8:08d}]'
-        res = ops.get(stat.name, str)(stat) or stat
-        sts.append(res)
-        asts[curref].append(res)
+            softrefs.add(off)
+        try:
+            res = ops.get(stat.name, str)(stat) or stat
+        except Exception as exc:
+            raise ScriptError(
+                exc,
+                elem.attribs['path'],
+                dict(realize_refs(create_refs(softrefs, refs), asts)),
+                stat,
+                None,
+            ) from exc
+        asts.append((off, res))
     yield from print_locals(indent)
     l_vars.clear()
-    yield from print_asts(indent, transform_asts(indent, asts, transform=transform))
+    yield from print_asts(
+        indent,
+        transform_asts(
+            indent,
+            dict(realize_refs(create_refs(softrefs, refs), asts)),
+            transform=transform,
+        ),
+    )
     if elem.tag == 'VERB' and entries:
         yield '\t}'
     yield '}'

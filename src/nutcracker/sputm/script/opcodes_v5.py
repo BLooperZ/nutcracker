@@ -40,7 +40,7 @@ class SomeOp:
 
     def __repr__(self) -> str:
         return ' '.join(
-            ['SUB', f'0x{self.opcode:02x}', self.name, '{', *(str(x) for x in self.args), '}']
+            ['OP', f'0x{self.opcode:02x}', self.name, '{', *(str(x) for x in self.args), '}']
         )
 
 
