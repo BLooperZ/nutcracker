@@ -82,10 +82,18 @@ if __name__ == '__main__':
                     print(awiz, awiz.attribs["path"])
 
                     im = read_awiz_resource(awiz, palette)
-                    im.save(f'AWIZ_out/{basename}/{os.path.basename(lflf.attribs["path"])}_{os.path.basename(awiz.attribs["path"])}.png')
+                    im.save(
+                        f'AWIZ_out/{basename}/{os.path.basename(lflf.attribs["path"])}_{os.path.basename(awiz.attribs["path"])}.png'
+                    )
 
                 for mult in sputm.findall('MULT', lflf):
+                    rgbs = None
+                    defa = sputm.find('DEFA', mult)
+                    if defa:
+                        rgbs = sputm.find('RGBS', defa)
                     wrap = sputm.find('WRAP', mult)
                     for awiz in wrap.children[1:]:
-                        im = read_awiz_resource(awiz, palette)
-                        im.save(f'AWIZ_out/{basename}/{os.path.basename(lflf.attribs["path"])}_{os.path.basename(mult.attribs["path"])}_{os.path.basename(awiz.attribs["path"])}.png')
+                        im = read_awiz_resource(awiz, rgbs.data if rgbs else palette)
+                        im.save(
+                            f'AWIZ_out/{basename}/{os.path.basename(lflf.attribs["path"])}_{os.path.basename(mult.attribs["path"])}_{os.path.basename(awiz.attribs["path"])}.png'
+                        )
