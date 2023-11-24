@@ -779,6 +779,24 @@ def o100_getHeap(op, stack, game):
 
 
 @regop
+def o90_videoOps(op, stack, game):
+    sub = Value(op.args[0], signed=False)
+    if sub.num == 49:
+        return f'\tload {pop_str(stack)}'
+    if sub.num == 54:
+        return f'\tflags {stack.pop()}'
+    if sub.num == 57:
+        return f'video {stack.pop()}'
+    if sub.num == 63:
+        return f'\timage {stack.pop()}'
+    if sub.num == 165:
+        return '\tstop'
+    if sub.num == 255:
+        return '\t(end)'
+    return defop(op, stack, game)
+
+
+@regop
 def o100_videoOps(op, stack, game):
     sub = Value(op.args[0], signed=False)
     if sub.num == 0:
@@ -793,6 +811,30 @@ def o100_videoOps(op, stack, game):
         return f'\tflags {stack.pop()}'
     if sub.num == 92:
         return '\t(end)'
+    return defop(op, stack, game)
+
+
+@regop
+def o90_getVideoData(op, stack, game):
+    sub = Value(op.args[0], signed=False)
+    if sub.num == 32:
+        stack.append(f'video-width {stack.pop()}')
+        return
+    if sub.num == 33:
+        stack.append(f'video-height {stack.pop()}')
+        return
+    if sub.num == 36:
+        stack.append(f'video-count {stack.pop()}')
+        return
+    if sub.num == 52:
+        stack.append(f'video-state {stack.pop()}')
+        return
+    if sub.num == 63:
+        stack.append(f'video-image {stack.pop()}')
+        return
+    if sub.num == 139:
+        stack.append(f'video-new-general-property {stack.pop()}')
+        return
     return defop(op, stack, game)
 
 
