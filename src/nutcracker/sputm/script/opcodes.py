@@ -570,7 +570,7 @@ OPCODES_he90: OpTable = realize({
     0x2B: makeop('o90_startScriptUnk', extended_b_op),
     0x2C: makeop('o90_jumpToScriptUnk', extended_b_op),
     0x2d: makeop('o90_videoOps', extended_b_op),
-    0x2e: makeop('o90_getVideoData'),
+    0x2e: makeop('o90_getVideoData', extended_b_op),
     0x2F: makeop('o90_floodFill', extended_b_op),
     0x30: makeop('o90_mod'),
     0x31: makeop('o90_shl'),
