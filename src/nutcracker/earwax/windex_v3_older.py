@@ -7,9 +7,9 @@ from nutcracker.earwax.older_sizeonly import open_game_resource
 from nutcracker.earwax.windex_v3 import OPCODES_v3, ops
 from nutcracker.earwax.windex_v4 import get_room_scripts, get_global_scripts, global_script
 from nutcracker.kernel.element import Element
-from nutcracker.sputm.script.bytecode import BytecodeParseError, descumm_iter, verb_script
+from nutcracker.sputm.script.bytecode import BytecodeParseError, descumm_iter, get_argtype, verb_script
 from nutcracker.sputm.script.parser import RefOffset
-from nutcracker.sputm.script.shared import BytecodeError, ScriptError, create_refs, realize_refs
+from nutcracker.sputm.script.shared import BytecodeError, ScriptError, realize_refs
 from nutcracker.sputm.windex_v5 import ConditionalJump, UnconditionalJump, print_asts, print_locals, l_vars, semantic_key
 from nutcracker.utils.funcutils import flatten
 
@@ -70,38 +70,47 @@ def dump_script_file(
     print('', file=outfile)  # end with new line
 
 
-def decompile_script(elem):
-    pref, script_data = script_map[elem.tag](elem.data)
-    obj_id = None
-    indent = '\t'
-    if elem.tag == 'OC':
-        pref = list(parse_verb_meta_v3(pref))
-        obj_id = elem.attribs.get('gid') or 123
+obj_names = {}
+
+
+def make_block_context(elem, gid):
     respath_comment = f'; {elem.tag} {elem.attribs["path"]}'
     titles = {
         'LS': 'script',
         'SC': 'script',
         'EN': 'enter',
         'EX': 'exit',
+        'OC': 'object',
     }
+    gid_str = '' if gid is None else f' {semantic_key(gid, titles[elem.tag])}'
+    yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
     if elem.tag == 'OC':
-        yield ' '.join(['object', semantic_key(obj_id, sem='object'), '{', respath_comment])
+        yield ' '.join(['\tname is', f'"{obj_names[gid]}"'])
+
+
+def get_elem_info(elem):
+    pref, script_data = script_map[elem.tag](elem.data)
+    gid = elem.attribs.get('gid')
+    entries = {}
+    if elem.tag == 'OC':
+        pref = list(parse_verb_meta_v3(pref))
         obj_name, script_data = script_data.split(b'\0', maxsplit=1)
-        obj_name_str = obj_name.decode('ascii', errors='ignore')
-        yield ' '.join(['\tname is', f'"{obj_name_str}"'])
-    else:
-        gid = elem.attribs.get('gid')
-        gid_str = '' if gid is None else f' {semantic_key(gid, "script")}'
-        yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
+        obj_names[gid] = obj_name.decode('ascii', errors='ignore')
+        entries = {(off - len(obj_name) + 7): idx[0] for idx, off in pref}
+    return script_data, gid, entries
+
+
+def decompile_script(elem):
+    script_data, gid, entries = get_elem_info(elem)
+    yield from make_block_context(elem, gid)
+    indent = '\t'
 
     print('============', elem)
     bytecode = descumm_iter(script_data, OPCODES_v3, base_offset=8)
 
-    refs = set()
-    softrefs = {0}
+    hrefs = set()
+    srefs = {0}
     asts = deque()
-    if elem.tag == 'OC':
-        entries = {(off - len(obj_name) + 7): idx[0] for idx, off in pref}
     res = None
     while True:
         try:
@@ -112,24 +121,21 @@ def decompile_script(elem):
             raise BytecodeError(
                 exc,
                 elem.attribs['path'],
-                dict(realize_refs(create_refs(softrefs, refs), asts)),
+                dict(realize_refs(srefs, hrefs, asts)),
             )
-        for roff in stat.args:
-            if isinstance(roff, RefOffset):
-                refs.add(roff.abs)
+        hrefs.update(roff.abs for roff in get_argtype(stat.args, RefOffset))
         coff = off + 8
         if elem.tag == 'OC' and coff in entries:
-            if coff in entries:
-                if coff > min(entries.keys()):
-                    yield from print_locals(indent)
-                l_vars.clear()
-                yield from print_asts(
-                    indent,
-                    dict(realize_refs(create_refs(softrefs, refs), asts)),
-                )
-                softrefs = {off}
-                refs = {ref for ref in refs if ref >= off}
-                asts = deque()
+            if coff > min(entries.keys()):
+                yield from print_locals(indent)
+            l_vars.clear()
+            yield from print_asts(
+                indent,
+                dict(realize_refs(srefs, hrefs, asts)),
+            )
+            srefs = {off}
+            hrefs = {ref for ref in hrefs if ref >= off}
+            asts = deque()
             if coff > min(entries.keys()):
                 yield '\t}'
                 l_vars.clear()
@@ -137,14 +143,14 @@ def decompile_script(elem):
             yield f'\tverb {semantic_key(entries[coff], sem="verb")} {{'
             indent = 2 * '\t'
         if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
-            softrefs.add(off)
+            srefs.add(off)
         try:
             res = ops.get(stat.name, str)(stat) or stat
         except Exception as exc:
             raise ScriptError(
                 exc,
                 elem.attribs['path'],
-                dict(realize_refs(create_refs(softrefs, refs), asts)),
+                dict(realize_refs(srefs, hrefs, asts)),
                 stat,
                 None,
             ) from exc
@@ -153,7 +159,7 @@ def decompile_script(elem):
     l_vars.clear()
     yield from print_asts(
         indent,
-        dict(realize_refs(create_refs(softrefs, refs), asts)),
+        dict(realize_refs(srefs, hrefs, asts)),
     )
     if elem.tag == 'OC' and entries:
         yield '\t}'

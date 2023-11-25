@@ -11,12 +11,12 @@ from typing import Iterable, Optional, OrderedDict
 from nutcracker.kernel.element import Element
 
 from nutcracker.sputm.preset import sputm
-from nutcracker.sputm.script.shared import BytecodeError, ScriptError, create_refs, parse_verb_meta, print_asts, realize_refs
+from nutcracker.sputm.script.shared import BytecodeError, ScriptError, parse_verb_meta, print_asts, realize_refs
 from nutcracker.sputm.strings import RAW_ENCODING, EncodingSetting
 from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
 
-from .script.bytecode import BytecodeParseError, descumm_iter, script_map
+from .script.bytecode import BytecodeParseError, descumm_iter, get_argtype, script_map
 from .script.opcodes import ByteValue, RefOffset
 from .script.opcodes_v5 import OPCODES_v5, Variable, value as ovalue
 
@@ -1338,41 +1338,48 @@ def semantic_key(name, sem=None):
     return str(name)
 
 
-def decompile_script(elem, transform=True):
-    if elem.tag == 'OBCD':
-        obcd = elem
-        elem = sputm.find('VERB', obcd)
-    pref, script_data = script_map[elem.tag](elem.data)
-    obj_id = None
-    indent = '\t'
-    if elem.tag == 'VERB':
-        pref = list(parse_verb_meta(pref))
-        obj_id = obcd.attribs['gid']
-        obj_names[obj_id] = msg_to_print(sputm.find('OBNA', obcd).data.split(b'\0')[0])
+def make_block_context(elem, gid):
     respath_comment = f'; {elem.tag} {elem.attribs["path"]}'
     titles = {
         'LSCR': 'script',
         'SCRP': 'script',
         'ENCD': 'enter',
         'EXCD': 'exit',
-        'VERB': 'verb',
+        'OBCD': 'object',
     }
+    gid_str = '' if gid is None else f' {semantic_key(gid, titles[elem.tag])}'
+    yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
+    if elem.tag == 'OBCD':
+        yield ' '.join(['\tname is', f'"{obj_names[gid]}"'])
+
+
+def get_elem_info(elem):
+    obcd = None
+    gid = elem.attribs['gid']
+    if elem.tag == 'OBCD':
+        obcd = elem
+        elem = sputm.find('VERB', obcd)
+    pref, script_data = script_map[elem.tag](elem.data)
+    entries = {}
     if elem.tag == 'VERB':
-        yield ' '.join(['object', semantic_key(obj_id, sem='object'), '{', os.path.dirname(respath_comment)])
-        yield ' '.join(['\tname is', f'"{obj_names[obj_id]}"'])
+        obj_names[gid] = msg_to_print(sputm.find('OBNA', obcd).data.split(b'\0')[0])
+        pref = list(parse_verb_meta(pref))
+        entries = {off: idx[0] for idx, off in pref}
     else:
         scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
-        gid = elem.attribs['gid']
         assert scr_id is None or scr_id == gid
-        gid_str = '' if gid is None else f' {semantic_key(gid, "script")}'
-        yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
+    return script_data, gid, entries
+
+
+def decompile_script(elem, transform=True):
+    script_data, gid, entries = get_elem_info(elem)
+    yield from make_block_context(elem, gid)
+    indent = '\t'
     bytecode = descumm_iter(script_data, OPCODES_v5, base_offset=8)
 
-    refs = set()
-    softrefs = {0}
+    hrefs = set()
+    srefs = {0}
     asts = deque()
-    if elem.tag == 'VERB':
-        entries = {off: idx[0] for idx, off in pref}
     res = None
     while True:
         try:
@@ -1383,27 +1390,25 @@ def decompile_script(elem, transform=True):
             raise BytecodeError(
                 exc,
                 elem.attribs['path'],
-                dict(realize_refs(create_refs(softrefs, refs), asts)),
+                dict(realize_refs(srefs, hrefs, asts)),
             )
-        for roff in stat.args:
-            if isinstance(roff, RefOffset):
-                refs.add(roff.abs)
-        if elem.tag == 'VERB' and off + 8 in entries:
-            if off + 8 in entries:
-                if off + 8 > min(entries.keys()):
-                    yield from print_locals(indent)
-                l_vars.clear()
-                yield from print_asts(
+        hrefs.update(roff.abs for roff in get_argtype(stat.args, RefOffset))
+        if elem.tag == 'OBCD' and off + 8 in entries:
+            if off + 8 > min(entries.keys()):
+                yield from print_locals(indent)
+            l_vars.clear()
+            # TODO: in FOA - room 12, object 159, verb 80 jumps to a ref on verb 12
+            yield from print_asts(
+                indent,
+                transform_asts(
                     indent,
-                    transform_asts(
-                        indent,
-                        dict(realize_refs(create_refs(softrefs, refs), asts)),
-                        transform=transform,
-                    ),
-                )
-                softrefs = {off}
-                refs = {ref for ref in refs if ref >= off}
-                asts = deque()
+                    dict(realize_refs(srefs, hrefs, asts)),
+                    transform=transform,
+                ),
+            )
+            srefs = {off}
+            hrefs = {ref for ref in hrefs if ref >= off}
+            asts = deque()
             if off + 8 > min(entries.keys()):
                 yield '\t}'
                 l_vars.clear()
@@ -1411,14 +1416,14 @@ def decompile_script(elem, transform=True):
             yield f'\tverb {semantic_key(entries[off + 8], sem="verb")} {{'
             indent = 2 * '\t'
         if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
-            softrefs.add(off)
+            srefs.add(off)
         try:
             res = ops.get(stat.name, str)(stat) or stat
         except Exception as exc:
             raise ScriptError(
                 exc,
                 elem.attribs['path'],
-                dict(realize_refs(create_refs(softrefs, refs), asts)),
+                dict(realize_refs(srefs, hrefs, asts)),
                 stat,
                 None,
             ) from exc
@@ -1429,11 +1434,11 @@ def decompile_script(elem, transform=True):
         indent,
         transform_asts(
             indent,
-            dict(realize_refs(create_refs(softrefs, refs), asts)),
+            dict(realize_refs(srefs, hrefs, asts)),
             transform=transform,
         ),
     )
-    if elem.tag == 'VERB' and entries:
+    if elem.tag == 'OBCD' and entries:
         yield '\t}'
     yield '}'
 
@@ -1441,7 +1446,7 @@ def decompile_script(elem, transform=True):
 if __name__ == '__main__':
     import argparse
 
-    from nutcracker.sputm.tree import open_game_resource, narrow_schema
+    from nutcracker.sputm.tree import open_game_resource
     from nutcracker.sputm.windex.scu import dump_script_file
 
     parser = argparse.ArgumentParser(description='read smush file')

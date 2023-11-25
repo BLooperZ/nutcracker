@@ -10,12 +10,12 @@ from nutcracker.kernel.element import Element
 
 from nutcracker.sputm.preset import sputm
 from nutcracker.sputm.script.parser import CString, DWordValue
-from nutcracker.sputm.script.shared import BytecodeError, ScriptError, create_refs, realize_refs
+from nutcracker.sputm.script.shared import BytecodeError, ScriptError, realize_refs
 
 from nutcracker.sputm.tree import narrow_schema
 from nutcracker.sputm.schema import SCHEMA
 
-from nutcracker.sputm.script.bytecode import BytecodeParseError, descumm_iter
+from nutcracker.sputm.script.bytecode import BytecodeParseError, descumm_iter, get_argtype
 from nutcracker.sputm.script.opcodes import ByteValue, RefOffset, WordValue
 from nutcracker.sputm.strings import (
     RAW_ENCODING,
@@ -1435,7 +1435,7 @@ def o71_getStringLenForWidth(op, stack, game):
 
 @regop
 def o6_beginOverride(op, stack, game):
-    return f'override'
+    return 'override'
 
 
 @regop
@@ -1492,7 +1492,7 @@ def o8_dimArray(op, stack, game):
 
 
 @regop
-def o6_dummy(op, stack, byecode, game):
+def o6_dummy(op, stack, game):
     return '$ dummy'
 
 
@@ -5449,18 +5449,7 @@ def parse_verb_meta(meta):
             yield key, entry - len(meta)
 
 
-def decompile_script(elem, game, verbose=False, transform=True):
-    script_map = get_script_map(game)
-    if elem.tag == 'OBCD':
-        obcd = elem
-        elem = sputm.find('VERB', obcd)
-    pref, script_data = script_map[elem.tag](elem.data)
-    obj_id = None
-    indent = '\t'
-    if elem.tag == 'VERB':
-        pref = list(parse_verb_meta(pref))
-        obj_id = obcd.attribs['gid']
-        obj_names[obj_id] = msg_to_print(sputm.find('OBNA', obcd).data.split(b'\0')[0])
+def make_block_context(elem, gid):
     respath_comment = f'; {elem.tag} {elem.attribs["path"]}'
     titles = {
         'LSC2': 'script',
@@ -5468,31 +5457,48 @@ def decompile_script(elem, game, verbose=False, transform=True):
         'SCRP': 'script',
         'ENCD': 'enter',
         'EXCD': 'exit',
-        'VERB': 'verb',
+        'OBCD': 'object',
     }
+    gid_str = '' if gid is None else f' {gid}'
+    yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
+    if elem.tag == 'OBCD':
+        yield ' '.join(['\tname is', f'"{obj_names[gid]}"'])
+
+
+def get_elem_info(game, elem):
+    obcd = None
+    gid = elem.attribs['gid']
+    script_map = get_script_map(game)
+    if elem.tag == 'OBCD':
+        obcd = elem
+        elem = sputm.find('VERB', obcd)
+    pref, script_data = script_map[elem.tag](elem.data)
+    entries = {}
     if elem.tag == 'VERB':
-        yield ' '.join(['object', f'{obj_id}', '{', os.path.dirname(respath_comment)])
-        yield ' '.join(['\tname is', f'"{obj_names[obj_id]}"'])
+        obj_names[gid] = msg_to_print(sputm.find('OBNA', obcd).data.split(b'\0')[0])
+        pref = list(parse_verb_meta(pref))
+        entries = {off: idx[0] for idx, off in pref}
     else:
         scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
-        gid = elem.attribs['gid']
         assert scr_id is None or scr_id == gid
-        gid_str = '' if gid is None else f' {gid}'
-        yield ' '.join([f'{titles[elem.tag]}{gid_str}', '{', respath_comment])
-    optable = get_optable(game)
+    return script_data, gid, entries
 
+
+def decompile_script(elem, game, verbose=False, transform=True):
+    script_data, gid, entries = get_elem_info(game, elem)
+    yield from make_block_context(elem, gid)
+    optable = get_optable(game)
+    indent = '\t'
     # print('====================')
     bytecode = descumm_iter(script_data, optable, base_offset=8)
     # print_bytecode(bytecode)
 
-    refs = set()
-    softrefs = {0}
+    hrefs = set()
+    srefs = {0}
     stack = deque(
         # ['**ERROR**'] * 3
     )
     asts = deque()
-    if elem.tag == 'VERB':
-        entries = {off: idx[0] for idx, off in pref}
     res = None
 
     # # clear local variables:
@@ -5511,27 +5517,24 @@ def decompile_script(elem, game, verbose=False, transform=True):
             raise BytecodeError(
                 exc,
                 elem.attribs['path'],
-                dict(realize_refs(create_refs(softrefs, refs), asts)),
+                dict(realize_refs(srefs, hrefs, asts)),
             )
-        for roff in stat.args:
-            if isinstance(roff, RefOffset):
-                refs.add(roff.abs)
-        if elem.tag == 'VERB' and off + 8 in entries:
-            if off + 8 in entries:
-                if off + 8 > min(entries.keys()):
-                    yield from print_locals(indent)
-                l_vars.clear()
-                yield from print_asts(
+        hrefs.update(roff.abs for roff in get_argtype(stat.args, RefOffset))
+        if elem.tag == 'OBCD' and off + 8 in entries:
+            if off + 8 > min(entries.keys()):
+                yield from print_locals(indent)
+            l_vars.clear()
+            yield from print_asts(
+                indent,
+                transform_asts(
                     indent,
-                    transform_asts(
-                        indent,
-                        dict(realize_refs(create_refs(softrefs, refs), asts)),
-                        transform=transform,
-                    ),
-                )
-                softrefs = {off}
-                refs = {ref for ref in refs if ref >= off}
-                asts = deque()
+                    dict(realize_refs(srefs, hrefs, asts)),
+                    transform=transform,
+                ),
+            )
+            srefs = {off}
+            hrefs = {ref for ref in hrefs if ref >= off}
+            asts = deque()
             if off + 8 > min(entries.keys()):
                 yield '\t}'
                 l_vars.clear()
@@ -5548,7 +5551,7 @@ def decompile_script(elem, game, verbose=False, transform=True):
                 ]
             )
         if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
-            softrefs.add(off)
+            srefs.add(off)
         stack_backup = list(stack)
         try:
             res = ops.get(stat.name, defop)(stat, stack, game)
@@ -5556,7 +5559,7 @@ def decompile_script(elem, game, verbose=False, transform=True):
             raise ScriptError(
                 exc,
                 elem.attribs['path'],
-                dict(realize_refs(create_refs(softrefs, refs), asts)),
+                dict(realize_refs(srefs, hrefs, asts)),
                 stat,
                 stack_backup,
             ) from exc
@@ -5575,11 +5578,11 @@ def decompile_script(elem, game, verbose=False, transform=True):
         indent,
         transform_asts(
             indent,
-            dict(realize_refs(create_refs(softrefs, refs), asts)),
+            dict(realize_refs(srefs, hrefs, asts)),
             transform=transform,
         ),
     )
-    if elem.tag == 'VERB' and entries:
+    if elem.tag == 'OBCD' and entries:
         yield '\t}'
     yield '}'
 
@@ -5588,10 +5591,8 @@ obj_names = {}
 
 if __name__ == '__main__':
     import argparse
-    import os
 
-    from nutcracker.sputm.tree import open_game_resource, narrow_schema
-    from nutcracker.sputm.schema import SCHEMA
+    from nutcracker.sputm.tree import open_game_resource
     from nutcracker.sputm.windex.scu import dump_script_file
 
     parser = argparse.ArgumentParser(description='read smush file')

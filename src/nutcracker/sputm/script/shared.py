@@ -83,24 +83,20 @@ class ScriptError(ValueError):
         self.stack = stack
 
 
-def realize_refs(refs, seq):
-    refs = dict(sorted(refs.items()))
+def realize_refs(srefs, hrefs, seq):
+    refs = {label: label in hrefs for label in sorted(srefs | hrefs)}
     assert refs
     if len(refs) == 1:
         nref = next(iter(refs))
     else:
         for ref, nref in itertools.pairwise(refs):
-            label = f'[{ref + 8:08d}]' if refs[ref] == 'strong' else f'_[{ref + 8:08d}]'
+            label = f'[{ref + 8:08d}]' if refs[ref] else f'_[{ref + 8:08d}]'
             stats = deque(stat for off, stat in seq if off < nref)
             # TODO: investigate what is the meaning of empty ref block
             if stats:
                 yield label, stats
             seq = deque((off, stat) for off, stat in seq if off >= nref)
-    label = f'[{nref + 8:08d}]' if refs[nref] == 'strong' else f'_[{nref + 8:08d}]'
+    label = f'[{nref + 8:08d}]' if refs[nref] else f'_[{nref + 8:08d}]'
     stats = deque(stat for _, stat in seq)
     if stats:
         yield label, stats
-
-
-def create_refs(soft, strong):
-    return {**{ref: 'soft' for ref in soft}, **{ref: 'strong' for ref in strong}}
