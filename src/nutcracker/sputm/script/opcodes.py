@@ -575,7 +575,7 @@ OPCODES_he90: OpTable = realize({
     0x30: makeop('o90_mod'),
     0x31: makeop('o90_shl'),
     0x32: makeop('o90_shr'),
-    # TODO: 0x33: makeop('o90_xor'),
+    0x33: makeop('o90_xor'),
     0x34: makeop('o90_findAllObjectsWithClassOf'),
     0x35: makeop('o90_getPolygonOverlap'),
     0x36: makeop('o90_cond'),

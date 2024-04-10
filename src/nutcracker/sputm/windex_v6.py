@@ -636,7 +636,11 @@ def o90_shl(op, stack, game):
 def o90_shr(op, stack, game):
     shift, num = stack.pop(), stack.pop()
     stack.append(f'{num} >> {shift}')
-
+    
+@regop
+def o90_xor(op, stack, game):
+    shift, num = stack.pop(), stack.pop()
+    stack.append(f'{num} bxor {shift}')
 
 @regop
 def o90_min(op, stack, game):
@@ -3159,17 +3163,26 @@ def o90_setSpriteGroupInfo(op, stack, game):
         if gtype.num == 1:
             dy = stack.pop()
             dx = stack.pop()
-            return f'\tsubgroup move {dx},{dy}'
-        if gtype.num == 2:
-            return f'\tsubgroup priority {stack.pop()}'
-        if gtype.num == 3:
-            return f'\tsubgroup sprite-group {stack.pop()}'
-        if gtype.num == 4:
-            return f'\tsubgroup update-type {stack.pop()}'
-        raise NotImplementedError(op, gtype)
+            return f'\tgroup move {dx},{dy}'
+        elif gtype.num == 2:
+            return f'\tgroup order {stack.pop()}'
+        elif gtype.num == 3:
+            return f'\tgroup group {stack.pop()}'
+        elif gtype.num == 4:
+            return f'\tgroup update-type {stack.pop()}'
+        elif gtype.num == 5:
+            return '\tgroup new'
+        elif gtype.num == 6:
+            return f'\tgroup animation-speed {stack.pop()}'
+        elif gtype.num == 7:
+            return f'\tgroup animation-type {stack.pop()}'
+        elif gtype.num == 8:
+            return f'\tgroup shadow {stack.pop()}'
+        else:
+            raise NotImplementedError(op, gtype)
     if cmd.num == 43:
         priority = stack.pop()
-        return f'\tpriority {priority}'
+        return f'\torder {priority}'
     if cmd.num == 44:
         dy = stack.pop()
         dx = stack.pop()
