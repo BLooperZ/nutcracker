@@ -46,7 +46,7 @@ class Value:
             if self.num < 128:
                 # ASCII Char
                 return f"'{chr(self.num)}'"
-            return f"'\\{ord(chr(self.num)):02x}'".upper()
+            return f"'\\x{ord(chr(self.num)):02X}'"
         suffix = self.suffix[type(self.orig)]
         return f'{self.num}'
 
