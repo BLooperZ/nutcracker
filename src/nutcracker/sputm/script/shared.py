@@ -1,6 +1,11 @@
 from collections import deque
 import io
-import itertools
+try:
+    # Python 3.10+
+    from itertools import pairwise
+except:
+    # Python 3.9
+    from more_itertools import pairwise
 from typing import Iterator, Mapping, Union
 from nutcracker.sputm.script.bytecode import BytecodeParseError
 from nutcracker.sputm.script.opcodes_v5 import SomeOp
@@ -89,7 +94,7 @@ def realize_refs(srefs, hrefs, seq):
     if len(refs) == 1:
         nref = next(iter(refs))
     else:
-        for ref, nref in itertools.pairwise(refs):
+        for ref, nref in pairwise(refs):
             label = f'[{ref + 8:08d}]' if refs[ref] else f'_[{ref + 8:08d}]'
             stats = deque(stat for off, stat in seq if off < nref)
             # TODO: investigate what is the meaning of empty ref block

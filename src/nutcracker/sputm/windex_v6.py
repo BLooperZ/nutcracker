@@ -43,7 +43,10 @@ class Value:
             # NOTE: in HE v71 games, they put the "/" char as a
             # WordValue.
             assert isinstance(self.orig, (ByteValue, WordValue))
-            return f"'{chr(self.num)}'"
+            if self.num < 128:
+                # ASCII Char
+                return f"'{chr(self.num)}'"
+            return f"'\\{ord(chr(self.num)):02x}'".upper()
         suffix = self.suffix[type(self.orig)]
         return f'{self.num}'
 
@@ -636,7 +639,7 @@ def o90_shl(op, stack, game):
 def o90_shr(op, stack, game):
     shift, num = stack.pop(), stack.pop()
     stack.append(f'{num} >> {shift}')
-    
+
 @regop
 def o90_xor(op, stack, game):
     shift, num = stack.pop(), stack.pop()
@@ -1073,7 +1076,7 @@ def o72_isAnyOf(op, stack, game):
 
 
 @regop
-def disabled_windowOps(op, stack, game):
+def o90_disabled_windowOps(op, stack, game):
     cmd = Value(op.args[0], signed=False)
     if cmd.num == 57:
         return f'window-x39 {stack.pop()}'
@@ -1088,6 +1091,38 @@ def disabled_windowOps(op, stack, game):
         return f'window-xF3 {title}'
     if cmd.num == 255:
         return f'window-xFF'
+    return defop(op, stack, game)
+
+@regop
+def o100_disabled_windowOps(op, stack, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 0:
+        return f'window-x00 {stack.pop()}'
+    if cmd.num == 6:
+        return f'window-x06 {stack.pop()} {stack.pop()}'
+    if cmd.num == 17:
+        return f'window-x11 {stack.pop()}'
+    if cmd.num == 39:
+        return f'window-x27 {stack.pop()}'
+    if cmd.num == 40:
+        return f'window-x28 {stack.pop()}'
+    if cmd.num == 49:
+        return f'window-x31 {stack.pop()} {stack.pop()}'
+    if cmd.num == 53:
+        return f'window-x35'
+    if cmd.num == 66:
+        return f'window-x42 {stack.pop()}'
+    if cmd.num == 67:
+        return f'window-x43 {stack.pop()}'
+    if cmd.num == 71:
+        return f'window-x47 {stack.pop()}'
+    if cmd.num == 80:
+        title = pop_str(stack)
+        return f'window-x50 {title}'
+    if cmd.num == 84:
+        return f'window-x54 {stack.pop()}'
+    if cmd.num == 92:
+        return f'window-x5C'
     return defop(op, stack, game)
 
 
@@ -2663,8 +2698,16 @@ def o100_actorOps(op, stack, game):
         return f'\tat {xpos},{ypos}'
     if cmd.num == 9:
         return f'\tbackground-on'
+    if cmd.num == 22:
+        return f'\tcondition {get_params(stack)}'
     if cmd.num == 25:
         return f'\tcostume {stack.pop()}'
+    if cmd.num == 59:
+        return f'\tpriority {stack.pop()}'
+    if cmd.num == 63:
+        return f'\tpalette {stack.pop()}'
+    if cmd.num == 70:
+        return f'\tshadow {stack.pop()}'
     if cmd.num == 74:
         y = stack.pop()
         x = stack.pop()
@@ -2704,12 +2747,20 @@ def o100_actorOps(op, stack, game):
         return f'\tnever-zclip'
     if cmd.num == 87:
         return f'\talways-zclip {stack.pop()}'
+    if cmd.num == 128:
+        bottom = stack.pop()
+        right = stack.pop()
+        top = stack.pop()
+        left = stack.pop()
+        return f'actor default-clip {left},{top} to {right},{bottom}'
     if cmd.num == 135:
         return f'\tignore-boxes'
     # if cmd.num == 119:
     #     return f'\tfollow-boxes'
     # if cmd.num == 120:
     #     return f'\tspecial-draw {stack.pop()}'
+    if cmd.num == 142:
+        return f'\ttalk-condition {stack.pop()}'
     if cmd.num == 143:
         ypos = stack.pop()
         xpos = stack.pop()
@@ -2928,6 +2979,8 @@ def o100_setSpriteInfo(op, stack, game):
         max_sprite_id = stack.pop()
         sprite_id = stack.pop()
         return f'$ sprite {sprite_id} of {max_sprite_id}'
+    if cmd.num == 2:
+        return f'\tangle {stack.pop()}'
     if cmd.num == 3:
         flags = stack.pop()
         return f'\tanimation {flags}'
@@ -2979,6 +3032,16 @@ def o100_setSpriteInfo(op, stack, game):
         return f'\tshadow {stack.pop()}'
     if cmd.num == 73:
         return f'$ state {stack.pop()}'
+    if cmd.num == 74:
+        dy = stack.pop()
+        dx = stack.pop()
+        return f'\tstep-dist {dx},{dy}'
+    if cmd.num == 75:
+        dx = stack.pop()
+        return f'\tstep-dist-x {dx}'
+    if cmd.num == 76:
+        dy = stack.pop()
+        return f'\tstep-dist-y {dx}'
     if cmd.num == 82:
         return f'\tupdate {stack.pop()}'
     if cmd.num == 83:
@@ -3090,6 +3153,15 @@ def o90_getSpriteInfo(op, stack, game):
 @regop
 def o100_getSpriteInfo(op, stack, game):
     sub = Value(op.args[0], signed=False)
+    if sub.num == 7:
+        stack.append(f'$ sprite-source-image {stack.pop()}')
+        return
+    if sub.num == 16:
+        params = get_params(stack)
+        param_str = ' '.join(str(param) for param in params)
+        sprite = stack.pop()
+        stack.append(f'$ class-of-sprite {sprite} {params}')
+        return
     if sub.num == 26:
         sprite = stack.pop()
         stack.append(f'$ sprite-num-states {sprite}')
@@ -3126,6 +3198,10 @@ def o100_getSpriteInfo(op, stack, game):
         flags = stack.pop()
         sprite = stack.pop()
         stack.append(f'$ sprite-property {sprite} flags {flags}')
+        return
+    if sub.num == 57:
+        sprite = stack.pop()
+        stack.append(f'$ sprite-palette {sprite}')
         return
     if sub.num == 59:
         sprite = stack.pop()
@@ -3209,6 +3285,28 @@ def o90_setSpriteGroupInfo(op, stack, game):
 @regop
 def o100_setSpriteGroupInfo(op, stack, game):
     cmd = Value(op.args[0], signed=False)
+    if cmd.num == 38:
+        gtype = stack.pop()
+        if gtype.num == 1:
+            dy = stack.pop()
+            dx = stack.pop()
+            return f'\tgroup move {dx},{dy}'
+        elif gtype.num == 2:
+            return f'\tgroup order {stack.pop()}'
+        elif gtype.num == 3:
+            return f'\tgroup group {stack.pop()}'
+        elif gtype.num == 4:
+            return f'\tgroup update-type {stack.pop()}'
+        elif gtype.num == 5:
+            return '\tgroup new'
+        elif gtype.num == 6:
+            return f'\tgroup animation-speed {stack.pop()}'
+        elif gtype.num == 7:
+            return f'\tgroup animation-type {stack.pop()}'
+        elif gtype.num == 8:
+            return f'\tgroup shadow {stack.pop()}'
+        else:
+            raise NotImplementedError(op, gtype)
     if cmd.num == 6:
         dy = stack.pop()
         dx = stack.pop()
@@ -3309,11 +3407,34 @@ def o100_getSpriteGroupInfo(op, stack, game):
         group = stack.pop()
         stack.append(f'$ sprite-group-var {group}')
         return
+    if sub.num == 59:
+        group = stack.pop()
+        stack.append(f'$ sprite-group-priority {group}')
+        return
+    if sub.num == 85:
+        group = stack.pop()
+        stack.append(f'$ sprite-group-x {group}')
+        return
+    if sub.num == 86:
+        group = stack.pop()
+        stack.append(f'$ sprite-group-y {group}')
+        return
     return defop(op, stack, game)
 
 
 @regop
 def o80_drawLine(op, stack, game):
+    step = stack.pop()
+    id = stack.pop()
+    y = stack.pop()
+    x = stack.pop()
+    y1 = stack.pop()
+    x1 = stack.pop()
+    sub = Value(op.args[0], signed=False)
+    return f'$ draw-line {sub} {x1},{y1} to {x},{y} {id} {step}'
+
+@regop
+def o100_drawLine(op, stack, game):
     step = stack.pop()
     id = stack.pop()
     y = stack.pop()
@@ -3621,6 +3742,11 @@ def o90_wizImageOps(op, stack, game):
         top = stack.pop()
         left = stack.pop()
         return f'\tfill-line {left},{top} to {right},{bottom} with-color {color}'
+    if cmd.num == 136:
+        color = stack.pop()
+        top = stack.pop()
+        left = stack.pop()
+        return f'\tfill-flood {left},{top} with color {color}'
     if cmd.num == 137:
         res = stack.pop()
         return f'\tresource {res}'
@@ -3651,6 +3777,8 @@ def o100_wizImageOps(op, stack, game):
         if isinstance(y1, str):
             y1 = f'({y1})'
         return f'\tat {x1},{y1}'
+    if cmd.num == 7:
+        return f'\tat-image {stack.pop()}'
     if cmd.num == 11:
         bottom = stack.pop()
         right = stack.pop()
@@ -3688,6 +3816,11 @@ def o100_wizImageOps(op, stack, game):
     if cmd.num == 57:
         palette = stack.pop()
         return f'\tpalette {palette}'
+    if cmd.num == 58:
+        poly2 = stack.pop()
+        poly = stack.pop()
+        compression = stack.pop()
+        return f'\tpolygon-to-polygon from {poly} to {poly2} compression {compression}'
     if cmd.num == 64:
         fname = pop_str(stack)
         mode = stack.pop()
@@ -3706,6 +3839,25 @@ def o100_wizImageOps(op, stack, game):
         return f'\twidth {width}'
     if cmd.num == 92:
         return f'\t(end-wiz)'
+    if cmd.num == 128:
+        bgcolor = stack.pop()
+        fgcolor = stack.pop()
+        size = stack.pop()
+        style = stack.pop()
+        return f'\tcreate-font {style} size {size} colors {fgcolor} {bgcolor}'
+    if cmd.num == 129:
+        return f'\t(end-font)'
+    if cmd.num == 130:
+        ypos = stack.pop()
+        xpos = stack.pop()
+        return f'\trender-font at {xpos},{ypos}'
+    if cmd.num == 131:
+        return f'\tstart-font'
+    if cmd.num == 134:
+        color = stack.pop()
+        top = stack.pop()
+        left = stack.pop()
+        return f'\tfill-flood {left},{top} with color {color}'
     if cmd.num == 135:
         res = stack.pop()
         return f'\tresource {res}'
@@ -3802,6 +3954,16 @@ def o100_paletteOps(op, stack, game):
     if cmd.num == 0:
         palette = stack.pop()
         return f'$ palette {palette}'
+    if cmd.num == 20:
+        b = stack.pop()
+        g = stack.pop()
+        r = stack.pop()
+        unk = stack.pop()
+        color = stack.pop()
+        return f'\tcolor {color} {unk} value {r},{g},{b}'
+    if cmd.num == 25:
+        res = stack.pop()
+        return f'\tfrom-costume {res}'
     if cmd.num == 81:
         color = stack.pop()
         end = stack.pop()
@@ -4253,6 +4415,10 @@ def o100_resourceRoutines(op, stack, game):
         return f'\tlock'
     if cmd.num == 133:
         return f'\tnuke'
+    if cmd.num == 134:
+        return f'\toff-heap'
+    if cmd.num == 135:
+        return f'\ton-heap'
     if cmd.num == 136:
         return f'\tqueue'
     if cmd.num == 137:
@@ -4507,10 +4673,19 @@ def o72_writeFile(op, stack, game):
 @regop
 def o100_readFile(op, stack, game):
     sub = Value(op.args[0], signed=False)
+    types = {
+        42: 'int',
+        43: 'dword',
+        45: 'byte'
+    }
     if sub.num == 5:
         size = stack.pop()
         slot = stack.pop()
         stack.append(f'$ read-file {Value(op.args[1])} {slot} size {size}')
+        return
+    if sub.num in types:
+        slot = stack.pop()
+        stack.append(f'$ read-file {types[sub.num]} {slot}')
         return
     return defop(op, stack, game)
 
@@ -4520,8 +4695,15 @@ def o100_writeFile(op, stack, game):
     res = stack.pop()
     slot = stack.pop()
     sub = Value(op.args[0], signed=False)
+    types = {
+        42: 'int',
+        43: 'dword',
+        45: 'byte'
+    }
     if sub.num == 5:
         return f'$ write-file {Value(op.args[1])} {slot} {res}'
+    if sub.num in types:
+        return f'$ write-file {types[sub.num]} {slot} {res}'
     return defop(op, stack, game)
 
 
@@ -5014,7 +5196,8 @@ def o6_getObjectY(op, stack, game):
 @regop
 def o90_sortArray(op, stack, game):
     cmd = Value(op.args[0], signed=False)
-    if cmd.num == 129:
+    # 134 is the same as 129 for HE100
+    if cmd.num in (129, 134):
         arr = get_var(op.args[1])
         order = stack.pop()
         dim1end = stack.pop()
@@ -5066,8 +5249,43 @@ def o90_getWizData(op, stack, game):
         res = stack.pop()
         stack.append(f'$ wiz-image-pixel-color {res} {state} at {x},{y}')
         return
+    if cmd.num == 139:
+        flags = stack.pop()
+        sprite = stack.pop()
+        stack.append(f'$ wiz-image-general-property {sprite} {flags}')
+        return
+    if cmd.num == 141:
+        property = stack.pop()
+        filename = pop_str(stack)
+        imageNum = stack.pop()
+        if property.num == 2:
+            stack.append(f'$ wiz-font-width {imageNum} {filename}')
+            return
+        if property.num == 3:
+            stack.append(f'$ wiz-font-height {imageNum} {filename}')
+            return
     return defop(op, stack, game)
 
+@regop
+def o90_fontEnum(op, stack, game):
+    cmd = Value(op.args[0], signed=False)
+    if cmd.num == 0 if game.he_version >= 100 else cmd.num == 57:
+        # Init
+        stack.append(f'$ font-enum-init')
+        return
+    if cmd.num == 60 if game.he_version >= 100 else cmd.num == 42:
+        # Property
+        subCmd = stack.pop()
+        unk = stack.pop()
+        if subCmd.num == 1:
+            # FONT_ENUM_GET
+            stack.append(f'$ font-enum-get {unk}')
+            return
+        if subCmd.num == 2:
+            # FONT_ENUM_FIND
+            stack.append(f'$ font-enum-find {unk}')
+            return
+    return defop(op, stack, game)
 
 @regop
 def o100_getWizData(op, stack, game):
@@ -5110,6 +5328,21 @@ def o100_getWizData(op, stack, game):
         res = stack.pop()
         stack.append(f'$ wiz-image-pixel-color {res} {state} at {x},{y}')
         return
+    if cmd.num == 54:
+        flags = stack.pop()
+        sprite = stack.pop()
+        stack.append(f'$ wiz-image-general-property {sprite} {flags}')
+        return
+    if cmd.num == 131:
+        property = stack.pop()
+        filename = pop_str(stack)
+        imageNum = stack.pop()
+        if property.num == 2:
+            stack.append(f'$ wiz-font-width {imageNum} {filename}')
+            return
+        if property.num == 3:
+            stack.append(f'$ wiz-font-height {imageNum} {filename}')
+            return
     return defop(op, stack, game)
 
 
