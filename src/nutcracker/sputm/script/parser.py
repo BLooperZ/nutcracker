@@ -1,5 +1,6 @@
 from collections.abc import Callable, Iterable, Iterator
 from typing import IO, Protocol
+import itertools
 
 
 def read_message(
@@ -95,14 +96,35 @@ class Statement:
     def __init__(
         self,
         name: str,
-        op: Callable[[IO[bytes]], Iterable[ScriptArg]],
         opcode: int,
-        stream: IO[bytes],
+        offset: int,
+        args: Iterable[ScriptArg],
     ) -> None:
         self.name = name
         self.opcode = opcode
-        self.offset = stream.tell() - 1
-        self.args = tuple(op(stream))
+        self.offset = offset
+        self.args = tuple(args)
+
+
+    @classmethod
+    def parse(
+        cls,
+        name: str,
+        ops: Iterable[Callable[[IO[bytes]], Iterable[ScriptArg]]],
+        opcode: int,
+        stream: IO[bytes],
+    ) -> None:
+        return cls(
+            name,
+            opcode,
+            stream.tell() -1,
+            tuple(
+                itertools.chain.from_iterable(
+                    op(stream)
+                    for op in ops
+                ),
+            ),
+        )
 
     def __repr__(self) -> str:
         return ' '.join(

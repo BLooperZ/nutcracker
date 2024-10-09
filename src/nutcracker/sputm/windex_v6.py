@@ -7,6 +7,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from string import printable
 
+from nutcracker.sputm.script.opcodes import SubOpsV6, fstack
+
 from nutcracker.kernel2.element import Element
 from nutcracker.sputm.preset import sputm
 from nutcracker.sputm.schema import SCHEMA
@@ -340,6 +342,34 @@ def regop(op):
 def defop(op, stack, game):
     raise NotImplementedError(f'{op} <{stack}>')
     return f'{op} <{stack}>'
+
+
+def POP(op, stack):
+    return stack.pop()
+
+def NPOP(num):
+    return num * [POP]
+
+def POP_STR(op, stack):
+    return pop_str(stack)
+
+def MSG_OP(num):
+    def inner(op, stack):
+        return msg_val(op.args[num])
+    return inner
+
+def SCRIPT_VAR(num):
+    def inner(op, stack):
+        return get_var(op.args[num])
+    return inner
+
+def REF_ARG(num):
+    def inner(op, stack):
+        return adr(op.args[num])
+    return inner
+
+def POP_PARAMS(op, stack):
+    return get_params(stack)
 
 
 @regop
@@ -865,26 +895,21 @@ def o100_getVideoData(op, stack, game):
     return defop(op, stack, game)
 
 
+def BUILD(mapping):
+    def inner(op, stack):
+        assert len(op.args), op.args
+        subop = op.args[0]
+        return mapping[subop.name](subop, stack)
+    return inner
+
+
 @regop
 def o6_arrayOps(op, stack, game):
-    sub = Value(op.args[0], signed=False)
-    arr = get_var(op.args[1])
-    if sub.num == 205:
-        base = stack.pop()
-        base_str = '' if base.num == 0 else f'$${base}'
-        return f'{arr}[{base_str}] = {msg_val(op.args[2])}'
-    if sub.num == 208:
-        base = stack.pop()
-        params = get_params(stack)
-        param_str = f'{", ".join(str(param) for param in params)}'
-        return f'{arr}[{base}] = {param_str}'
-    if sub.num == 212:
-        col = stack.pop()
-        params = get_params(stack)
-        param_str = f'{", ".join(str(param) for param in params)}'
-        base = stack.pop()
-        return f'{arr}[{base}][{col}] = {param_str}'
-    return defop(op, stack, game)
+    return BUILD({
+        'SO_ASSIGN_STRING': fstack('{0}[{1}] = {2}', SCRIPT_VAR(0), POP, MSG_OP(1)),
+        'SO_ASSIGN_INT_LIST': fstack('{0}[{1}] = {2}', SCRIPT_VAR(0), POP, POP_PARAMS),
+        'SO_ASSIGN_2DIM_LIST': fstack('{0}[{3}][{1}] = {2}', SCRIPT_VAR(0), POP, POP_PARAMS, POP),
+    })(op, stack)
 
 
 @regop
@@ -2017,61 +2042,23 @@ def o6_isRoomScriptRunning(op, stack, game):
 
 @regop
 def o6_roomOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 172:
-        x2 = stack.pop()
-        x1 = stack.pop()
-        return f'room-scroll is {x1} {x2}'
-    if cmd.num == 174:
-        h = stack.pop()
-        b = stack.pop()
-        return f'set-screen {b} to {h}'
-    if cmd.num == 175:
-        slot = stack.pop()
-        blue = stack.pop()
-        green = stack.pop()
-        red = stack.pop()
-        return f'palette {red} {green} {blue} in-slot {slot}'
-    if cmd.num == 176:
-        return 'shake on'
-    if cmd.num == 177:
-        return 'shake off'
-    if cmd.num == 179:
-        to_slot = stack.pop()
-        from_slot = stack.pop()
-        value = stack.pop()
-        return f'palette intensity {value} in-slot {from_slot} to {to_slot}'
-    if cmd.num == 180:
-        slot = stack.pop()
-        flags = stack.pop()
-        return f'saveload-game {flags} {slot}'
-    if cmd.num == 181:
-        return f'fades {stack.pop()}'
-    if cmd.num == 182:
-        to_slot = stack.pop()
-        from_slot = stack.pop()
-        blue = stack.pop()
-        green = stack.pop()
-        red = stack.pop()
-        return (
-            f'palette intensity {red},{green},{blue} in-slot {from_slot} to {to_slot}'
-        )
-    if cmd.num == 186:
-        steps = stack.pop()
-        to_slot = stack.pop()
-        from_slot = stack.pop()
-        number = stack.pop()
-        return (
-            f'palette transform {number} in-slot {from_slot} to {to_slot} steps {steps}'
-        )
-    if cmd.num == 187:
-        speed = stack.pop()
-        slot = stack.pop()
-        return f'palette cycle-speed {slot} is {speed}'
-    if cmd.num == 213:
-        # windex show empty string here
-        return f'$ room-color is {stack.pop()}'
-    return defop(op, stack, game)
+    return BUILD({
+        'SO_ROOM_SCROLL': fstack('room-scroll is {1} {0}', *NPOP(2)),
+        'SO_ROOM_SCREEN': fstack('set-screen {1} to {0}', *NPOP(2)),
+        'SO_ROOM_PALETTE': fstack('palette {3} {2} {1} in-slot {0}', *NPOP(4)),
+        'SO_ROOM_SHAKE_ON': fstack('shake on'),
+        'SO_ROOM_SHAKE_OFF': fstack('shake off'),
+        'SO_ROOM_INTENSITY': fstack('palette intensity {2} in-slot {1} to {0}', *NPOP(3)),
+        'SO_ROOM_SAVEGAME': fstack('saveload-game {1} {0}', *NPOP(2)),
+        'SO_ROOM_FADE': fstack('fades {0}', POP),
+        'SO_RGB_ROOM_INTENSITY': fstack('palette intensity {4},{3},{2} in-slot {1} to {0}', *NPOP(5)),
+        'SO_ROOM_TRANSFORM': fstack('palette transform {3} in-slot {2} to {1} steps {0}', *NPOP(4)),
+        'SO_CYCLE_SPEED': fstack('palette cycle-speed {1} is {0}', *NPOP(2)),
+        'SO_ROOM_NEW_PALETTE': (
+            # windex show empty string here
+            fstack('$ room-color is {0}', POP)
+        ),
+    })(op, stack)
 
 
 @regop
@@ -2219,52 +2206,26 @@ def o100_roomOps(op, stack, game):
 
 @regop
 def o6_verbOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 196:
-        verb = stack.pop()
-        return f'verb {verb}'
-    if cmd.num == 124:
-        im = stack.pop()
-        return f'\timage {im}'
-    if cmd.num == 125:
-        return f'\tname {msg_val(op.args[1])}'
-    if cmd.num == 126:
-        color = stack.pop()
-        return f'\tcolor {color}'
-    if cmd.num == 127:
-        color = stack.pop()
-        return f'\thicolor {color}'
-    if cmd.num == 128:
-        ypos = stack.pop()
-        xpos = stack.pop()
-        return f'\tat {xpos},{ypos}'
-    if cmd.num == 129:
-        return '\ton'
-    if cmd.num == 130:
-        return '\toff'
-    if cmd.num == 131:
-        return '\tdelete'
-    if cmd.num == 132:
-        return '\tnew'
-    if cmd.num == 133:
-        color = stack.pop()
-        return f'\tdimcolor {color}'
-    if cmd.num == 134:
-        return '\tdim'
-    if cmd.num == 135:
-        return f'\tkey {stack.pop()}'
-    if cmd.num == 136:
-        return '\tcenter'
-    if cmd.num == 139:
-        room = stack.pop()
-        im = stack.pop()
-        return f'\timage {im} in-room {room}'
-    if cmd.num == 140:
-        color = stack.pop()
-        return f'\tbakcolor {color}'
-    if cmd.num == 255:
-        return '\t(end-verb)'
-    return defop(op, stack, game)
+    return BUILD({
+        'SO_VERB_INIT': fstack('verb {0}', POP),
+        # 'SO_VERB_IMAGE': fstack('\timage {0}', POP),
+        'SO_VERB_NAME': fstack('\tname {0}', MSG_OP(0)),
+        'SO_VERB_COLOR': fstack('\tcolor {0}', POP),
+        'SO_VERB_HICOLOR': fstack('\thicolor {0}', POP),
+        'SO_VERB_AT': fstack('\tat {1},{0}', *NPOP(2)),
+        'SO_VERB_ON': fstack('\ton'),
+        'SO_VERB_OFF': fstack('\toff'),
+        'SO_VERB_DELETE': fstack('\tdelete'),
+        'SO_VERB_NEW': fstack('\tnew'),
+        'SO_VERB_DIMCOLOR': fstack('\tdimcolor {0}', POP),
+        'SO_VERB_DIM': fstack('\tdim'),
+        'SO_VERB_KEY': fstack('\tkey {0}', POP),
+        'SO_VERB_CENTER': fstack('\tcenter'),
+        # TODO: 'SO_VERB_NAME_STR'
+        'SO_VERB_IMAGE_IN_ROOM': fstack('\timage {1} in-room {0}', *NPOP(2)),
+        'SO_VERB_BAKCOLOR': fstack('\tbakcolor {0}', POP),
+        'SO_END': fstack('\t(end-verb)'),
+    })(op, stack)
 
 
 @regop
@@ -2385,46 +2346,32 @@ def o72_printWizImage(op, stack, game):
 
 @regop
 def o6_cursorCommand(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 0x90:
-        return 'cursor on'
-    elif cmd.num == 0x91:
-        return 'cursor off'
-    elif cmd.num == 0x92:
-        return 'userput on'
-    elif cmd.num == 0x93:
-        return 'userput off'
-    elif cmd.num == 0x94:
-        return 'cursor soft-on'
-    elif cmd.num == 0x95:
-        return 'cursor soft-off'
-    elif cmd.num == 0x96:
-        return 'userput soft-on'
-    elif cmd.num == 0x97:
-        return 'userput soft-off'
-    elif cmd.num == 0x99:
-        if game.he_version >= 70 or game.version >= 7:
+    return BUILD({
+        'SO_CURSOR_ON': fstack('cursor on'),
+        'SO_CURSOR_OFF': fstack('cursor off'),
+        'SO_USERPUT_ON': fstack('userput on'),
+        'SO_USERPUT_OFF': fstack('userput off'),
+        'SO_CURSOR_SOFT_ON': fstack('cursor soft-on'),
+        'SO_CURSOR_SOFT_OFF': fstack('cursor soft-off'),
+        'SO_USERPUT_SOFT_ON': fstack('userput soft-on'),
+        'SO_USERPUT_SOFT_OFF': fstack('userput soft-off'),
+        'SO_CURSOR_IMAGE': (
             # TODO: Figure out object?
-            return f'cursor {stack.pop()}'
-        # TODO: another pop for non HE or HE < 70 games
-        image = stack.pop()
-        return f'cursor {stack.pop()} image {image}'
-    elif cmd.num == 0x9A:
-        ypos = stack.pop()
-        xpos = stack.pop()
-        return f'cursor hotspot {xpos} {ypos}'
-    elif cmd.num == 0x9C:
-        return f'charset {stack.pop()}'
-    elif cmd.num == 0x9D:
-        params = get_params(stack)
-        param_str = ', '.join(str(param) for param in params)
-        return f'charset color {param_str}'
-    elif cmd.num == 0xD6:
-        # > cursor transparent color
-        # This command sets transparent colors in the cursor.
-        # It can be called multiple times for multiple transparent colors.
-        return f'cursor transparent {stack.pop()}'
-    return defop(op, stack, game)
+            fstack('cursor {0}', POP)
+            if game.he_version >= 70 or game.version >= 7
+            # TODO: another pop for non HE or HE < 70 games
+            else fstack('cursor {1} image {0}', *NPOP(2))
+        ),
+        'SO_CURSOR_HOTSPOT': fstack('cursor hotspot {1} {0}', *NPOP(2)),
+        'SO_CHARSET_SET': fstack('charset {0}', POP),
+        'SO_CHARSET_COLOR': fstack('charset color {0}', POP_PARAMS),
+        'SO_CURSOR_TRANSPARENT': (
+            # > cursor transparent color
+            # This command sets transparent colors in the cursor.
+            # It can be called multiple times for multiple transparent colors.
+            fstack('cursor transparent {0}', POP)
+        ),
+    })(op, stack)
 
 
 @regop
@@ -2543,89 +2490,45 @@ def o100_cursorCommand(op, stack, game):
 
 @regop
 def o6_actorOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 76:
-        return f'\tcostume {stack.pop()}'
-    if cmd.num == 77:
-        y = stack.pop()
-        x = stack.pop()
-        return f'\tstep-dist {x},{y}'
-    if cmd.num == 78:
-        return f'\tsound {get_params(stack)}'
-    if cmd.num == 79:
-        return f'\twalk-animation {stack.pop()}'
-    if cmd.num == 80:
-        stop = stack.pop()
-        start = stack.pop()
-        return f'\ttalk-animation {start} {stop}'
-    if cmd.num == 81:
-        return f'\tstand-animation {stack.pop()}'
-    # TODO: 82 - animation - 3 pops
-    if cmd.num == 83:
-        return '\tdefault'
-    if cmd.num == 84:
-        return f'\televation {stack.pop()}'
-    if cmd.num == 85:
-        return '\tanimation default'
-    if cmd.num == 86:
-        new_color = stack.pop()
-        old_color = stack.pop()
-        return f'\tcolor {old_color} is {new_color}'
-    if cmd.num == 87:
-        color = stack.pop()
-        return f'\ttalk-color {color}'
-    if cmd.num == 88:
-        return f'\tname {msg_val(op.args[1])}'
-    if cmd.num == 89:
-        return f'\tinit-animation {stack.pop()}'
-    if cmd.num == 91:
-        return f'\twidth {stack.pop()}'
-    if cmd.num == 92:
-        return f'\tscale {stack.pop()}'
-    if cmd.num == 93:
-        return '\tnever-zclip'
-    if cmd.num in {94, 225}:
-        return f'\talways-zclip {stack.pop()}'
-    if cmd.num == 95:
-        return '\tignore-boxes'
-    if cmd.num == 96:
-        return '\tfollow-boxes'
-    if cmd.num == 97:
-        return f'\tanimation-speed {stack.pop()}'
-    if cmd.num == 98:
-        return f'\tspecial-draw {stack.pop()}'
-    if cmd.num == 99:
-        ypos = stack.pop()
-        xpos = stack.pop()
-        return f'\ttext-offset {xpos},{ypos}'
-    if cmd.num == 197:
-        return f'actor {stack.pop()}'
-    if cmd.num == 198:
-        value = stack.pop()
-        var = stack.pop()
-        return f'\tanimation-var {var} {value}'
-    if cmd.num == 215:
-        return '\tignore-turns on'
-    if cmd.num == 216:
-        return '\tignore-turns off'
-    if cmd.num == 217:
-        return '\tnew'
-    if cmd.num == 227:
-        return f'\tto-zplane {stack.pop()}'
-    if cmd.num == 228:
-        return f'\tactor-walk-script {stack.pop()}'
-    # TODO: 229 - actor-stop - no pops
-    if cmd.num == 230:
-        return f'\tdirection {stack.pop()}'
-    if cmd.num == 231:
-        return f'\tturn-to {stack.pop()}'
-    if cmd.num == 233:
-        return '\tstop-walk'
-    if cmd.num == 234:
-        return '\tresume-walk'
-    if cmd.num == 235:
-        return f'\ttalk-script {stack.pop()}'
-    return defop(op, stack, game)
+    return BUILD({
+        'SO_COSTUME': fstack('\tcostume {0}', POP),
+        'SO_STEP_DIST': fstack('\tstep-dist {1},{0}', *NPOP(2)),
+        # 'SO_SOUND': fstack('\tsound {0}', POP_PARAMS),
+        'SO_WALK_ANIMATION': fstack('\twalk-animation {0}', POP),
+        'SO_TALK_ANIMATION': fstack('\ttalk-animation {1} {0}', *NPOP(2)),
+        'SO_STAND_ANIMATION': fstack('\tstand-animation {0}', POP),
+        # # 'SO_ANIMATION': fstack('\tanimation {2} {1} {0}', *NPOP(3)),
+        'SO_DEFAULT': fstack('\tdefault'),
+        'SO_ELEVATION': fstack('\televation {0}', POP),
+        # 'SO_ANIMATION_DEFAULT': fstack('\tanimation default'),
+        'SO_PALETTE': fstack('\tcolor {1} is {0}', *NPOP(2)),
+        'SO_TALK_COLOR': fstack('\ttalk-color {0}', POP),
+
+        'SO_ACTOR_NAME': fstack('\tname {0}', MSG_OP(0)),
+        'SO_INIT_ANIMATION': fstack('\tinit-animation {0}', POP),
+        'SO_ACTOR_WIDTH': fstack('\twidth {0}', POP),
+        'SO_SCALE': fstack('\tscale {0}', POP),
+        'SO_NEVER_ZCLIP': fstack('\tnever-zclip'),
+        'SO_ALWAYS_ZCLIP': fstack('\talways-zclip {0}', POP),
+        'SO_IGNORE_BOXES': fstack('\tignore-boxes'),
+        'SO_FOLLOW_BOXES': fstack('\tfollow-boxes'),
+        # 'SO_SHADOW': fstack('\tshadow {0}', POP),
+        # # 'SO_SPECIAL_DRAW': fstack('\tspecial-draw {0}', POP),
+        'SO_TEXT_OFFSET': fstack('\ttext-offset {1},{0}', *NPOP(2)),
+        'SO_ACTOR_INIT': fstack('actor {0}', POP),
+        # 'SO_ACTOR_VARIABLE': fstack('\tvariable {1} is {0}', *NPOP(2)),
+        # 'SO_IGNORE_TURNS_ON': fstack('\tignore-turns on'),
+        # 'SO_IGNORE_TURNS_OFF': fstack('\tignore-turns off'),
+        # 'SO_NEW': fstack('\tnew'),
+        'SO_ANIMATION_SPEED': fstack('\tanimation-speed {0}', POP),
+        # 'SO_ACTOR_DEFAULT_CLIPPED': fstack('actor clipped {3},{2} to {1},{0}', *NPOP(4)),
+        # 'SO_CONDITION': fstack('\tcondition {0}', POP_PARAMS),
+        # 'SO_TALK_CONDITION': fstack('\ttalk-condition {0}', POP),
+        # 'SO_TALKIE': fstack('\ttalkie {1} {0}', POP_STR, POP),
+        # 'SO_BACKGROUND_ON': fstack('\tbak on'),
+        # 'SO_BACKGROUND_OFF': fstack('\tbak off'),
+        # 'SO_CHARSET_SET': fstack('\tcharset {0}', POP),
+    })(op, stack)
 
 
 @regop
@@ -4037,16 +3940,12 @@ def o6_wait(op, stack, game):
 
 @regop
 def o8_wait(op, stack, game):
-    sub = Value(op.args[0], signed=False)
-    if sub.num == 30:
-        return f'wait-for-actor {stack.pop()} [ref {adr(op.args[1])}]'
-    if sub.num == 31:
-        return 'wait-for-message'
-    if sub.num == 32:
-        return 'wait-for-camera'
-    if sub.num == 34:
-        return f'wait-for-animation {stack.pop()} [ref {adr(op.args[1])}]'
-    return defop(op, stack, game)
+    return BUILD({
+        'SO_WAIT_FOR_ACTOR': fstack('wait-for-actor {0} [ref {1}]', POP, REF_ARG(0)),
+        'SO_WAIT_FOR_MESSAGE': fstack('wait-for-message'),
+        'SO_WAIT_FOR_CAMERA': fstack('wait-for-camera'),
+        'SO_WAIT_FOR_ANIMATION': fstack('wait-for-animation {0} [ref {1}]', POP, REF_ARG(0)),
+    })(op, stack)
 
 
 @regop
@@ -4179,18 +4078,14 @@ def o100_systemOps(op, stack, game):
 
 @regop
 def o6_saveRestoreVerbs(op, stack, game):
-    setval = stack.pop()
-    end = stack.pop()
-    start = stack.pop()
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 141:
-        return f'verbs-save {start} to {end} set {setval}'
-        # return f'save-verbs {start} to {end} set {setval}'
-    if cmd.num == 142:
-        return f'verbs-restore {start} to {end} set {setval}'
-        # return f'restore-verbs {start} to {end} set {setval}'
-    # TODO: 143: verbs-delete {start} to {end} set {setval}
-    return defop(op, stack, game)
+    return BUILD({
+        # 'SO_SAVE_VERBS': fstack('save-verbs {2} to {1} set {0}', *NPOP(3)),
+        'SO_SAVE_VERBS': fstack('verbs-save {2} to {1} set {0}', *NPOP(3)),
+        # 'SO_RESTORE_VERBS': fstack('restore-verbs {2} to {1} set {0}', *NPOP(3)),
+        'SO_RESTORE_VERBS': fstack('verbs-restore {2} to {1} set {0}', *NPOP(3)),
+        # 'SO_DELETE_VERBS': fstack('delete-verbs {2} to {1} set {0}', *NPOP(3)),
+        # 'SO_DELETE_VERBS': fstack('verbs-delete {2} to {1} set {0}', *NPOP(3)),
+    })(op, stack)
 
 
 @regop
@@ -4251,49 +4146,30 @@ def o100_setSystemMessage(op, stack, game):
 
 @regop
 def o6_resourceRoutines(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 100:
-        return f'load-script {stack.pop()}'
-    if cmd.num == 101:
-        return f'load-sound {stack.pop()}'
-    if cmd.num == 102:
-        return f'load-costume {stack.pop()}'
-    if cmd.num == 103:
-        return f'load-room {stack.pop()}'
-    if cmd.num == 104:
-        return f'nuke-script {stack.pop()}'
-    if cmd.num == 105:
-        return f'nuke-sound {stack.pop()}'
-    if cmd.num == 106:
-        return f'nuke-costume {stack.pop()}'
-    if cmd.num == 107:
-        return f'nuke-room {stack.pop()}'
-    if cmd.num == 108:
-        return f'lock-script {stack.pop()}'
-    if cmd.num == 109:
-        return f'lock-sound {stack.pop()}'
-    if cmd.num == 110:
-        return f'lock-costume {stack.pop()}'
-    if cmd.num == 111:
-        return f'lock-room {stack.pop()}'
-    if cmd.num == 112:
-        return f'unlock-script {stack.pop()}'
-    if cmd.num == 113:
-        return f'unlock-sound {stack.pop()}'
-    if cmd.num == 114:
-        return f'unlock-costume {stack.pop()}'
-    if cmd.num == 115:
-        return f'unlock-room {stack.pop()}'
-    if cmd.num == 117:
-        return f'load-charset {stack.pop()}'
-    if cmd.num == 119:
-        if game.version < 7:
-            room = stack.pop()
-            obj = stack.pop()
-            return f'load-object {obj} in-room {room}'
-        obj = stack.pop()
-        return f'load-object {obj}'
-    return defop(op, stack, game)
+    return BUILD({
+        'SO_LOAD_SCRIPT': fstack('load-script {0}', POP),
+        'SO_LOAD_SOUND': fstack('load-sound {0}', POP),
+        'SO_LOAD_COSTUME': fstack('load-costume {0}', POP),
+        'SO_LOAD_ROOM': fstack('load-room {0}', POP),
+        'SO_NUKE_SCRIPT': fstack('nuke-script {0}', POP),
+        'SO_NUKE_SOUND': fstack('nuke-sound {0}', POP),
+        'SO_NUKE_COSTUME': fstack('nuke-costume {0}', POP),
+        'SO_NUKE_ROOM': fstack('nuke-room {0}', POP),
+        'SO_LOCK_SCRIPT': fstack('lock-script {0}', POP),
+        'SO_LOCK_SOUND': fstack('lock-sound {0}', POP),
+        'SO_LOCK_COSTUME': fstack('lock-costume {0}', POP),
+        'SO_LOCK_ROOM': fstack('lock-room {0}', POP),
+        'SO_UNLOCK_SCRIPT': fstack('unlock-script {0}', POP),
+        'SO_UNLOCK_SOUND': fstack('unlock-sound {0}', POP),
+        'SO_UNLOCK_COSTUME': fstack('unlock-costume {0}', POP),
+        'SO_UNLOCK_ROOM': fstack('unlock-room {0}', POP),
+        'SO_LOAD_CHARSET': fstack('load-charset {0}', POP),
+        'SO_LOAD_OBJECT': (
+            fstack('load-object {1} in-room {0}', *NPOP(2))
+            if game.version < 7
+            else fstack('load-object {0}', POP)
+        ),
+    })(op, stack)
 
 
 @regop
