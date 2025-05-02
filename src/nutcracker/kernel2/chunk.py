@@ -169,7 +169,7 @@ def read_chunk_header(
 
 class UnexpectedBufferSizeError(ValueError):
     def __init__(self, expected: int, given: int, buffer: ArrayBuffer) -> None:
-        super().__init__(f'chunk data size mismatch: {expected} != {given}')
+        super().__init__(f'chunk data size mismatch: {expected} != {given}, {bytes(buffer[:10])}')
         self.expected = expected
         self.given = given
         self.buffer = buffer

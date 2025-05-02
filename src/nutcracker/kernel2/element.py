@@ -101,7 +101,7 @@ class MissingSchemaKeyError(Exception):
 
 class MissingSchemaEntryError(Exception):
     def __init__(self, tag: str, child_tag: str) -> None:
-        super().__init__(f'Missing entry for {tag} in {child_tag} schema')
+        super().__init__(f'Missing entry for {child_tag} in {tag} schema')
         self.tag = tag
         self.child_tag = child_tag
 

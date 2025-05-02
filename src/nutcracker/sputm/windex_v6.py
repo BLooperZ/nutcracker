@@ -3,7 +3,7 @@ import io
 import operator
 import os
 from collections import OrderedDict, deque
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from string import printable
 
@@ -34,7 +34,7 @@ class Value:
         DWordValue: 'D',
     }
 
-    def __init__(self, orig, signed=True, cast=None):
+    def __init__(self, orig, *, signed=True, cast=None):
         self.orig = orig
         self.num = int.from_bytes(orig.op, byteorder='little', signed=signed)
         self.cast = cast
@@ -105,6 +105,11 @@ class Variable:
             num = self.num & 0xFFFFFFF
             return f'{pref}.{num}'  # [{self.cast}]'
 
+        if isinstance(self.orig, ByteValue):
+            pref = 'B'
+            num = self.num & 0xFF
+            return f'{pref}.{num}'
+
         assert isinstance(self.orig, WordValue), self.orig
         if not self.num & 0xF000:
             assert self.num & 0xFFF == self.num, self.num
@@ -136,6 +141,11 @@ def get_var(orig):
         l_vars[str(g_vars[key])] = g_vars[key]
 
     return g_vars[key]
+
+
+def get_params(stack):
+    num_params = stack.pop().num
+    return [stack.pop() for _ in range(num_params)][::-1]
 
 
 class Caster:
@@ -269,7 +279,7 @@ def escape_message(
     msg: bytes,
     escape: bytes | None = None,
     var_size: int = 2,
-) -> bytes:
+) -> Iterator[bytes]:
     controls = {0x04: 'n', 0x05: 'v', 0x06: 'o', 0x07: 's'}
     with io.BytesIO(msg) as stream:
         while True:
@@ -305,7 +315,7 @@ def msg_to_print(msg: bytes, encoding: EncodingSetting = RAW_ENCODING) -> str:
     return b''.join(escape_message(msg, escape=b'\xff')).decode(**encoding)
 
 
-def msg_val(arg):
+def msg_val(arg: CString) -> str:
     # "\\xFF\\x06\\x6C\\x00" -> "%o108%"
     # "\\xFF\\x06\\x6D\\x00" -> "%o109%"
     # "\\xFF\\x06\\x07\\x00" -> "%o7%"
@@ -325,7 +335,7 @@ def pop_str(stack):
     return ops['_strings'].pop() if Value(arr.orig, signed=True).num == -1 else arr
 
 
-def adr(arg):
+def adr(arg: RefOffset) -> str:
     return f'&[{arg.abs + 8:08d}]'
 
 
@@ -352,10 +362,10 @@ class PrintArg:
     def __init__(self, arg) -> None:
         self.arg = arg
 
-    def __format__(self, format_spec) -> str:
+    def __format__(self, format_spec: str) -> str:
         if format_spec == 'var':
             assert isinstance(self.arg, (WordValue, DWordValue)), self.arg
-            return get_var(self.arg)
+            return str(get_var(self.arg))
         if format_spec == 'ref':
             assert isinstance(self.arg, RefOffset), self.arg
             return adr(self.arg)
@@ -411,6 +421,30 @@ def ARG(num):
         return op.args[num]
     return inner
 
+def BYTE_ARG(num):
+    def inner(op, stack):
+        assert isinstance(op.args[num], ByteValue), op.args
+        return Value(op.args[num])
+    return inner
+
+def WORD_ARG(num):
+    def inner(op, stack):
+        assert isinstance(op.args[num], (WordValue, DWordValue)), op.args
+        return Value(op.args[num])
+    return inner
+
+def DWORD_ARG(num):
+    def inner(op, stack):
+        assert isinstance(op.args[num], DWordValue), op.args
+        return Value(op.args[num])
+    return inner
+
+def BYTE_VAR(num):
+    def inner(op, stack):
+        assert isinstance(op.args[num], ByteValue), op.args
+        return get_var(op.args[num])
+    return inner
+
 def SCRIPT_VAR(num):
     def inner(op, stack):
         assert isinstance(op.args[num], (WordValue, DWordValue)), op.args
@@ -449,86 +483,41 @@ def PBUILD(mapping):
     return inner
 
 
-@regop
-def o6_startObject(op, stack, game):
-    return fstack('start-object {3:sflags} {2} verb {1}{0:pvargs}', POP_PARAMS, *NPOP(3))(op, stack)
+def GUARD(condtion, option, fallback=None):
+    if condtion:
+        return option
+    return fallback
 
 
+## OPCODES
+
 @regop
-def o72_startObject(op, stack, game):
-    return BUILD({
-        'SO_NONE': fstack('start-object {2} verb {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
-        'SO_BAK': fstack('start-object bak {2} verb {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
-        'SO_REC': fstack('start-object rec {2} verb {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
-        'SO_BAK_REC': fstack('start-object bak rec {2} verb {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
-    })(op, stack)
+def o6_pushByte(op, stack, game):
+    F_PUSH(BYTE_ARG(0))(op, stack)
 
 
 @regop
-def o6_pushByte(op, stack, game):  # 0x00
-    assert len(op.args) == 1 and isinstance(op.args[0], ByteValue), op.args
-    stack.append(Value(op.args[0], signed=False))
+def o6_pushWord(op, stack, game):
+    F_PUSH(WORD_ARG(0))(op, stack)
 
 
 @regop
-def o6_pushWord(op, stack, game):  # 0x01
-    assert len(op.args) == 1 and isinstance(
-        op.args[0],
-        (WordValue, DWordValue),
-    ), op.args
-    stack.append(Value(op.args[0]))
+def o72_pushDWord(op, stack, game):
+    F_PUSH(DWORD_ARG(0))(op, stack)
 
 
 @regop
-def o72_pushDWord(op, stack, game):  # 0x02
-    assert len(op.args) == 1 and isinstance(op.args[0], DWordValue), op.args
-    stack.append(Value(op.args[0]))
+def o6_pushByteVar(op, stack, game):
+    F_PUSH(BYTE_VAR(0))(op, stack)
 
 
 @regop
-def o6_drawBox(op, stack, game):
-    # draw-box {x1},{y1} to {x2},{y2} color {color}
-    return fstack('draw-box {4},{3} to {2},{1} color {0}', *NPOP(5))(op, stack)
+def o6_pushWordVar(op, stack, game):
+    F_PUSH(SCRIPT_VAR(0))(op, stack)
 
 
 @regop
-def o6_setBoxFlags(op, stack, game):
-    # set-box box-number [box-numer ...] to box-status
-    return fstack('set-box {1:svargs} to {0}', POP, POP_PARAMS)(op, stack)
-
-
-@regop
-def o6_setBoxSet(op, stack, game):
-    # set-box-set set
-    return fstack('set-box-set {0}', POP)(op, stack)
-
-
-@regop
-def o6_loadRoomWithEgo(op, stack, game):
-    if game.version < 7:
-        # come-out-door {door} in-room {room} walk {x},{y}
-        return fstack('come-out-door {3} in-room {2} walk {1},{0}', *NPOP(4))(op, stack)
-    # come-out-door {door} walk {x},{y}
-    return fstack('come-out-door {2} walk {1},{0}', *NPOP(3))(op, stack)
-
-
-@regop
-def o6_pushByteVar(op, stack, game):  # 0x02
-    assert len(op.args) == 1 and isinstance(op.args[0], ByteValue), op.args
-    stack.append(get_var(op.args[0]))
-
-
-@regop
-def o6_pushWordVar(op, stack, game):  # 0x03
-    assert len(op.args) == 1 and isinstance(
-        op.args[0],
-        (WordValue, DWordValue),
-    ), op.args
-    stack.append(get_var(op.args[0]))
-
-
-@regop
-def o6_wordArrayRead(op, stack, game):  # 0x07
+def o6_wordArrayRead(op, stack, game):
     arr = get_var(op.args[0])
     pos = stack.pop()
     cast = None
@@ -560,12 +549,7 @@ def o6_wordArrayIndexedRead(op, stack, game):  # 0x0B
 
 
 @regop
-def o6_wordArrayIndexedWrite(op, stack, game):
-    return fstack('{0}[{3}][{2}] = {1}', SCRIPT_VAR(0), *NPOP(3))(op, stack)
-
-
-@regop
-def o6_dup(op, stack, game):  # 0x0C
+def o6_dup(op, stack, game):
     val = stack.pop()
     if not isinstance(val, Dup):
         val = Dup(val)
@@ -574,7 +558,7 @@ def o6_dup(op, stack, game):  # 0x0C
 
 
 @regop
-def o90_dup_n(op, stack, game):  # 0x0C
+def o90_dup_n(op, stack, game):
     stack.append(Value(op.args[0], signed=True))
     params = get_params(stack)
     for param in params:
@@ -582,7 +566,7 @@ def o90_dup_n(op, stack, game):  # 0x0C
 
 
 @regop
-def o6_not(op, stack, game):  # 0x0D
+def o6_not(op, stack, game):
     arg = stack.pop()
     if isinstance(arg, str) and ' ' in arg:
         arg = f'({arg})'
@@ -590,7 +574,7 @@ def o6_not(op, stack, game):  # 0x0D
 
 
 @regop
-def o6_abs(op, stack, game):  # 0x0D
+def o6_abs(op, stack, game):
     stack.append(Abs(stack.pop()))
 
 
@@ -691,14 +675,120 @@ def o90_mod(op, stack, game):
 
 
 @regop
+def o6_pop(op, stack, game):
+    val = stack.pop()
+    if isinstance(val, Dup):
+        stack.append(val)
+
+
+@regop
+def o6_ifNot(op, stack, game):
+    off, *rest = op.args
+    assert not rest
+    return ConditionalJump(stack.pop(), off)
+
+
+@regop
+def o6_if(op, stack, game):
+    off, *rest = op.args
+    assert not rest
+    return ConditionalNotJump(stack.pop(), off)
+
+
+@regop
+def o6_jump(op, stack, game):
+    off, *rest = op.args
+    assert not rest
+    return UnconditionalJump(off)
+
+
+@regop
+def o6_writeByteVar(op, stack, game):
+    assert len(op.args) == 1 and isinstance(op.args[0], ByteValue), op.args
+    value = stack.pop()
+    var = get_var(op.args[0])
+    var.cast = getattr(value, 'cast', None)
+    if isinstance(value, Caster):
+        value = value.orig
+    return f'{var} = {PrintArg(value)}'
+
+
+@regop
+def o6_writeWordVar(op, stack, game):
+    assert len(op.args) == 1 and isinstance(
+        op.args[0],
+        (WordValue, DWordValue),
+    ), op.args
+    value = stack.pop()
+    var = get_var(op.args[0])
+    var.cast = getattr(value, 'cast', None)
+    if isinstance(value, Caster):
+        value = value.orig
+    return f'{var} = {PrintArg(value)}'
+
+
+@regop
+def o6_startObject(op, stack, game):
+    return fstack('start-object {3:sflags} {2} verb {1}{0:pvargs}', POP_PARAMS, *NPOP(3))(op, stack)
+
+
+@regop
+def o72_startObject(op, stack, game):
+    return BUILD({
+        'SO_NONE': fstack('start-object {2} verb {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
+        'SO_BAK': fstack('start-object bak {2} verb {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
+        'SO_REC': fstack('start-object rec {2} verb {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
+        'SO_BAK_REC': fstack('start-object bak rec {2} verb {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
+    })(op, stack)
+
+
+@regop
+def o6_drawBox(op, stack, game):
+    # draw-box {x1},{y1} to {x2},{y2} color {color}
+    return fstack('draw-box {4},{3} to {2},{1} color {0}', *NPOP(5))(op, stack)
+
+
+@regop
+def o6_setBoxFlags(op, stack, game):
+    # set-box box-number [box-numer ...] to box-status
+    return fstack('set-box {1:svargs} to {0}', POP, POP_PARAMS)(op, stack)
+
+
+@regop
+def o6_setBoxSet(op, stack, game):
+    # set-box-set set
+    return fstack('set-box-set {0}', POP)(op, stack)
+
+
+@regop
+def o6_loadRoomWithEgo(op, stack, game):
+    if game.version < 7:
+        # come-out-door {door} in-room {room} walk {x},{y}
+        return fstack('come-out-door {3} in-room {2} walk {1},{0}', *NPOP(4))(op, stack)
+    # come-out-door {door} walk {x},{y}
+    return fstack('come-out-door {2} walk {1},{0}', *NPOP(3))(op, stack)
+
+
+@regop
+def o6_wordArrayIndexedWrite(op, stack, game):
+    return fstack('{0}[{3}][{2}] = {1}', SCRIPT_VAR(0), *NPOP(3))(op, stack)
+
+
+@regop
 def o90_max(op, stack, game):
     F_PUSH(fstack('max {1} {0}', *NPOP(2)))(op, stack)
 
 
-
 @regop
 def o90_atan2(op, stack, game):
-    F_PUSH(fstack('atan2 {1} {0}', *NPOP(2)))(op, stack)
+    F_PUSH(fstack('angle-from-delta {1},{0}', *NPOP(2)))(op, stack)
+
+
+@regop
+def o90_getSegmentAngle(op, stack, game):
+    F_PUSH(
+        fstack('angle-from-line {3},{2} to {1},{0}', *NPOP(4))
+    )(op, stack)
 
 
 @regop
@@ -737,53 +827,6 @@ def o90_min(op, stack, game):
 
 
 @regop
-def o6_pop(op, stack, game):
-    val = stack.pop()
-    if isinstance(val, Dup):
-        stack.append(val)
-
-
-@regop
-def o6_ifNot(op, stack, game):
-    off, *rest = op.args
-    assert not rest
-    return ConditionalJump(stack.pop(), off)
-
-
-@regop
-def o6_if(op, stack, game):
-    off, *rest = op.args
-    assert not rest
-    return ConditionalNotJump(stack.pop(), off)
-
-
-@regop
-def o6_jump(op, stack, game):
-    off, *rest = op.args
-    assert not rest
-    return UnconditionalJump(off)
-
-
-@regop
-def o6_writeWordVar(op, stack, game):
-    assert len(op.args) == 1 and isinstance(
-        op.args[0],
-        (WordValue, DWordValue),
-    ), op.args
-    value = stack.pop()
-    var = get_var(op.args[0])
-    var.cast = getattr(value, 'cast', None)
-    if isinstance(value, Caster):
-        value = value.orig
-    return f'{var} = {PrintArg(value)}'
-
-
-def get_params(stack):
-    num_params = stack.pop().num
-    return [stack.pop() for _ in range(num_params)][::-1]
-
-
-@regop
 def o6_startScript(op, stack, game):
     return fstack(
         'start-script {2:sflags}{1:script}{0:pvargs}',
@@ -812,22 +855,44 @@ def o72_jumpToScript(op, stack, game):
 
 
 @regop
-def o100_jumpToScript(op, stack, game):
+def o72_startScript(op, stack, game):
     return BUILD({
-        'SO_NONE': fstack('chain-script {1}{0:pvargs}', POP_PARAMS, POP),
-        # 'SO_BAK': fstack('chain-script bak {1}{0:pvargs}', POP_PARAMS, POP),
-        # 'SO_REC': fstack('chain-script rec {1}{0:pvargs}', POP_PARAMS, POP),
-        # 'SO_BAK_REC': fstack('chain-script bak rec {1}{0:pvargs}', POP_PARAMS, POP),
+        'SO_NONE': fstack('start-script {1}{0:pvargs}', POP_PARAMS, POP),
+        'SO_BAK': fstack('start-script bak {1}{0:pvargs}', POP_PARAMS, POP),
+        'SO_REC': fstack('start-script rec {1}{0:pvargs}', POP_PARAMS, POP),
+        # 'SO_BAK_REC': fstack('start-script bak rec {1}{0:pvargs}', POP_PARAMS, POP),
     })(op, stack)
 
 
 @regop
-def o72_startScript(op, stack, game):
+def o6_startScriptQuick(op, stack, game):
+    return fstack('start-script {1}{0:pvargs}', POP_PARAMS, POP)(op, stack)
+
+
+@regop
+def o6_startScriptQuick2(op, stack, game):
+    F_PUSH(
+        fstack('@{1}{0:pvargs}', POP_PARAMS, POP)
+    )(op, stack)
+
+
+@regop
+def o90_priorityChainScript(op, stack, game):
     return BUILD({
-        'SO_NONE': fstack('start-script {1}{0:pvargs}', POP_PARAMS, POP),
-        # 'SO_BAK': fstack('start-script bak {1}{0:pvargs}', POP_PARAMS, POP),
-        'SO_REC': fstack('start-script rec {1}{0:pvargs}', POP_PARAMS, POP),
-        # 'SO_BAK_REC': fstack('start-script bak rec {1}{0:pvargs}', POP_PARAMS, POP),
+        'SO_NONE': fstack('chain-script {2} order {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
+        # 'SO_BAK': fstack('chain-script bak {2} order {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
+        # 'SO_REC': fstack('chain-script rec {2} order {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
+        # 'SO_BAK_REC': fstack('chain-script bak rec {2} order {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
+    })(op, stack)
+
+
+@regop
+def o90_priorityStartScript(op, stack, game):
+    return BUILD({
+        'SO_NONE': fstack('start-script {2} order {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
+        # 'SO_BAK': fstack('start-script bak {2} order {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
+        'SO_REC': fstack('start-script rec {2} order {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
+        # 'SO_BAK_REC': fstack('start-script bak rec {2} order {1}{0:pvargs}', POP_PARAMS, *NPOP(2)),
     })(op, stack)
 
 
@@ -843,98 +908,43 @@ def o6_stopScript(op, stack, game):
 
 @regop
 def o72_getHeap(op, stack, game):
-    sub = Value(op.args[0], signed=False)
-    if sub.num == 11:
-        stack.append('$ free-space')
-        return
-    if sub.num == 12:
-        stack.append('$ largest-block-size')
-        return
-    return defop(op, stack, game)
+    F_PUSH(
+        BUILD({
+        # 'SO_HEAP_FREE': fstack('heap-free'),
+        'SO_HEAP_LARGEST_FREE': fstack('heap-largest-free'),
+        }),
+    )(op, stack)
 
 
 @regop
-def o100_getHeap(op, stack, game):
-    sub = Value(op.args[0], signed=False)
-    if sub.num == 130:
-        stack.append('$ free-space')
-        return
-    if sub.num == 131:
-        stack.append('$ largest-block-size')
-        return
-    return defop(op, stack, game)
+def videoOps(op, stack, game):
+    return BUILD({
+        'SO_INIT': fstack('video {0}', POP),
+        'SO_CLOSE': fstack('\tclose-file'),
+        'SO_IMAGE': fstack('\timage {0}', POP),
+        'SO_LOAD': fstack('\topen-file {0}', POP_STR),
+        'SO_SET_FLAGS': PBUILD({
+            1: fstack('\tbackground'),
+            4: fstack('\tforeground'),
+            # 8: fstack('\tlooping'),
+            16: fstack('\tset-flags 16'),
+        }),
+        'SO_END': fstack('\t(end)'),
+    })(op, stack)
 
 
 @regop
-def o90_videoOps(op, stack, game):
-    sub = Value(op.args[0], signed=False)
-    if sub.num == 49:
-        return f'\tload {pop_str(stack)}'
-    if sub.num == 54:
-        return f'\tflags {stack.pop()}'
-    if sub.num == 57:
-        return f'video {stack.pop()}'
-    if sub.num == 63:
-        return f'\timage {stack.pop()}'
-    if sub.num == 165:
-        return '\tstop'
-    if sub.num == 255:
-        return '\t(end)'
-    return defop(op, stack, game)
-
-
-@regop
-def o100_videoOps(op, stack, game):
-    sub = Value(op.args[0], signed=False)
-    if sub.num == 0:
-        return f'video {stack.pop()}'
-    if sub.num == 19:
-        return '\tstop'
-    if sub.num == 40:
-        return f'\timage {stack.pop()}'
-    if sub.num == 47:
-        return f'\tload {pop_str(stack)}'
-    if sub.num == 67:
-        return f'\tflags {stack.pop()}'
-    if sub.num == 92:
-        return '\t(end)'
-    return defop(op, stack, game)
-
-
-@regop
-def o90_getVideoData(op, stack, game):
-    sub = Value(op.args[0], signed=False)
-    if sub.num == 32:
-        stack.append(f'video-width {stack.pop()}')
-        return
-    if sub.num == 33:
-        stack.append(f'video-height {stack.pop()}')
-        return
-    if sub.num == 36:
-        stack.append(f'video-count {stack.pop()}')
-        return
-    if sub.num == 52:
-        stack.append(f'video-state {stack.pop()}')
-        return
-    if sub.num == 63:
-        stack.append(f'video-image {stack.pop()}')
-        return
-    if sub.num == 139:
-        stack.append(f'video-new-general-property {stack.pop()}')
-        return
-    return defop(op, stack, game)
-
-
-@regop
-def o100_getVideoData(op, stack, game):
-    sub = Value(op.args[0], signed=False)
-    if sub.num == 26:
-        stack.append(f'video-count {stack.pop()}')
-        return
-    if sub.num == 73:
-        stack.append(f'video-state {stack.pop()}')
-        return
-    return defop(op, stack, game)
+def getVideoData(op, stack, game):
+    F_PUSH(
+        BUILD({
+            'SO_COUNT': fstack('video {0} state-count', POP),
+            # 'SO_HEIGHT': fstack('video {0} height', POP),
+            # 'SO_IMAGE': fstack('video {0} image', POP),
+            # 'SO_NEW_GENERAL_PROPERTY': fstack('video {1} propery {0}', *NPOP(2)),
+            'SO_STATE': fstack('video {0} state', POP),
+            # 'SO_WIDTH': fstack('video {0} width', POP),
+        })
+    )(op, stack)
 
 
 @regop
@@ -950,27 +960,13 @@ def arrayOps(op, stack, game):
 def o72_arrayOps(op, stack, game):
     return BUILD({
         'SO_STRING': fstack('{0} = {1}', SCRIPT_VAR(0), POP_STR),
-        # 'SO_COMPLEX_ARRAY_ASSIGNMENT': fstack('{0}[{5} to {4}][{3} to {2}] = [{1:csvargs}]', SCRIPT_VAR(0), POP_PARAMS, *NPOP(4)),
-        # 'SO_COMPLEX_ARRAY_COPY_OPERATION': fstack('{0}[{9} to {8}][{7} to {6}] = {1}[{5} to {4}][{3} to {2}]', SCRIPT_VAR(0), SCRIPT_VAR(1), *NPOP(8)),
-        # 'SO_RANGE_ARRAY_ASSIGNMENT': fstack('{0}[{6} to {5}][{4} to {3}] = ({2} to {1})', SCRIPT_VAR(0), *NPOP(6)),
-        # 'SO_COMPLEX_ARRAY_MATH_OPERATION': fstack('{0}[{15} to {14}][{13} to {12}] := ({1}[{11} to {10}][{9} to {8}] {3:operation} {2}[{7} to {6}][{5} to {4}])', SCRIPT_VAR(0), SCRIPT_VAR(1), SCRIPT_VAR(2), *NPOP(13)),
-        'SO_FORMATTED_STRING': fstack('{0} = {3} {2}{1:psvargs}', SCRIPT_VAR(0), POP_PARAMS, POP, POP_STR),
-        'SO_ASSIGN_INT_LIST': fstack('{0}[{1:hzero}] = [{2:csvargs}]', SCRIPT_VAR(0), POP, POP_PARAMS),
-        'SO_ASSIGN_2DIM_LIST': fstack('{0}[{2}][] = [{1:csvargs}]', SCRIPT_VAR(0), POP_PARAMS, POP),
-    })(op, stack)
-
-
-@regop
-def o100_arrayOps(op, stack, game):
-    return BUILD({
-        'SO_STRING': fstack('{0} = {1}', SCRIPT_VAR(0), POP_STR),
         'SO_COMPLEX_ARRAY_ASSIGNMENT': fstack('{0}[{5} to {4}][{3} to {2}] = [{1:csvargs}]', SCRIPT_VAR(0), POP_PARAMS, *NPOP(4)),
         'SO_COMPLEX_ARRAY_COPY_OPERATION': fstack('{0}[{9} to {8}][{7} to {6}] = {1}[{5} to {4}][{3} to {2}]', SCRIPT_VAR(0), SCRIPT_VAR(1), *NPOP(8)),
         'SO_RANGE_ARRAY_ASSIGNMENT': fstack('{0}[{6} to {5}][{4} to {3}] = ({2} to {1})', SCRIPT_VAR(0), *NPOP(6)),
         'SO_COMPLEX_ARRAY_MATH_OPERATION': fstack('{0}[{15} to {14}][{13} to {12}] := ({1}[{11} to {10}][{9} to {8}] {3:operation} {2}[{7} to {6}][{5} to {4}])', SCRIPT_VAR(0), SCRIPT_VAR(1), SCRIPT_VAR(2), *NPOP(13)),
         'SO_FORMATTED_STRING': fstack('{0} = {3} {2}{1:psvargs}', SCRIPT_VAR(0), POP_PARAMS, POP, POP_STR),
         'SO_ASSIGN_INT_LIST': fstack('{0}[{1:hzero}] = [{2:csvargs}]', SCRIPT_VAR(0), POP, POP_PARAMS),
-        # 'SO_ASSIGN_2DIM_LIST': fstack('{0}[{2}][] = [{1:csvargs}]', SCRIPT_VAR(0), POP_PARAMS, POP),
+        'SO_ASSIGN_2DIM_LIST': fstack('{0}[{2}][] = [{1:csvargs}]', SCRIPT_VAR(0), POP_PARAMS, POP),
     })(op, stack)
 
 
@@ -988,73 +984,27 @@ def o6_isAnyOf(op, stack, game):
 
 
 @regop
-def o72_isAnyOf(op, stack, game):
-    if getattr(stack[-1], 'cast', None):
-        raise ValueError(getattr(stack[-1], 'cast', None), stack)
-    params = get_params(stack)
-    var = stack.pop()
-    cast = getattr(var, 'cast', None)
-    if cast:
-        for param in params:
-            param.cast = cast
-    stack.append(f'{var} in [ {", ".join(str(param) for param in params)} ]')
-
-
-@regop
 def o90_disabled_windowOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 57:
-        return f'window-x39 {stack.pop()}'
-    if cmd.num == 58:
-        return f'window-x3A {stack.pop()}'
-    if cmd.num == 63:
-        return f'window-x3F {stack.pop()}'
-    if cmd.num == 217:
-        return 'window-xD9'
-    if cmd.num == 243:
-        title = pop_str(stack)
-        return f'window-xF3 {title}'
-    if cmd.num == 255:
-        return 'window-xFF'
-    return defop(op, stack, game)
-
-
-@regop
-def o100_disabled_windowOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 0:
-        return f'window-x00 {stack.pop()}'
-    if cmd.num == 6:
-        return f'window-x06 {stack.pop()} {stack.pop()}'
-    if cmd.num == 17:
-        return f'window-x11 {stack.pop()}'
-    if cmd.num == 39:
-        return f'window-x27 {stack.pop()}'
-    if cmd.num == 40:
-        return f'window-x28 {stack.pop()}'
-    if cmd.num == 49:
-        return f'window-x31 {stack.pop()} {stack.pop()}'
-    if cmd.num == 53:
-        return f'window-x35'
-    if cmd.num == 66:
-        return f'window-x42 {stack.pop()}'
-    if cmd.num == 67:
-        return f'window-x43 {stack.pop()}'
-    if cmd.num == 71:
-        return f'window-x47 {stack.pop()}'
-    if cmd.num == 80:
-        title = pop_str(stack)
-        return f'window-x50 {title}'
-    if cmd.num == 84:
-        return f'window-x54 {stack.pop()}'
-    if cmd.num == 92:
-        return f'window-x5C'
-    return defop(op, stack, game)
+    return BUILD({
+        'SO_INIT': fstack('window {0}', POP),
+        'SO_NEW': fstack('\tnew'),
+        'SO_IMAGE': fstack('\timage {0}', POP),
+        'SO_TITLE_BAR': fstack('\ttitle-bar {0}', POP_STR),
+        'SO_SCRIPT': fstack('\tscript {0}', POP),
+        'SO_END': fstack('\t(end)'),
+        'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
+        'SO_MOVE': fstack('\tmove {1},{0}', *NPOP(2)),
+        'SO_SHOW': fstack('\tshow {0}', POP),
+        # 'SO_CLEAR_FLAGS': fstack('\tclear-flags {0}', POP),
+        # 'SO_HEIGHT': fstack('\theight {0}', POP),
+        # 'SO_SET_FLAGS': fstack('\tset-flags {0}', POP),
+        # 'SO_WIDTH': fstack('\twidth {0}', POP),
+    })(op, stack)
 
 
 @regop
 def o6_stopObjectCodeReturn(op, stack, game):
-    return f'return {stack.pop()}'
+    return fstack('return {0}', POP)(op, stack)
 
 
 @regop
@@ -1085,6 +1035,19 @@ def o70_readINI(op, stack, game):
     return defop(op, stack, game)
 
 
+@regop
+def o70_writeINI(op, stack, game):
+    sub = stack.pop()
+    value = stack.pop()
+    option = op.args[0]
+    if sub.num == 1:
+        return f'write-ini {option} = {value}'
+    if sub.num == 2:
+        value = op.args[1]
+        return f'write-ini string {option} = {value}'
+    return defop(op, stack, game)
+
+
 def CAST(cast, func):
     def inner(op, stack):
         return Caster(func(op, stack), cast=cast)
@@ -1102,24 +1065,10 @@ def o72_readINI(op, stack, game):
 
 
 @regop
-def o70_writeINI(op, stack, game):
-    sub = stack.pop()
-    value = stack.pop()
-
-    option = op.args[0]
-    if sub.num == 1:
-        return f'write-ini {option} {value}'
-    if sub.num == 2:
-        value = op.args[1]
-        return f'write-ini {option} {value}'
-    return defop(op, stack, game)
-
-
-@regop
 def o72_writeINI(op, stack, game):
     return BUILD({
-        'SO_DWORD': fstack('write-ini {1} is {0}', POP, POP_STR),
-        'SO_STRING': fstack('write-ini string {1} is {0}', POP_STR, POP_STR),
+        'SO_DWORD': fstack('write-ini {1} = {0}', POP, POP_STR),
+        'SO_STRING': fstack('write-ini string {1} = {0}', POP_STR, POP_STR),
     })(op, stack)
 
 
@@ -1151,21 +1100,18 @@ def o8_debug(op, stack, game):
 
 @regop
 def o80_getFileSize(op, stack, game):
-    string = pop_str(stack)
-    stack.append(f'$ file-size {string}')
+    F_PUSH(fstack('file-size {0}', POP_STR))(op, stack)
 
 
 @regop
 def o72_traceStatus(op, stack, game):
-    string = pop_str(stack)
-    return f'$ trace-status {string} {stack.pop()}'
+    return fstack('debug {1} {0}', POP, POP_STR)(op, stack)
 
 
-def printer(action, op, stack, pop_actor=False):
+def printer(action, op, stack, *, pop_actor=False):
     return BUILD({
         'SO_BASEOP': fstack(f'{action} {{0}}', POP) if pop_actor else fstack(f'{action}'),
         'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
-        'SO_COLOR': fstack('\tcolor {0}', POP),
         'SO_CLIPPED': fstack('\tclipped {0}', POP),
         'SO_CENTER': fstack('\tcenter'),
         'SO_LEFT': fstack('\tleft'),
@@ -1174,86 +1120,14 @@ def printer(action, op, stack, pop_actor=False):
         'SO_TEXTSTRING': fstack('\t{0:msg}', MSG_ARG(0)),
         'SO_FORMATTED_STRING': fstack('\t{0:msg} {2}{1:psvargs}', MSG_ARG(0), POP_PARAMS, POP),
         'SO_TALKIE': fstack('\ttalkie {0}', POP),
-        'SO_COLOR_LIST': fstack('\tcolor {0:csvargs}', POP_PARAMS),  # TODO: color {0} if have only one
+        'SO_COLOR': fstack('\tcolor {0}', POP),
+        'SO_COLOR_LIST': fstack('\tcolor {0:csvargs}', POP_PARAMS),
         'SO_END': fstack('\tend'),
 
         # V8
         'SO_PRINT_CHARSET': fstack('\tcharset {0}', POP),
         'SO_PRINT_WRAP': fstack('\twrap'),
     })(op, stack)
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 65:
-        ypos = stack.pop()
-        xpos = stack.pop()
-        return f'\tat {xpos},{ypos}'
-    if cmd.num == 66:
-        return f'\tcolor {stack.pop()}'
-    if cmd.num == 67:
-        return f'\tclipped {stack.pop()}'
-    if cmd.num == 69:
-        return '\tcenter'
-    if cmd.num == 71:  # String
-        return '\tleft'
-    if cmd.num == 72:  # String
-        return '\toverhead'
-    if cmd.num == 74:  # String
-        return '\tno-talk-animation'
-    if cmd.num == 75:  # String
-        string = op.args[1]
-        return f'\t{msg_val(string)}'
-    if cmd.num == 194:  # Formatted string
-        string = op.args[1]
-        num_params = stack.pop().num + 1
-        params = [stack.pop() for _ in range(num_params)]
-        return f'\t{msg_val(string)} {" ".join(str(param) for param in params)}'
-    if cmd.num == 225:
-        res = stack.pop()
-        return f'\ttalkie {res}'
-    if cmd.num == 249:
-        colors = stack.pop()
-        if colors.num == 1:
-            return f'\tcolor {stack.pop()}'
-        stack.append(colors)
-        return f'\tcolor {get_params(stack)}'
-    if cmd.num == 254:
-        if pop_actor:
-            return f'{action} {stack.pop()}'
-        return f'{action}'
-    if cmd.num == 255:
-        return '\tend'
-    raise ValueError(cmd)
-
-
-def printer_v8(action, op, stack, pop_actor=False):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 200:
-        if pop_actor:
-            return f'{action} {stack.pop()}'
-        return f'{action}'
-    if cmd.num == 201:
-        return '\tend'
-    if cmd.num == 202:
-        ypos = stack.pop()
-        xpos = stack.pop()
-        return f'\tat {xpos},{ypos}'
-    if cmd.num == 203:
-        return f'\tcolor {stack.pop()}'
-    if cmd.num == 204:
-        return '\tcenter'
-    if cmd.num == 205:
-        return f'\tcharset {stack.pop()}'
-    if cmd.num == 206:
-        return '\tleft'
-    if cmd.num == 207:
-        return '\toverhead'
-    if cmd.num == 208:  # String
-        return '\tno-talk-animation'
-    if cmd.num == 209:  # String
-        string = op.args[1]
-        return f'\t{msg_val(string)}'
-    if cmd.num == 210:
-        return '\twrap'
-    raise ValueError(cmd)
 
 
 @regop
@@ -1290,7 +1164,7 @@ def o8_printEgo(op, stack, game):
 
 @regop
 def o8_printActor(op, stack, game):
-    return printer('say-line', op, stack, True)
+    return printer('say-line', op, stack, pop_actor=True)
 
 
 @regop
@@ -1315,14 +1189,12 @@ def o6_printSystem(op, stack, game):
 
 @regop
 def o6_printEgo(op, stack, game):
-    # with io.BytesIO(b'\x09\x00') as stream:
-    #     stack.append(get_var(WordValue(stream)))
     return printer('say-line', op, stack)
 
 
 @regop
 def o6_printActor(op, stack, game):
-    return printer('say-line', op, stack, True)
+    return printer('say-line', op, stack, pop_actor=True)
 
 
 @regop
@@ -1355,89 +1227,6 @@ def o8_talkActor(op, stack, game):
     return f'say-line {act} {msg_val(op.args[0])}'
 
 
-def printer_he100(action, op, stack, pop_actor=False):
-    return BUILD({
-        'SO_BASEOP': fstack(f'{action} {{0}}', POP) if pop_actor else fstack(f'{action}'),
-        'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
-        'SO_COLOR': fstack('\tcolor {0}', POP),
-        'SO_CLIPPED': fstack('\tclipped {0}', POP),
-        'SO_CENTER': fstack('\tcenter'),
-        'SO_LEFT': fstack('\tleft'),
-        'SO_OVERHEAD': fstack('\toverhead'),
-        'SO_MUMBLE': fstack('\tmumble'),
-        'SO_TEXTSTRING': fstack('\t{0:msg}', MSG_ARG(0)),
-        'SO_FORMATTED_STRING': fstack('\t{0:msg} {2}{1:psvargs}', MSG_ARG(0), POP_PARAMS, POP),
-        'SO_TALKIE': fstack('\ttalkie {0}', POP),
-        'SO_COLOR_LIST': fstack('\tcolor {0:csvargs}', POP_PARAMS),  # TODO: color {0} if have only one
-        'SO_END': fstack('\tend'),
-    })(op, stack)
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 6:
-        ypos = stack.pop()
-        xpos = stack.pop()
-        return f'\tat {xpos},{ypos}'
-    if cmd.num == 20:
-        return f'\tcolor {stack.pop()}'
-    if cmd.num == 18:
-        return f'\tclipped {stack.pop()}'
-    if cmd.num == 12:
-        return '\tcenter'
-    if cmd.num == 46:
-        return '\tleft'
-    if cmd.num == 56:
-        return '\toverhead'
-    if cmd.num == 51:
-        return '\tno-talk-animation'
-    if cmd.num == 79:  # String
-        string = op.args[1]
-        return f'\t{msg_val(string)}'
-    if cmd.num == 35:  # Formatted string
-        string = op.args[1]
-        num_params = stack.pop().num + 1
-        params = [stack.pop() for _ in range(num_params)]
-        return f'\t{msg_val(string)} {" ".join(str(param) for param in params)}'
-    if cmd.num == 78:
-        res = stack.pop()
-        return f'\ttalkie {res}'
-    if cmd.num == 91:
-        if pop_actor:
-            return f'{action} {stack.pop()}'
-        return f'{action}'
-    if cmd.num == 92:
-        return '\tend'
-    raise ValueError(cmd)
-
-
-@regop
-def o100_printLine(op, stack, game):
-    return printer_he100('print-line', op, stack)
-
-
-@regop
-def o100_printText(op, stack, game):
-    return printer_he100('print-text', op, stack)
-
-
-@regop
-def o100_printActor(op, stack, game):
-    return printer_he100('say-line', op, stack, True)
-
-
-@regop
-def o100_printSystem(op, stack, game):
-    return printer_he100('print-system', op, stack)
-
-
-@regop
-def o100_printDebug(op, stack, game):
-    return printer_he100('print-debug', op, stack)
-
-
-@regop
-def o100_printEgo(op, stack, game):
-    return printer_he100('say-line', op, stack)
-
-
 @regop
 def o6_setBlastObjectWindow(op, stack, game):
     bottom = stack.pop()
@@ -1452,7 +1241,7 @@ def o71_getStringWidth(op, stack, game):
     ln = stack.pop()
     pos = stack.pop()
     array = stack.pop()
-    stack.append(f'string-width {array} {pos} {ln}')
+    stack.append(f'string-width {array} from {pos} to {ln}')
 
 
 @regop
@@ -1463,10 +1252,9 @@ def o8_getStringWidth(op, stack, game):
 
 @regop
 def o71_getStringLenForWidth(op, stack, game):
-    ln = stack.pop()
-    pos = stack.pop()
-    array = stack.pop()
-    stack.append(f'$ string-length-for-width {array} {pos} {ln}')
+    F_PUSH(
+        fstack('string-margin {2} from {1} margin {0}', *NPOP(3))
+    )(op, stack)
 
 
 @regop
@@ -1475,15 +1263,25 @@ def o6_beginOverride(op, stack, game):
 
 
 @regop
+def o6_endOverride(op, stack, game):
+    return 'override off'
+
+
+@regop
+def o72_resetCutscene(op, stack, game):
+    return 'override off off'
+
+
+@regop
 def o70_createDirectory(op, stack, game):
     string = op.args[0]
-    return f'$ mkdir {string}'
+    return f'create-directory {string}'
 
 
 @regop
 def o72_createDirectory(op, stack, game):
     string = pop_str(stack)
-    return f'$ mkdir {string}'
+    return f'create-directory {string}'
 
 
 @regop
@@ -1502,27 +1300,22 @@ def o72_deleteFile(op, stack, game):
 def dimArray(op, stack, game):
     return BUILD({
         'SO_UNDIM_ARRAY': fstack('undim {0}', SCRIPT_VAR(0)),
-        'SO_INT_ARRAY': fstack('dim int array {0}[{1}]', SCRIPT_VAR(0), POP),
-        'SO_BIT_ARRAY': fstack('dim bit array {0}[{1}]', SCRIPT_VAR(0), POP),
-        'SO_NIBBLE_ARRAY': fstack('dim nibble array {0}[{1}]', SCRIPT_VAR(0), POP),
-        'SO_BYTE_ARRAY': fstack('dim byte array {0}[{1}]', SCRIPT_VAR(0), POP),
-        'SO_STRING_ARRAY': fstack('dim string array {0}[{1}]', SCRIPT_VAR(0), POP),
+        'SO_INT': fstack('dim int array {0}[{1}]', SCRIPT_VAR(0), POP),
+        'SO_BIT': fstack('dim bit array {0}[{1}]', SCRIPT_VAR(0), POP),
+        'SO_NIBBLE': fstack('dim nibble array {0}[{1}]', SCRIPT_VAR(0), POP),
+        'SO_BYTE': fstack('dim byte array {0}[{1}]', SCRIPT_VAR(0), POP),
+        'SO_STRING': fstack('dim string array {0}[{1}]', SCRIPT_VAR(0), POP),
     })(op, stack)
-
-
-@regop
-def o6_dummy(op, stack, game):
-    return '$ dummy'
 
 
 @regop
 def dim2dimArray(op, stack, game):
     return BUILD({
-        'SO_INT_ARRAY': fstack('dim int array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
-        'SO_BIT_ARRAY': fstack('dim bit array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
-        'SO_NIBBLE_ARRAY': fstack('dim nibble array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
-        'SO_BYTE_ARRAY': fstack('dim byte array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
-        'SO_STRING_ARRAY': fstack('dim string array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
+        'SO_INT': fstack('dim int array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
+        'SO_BIT': fstack('dim bit array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
+        'SO_NIBBLE': fstack('dim nibble array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
+        'SO_BYTE': fstack('dim byte array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
+        'SO_STRING': fstack('dim string array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
     })(op, stack)
 
 
@@ -1552,19 +1345,6 @@ def o72_dimArray(op, stack, game):
 
 
 @regop
-def o100_dimArray(op, stack, game):
-    return BUILD({
-        'SO_UNDIM_ARRAY': fstack('undim {0}', SCRIPT_VAR(0)),
-        'SO_BIT': fstack('dim int array {0}[{1}]', SCRIPT_VAR(0), POP),
-        'SO_NIBBLE': fstack('dim bit array {0}[{1}]', SCRIPT_VAR(0), POP),
-        'SO_BYTE': fstack('dim byte array {0}[{1}]', SCRIPT_VAR(0), POP),
-        'SO_INT': fstack('dim int array {0}[{1}]', SCRIPT_VAR(0), POP),
-        'SO_DWORD': fstack('dim dword array {0}[{1}]', SCRIPT_VAR(0), POP),
-        'SO_STRING': fstack('dim string array {0}[{1}]', SCRIPT_VAR(0), POP),
-    })(op, stack)
-
-
-@regop
 def o90_dim2dim2Array(op, stack, game):
     return BUILD({
         'SO_BIT': fstack('dim bit array {0}[{5} to {4}][{3} to {2}] order {1}', SCRIPT_VAR(0), *NPOP(5)),
@@ -1574,92 +1354,10 @@ def o90_dim2dim2Array(op, stack, game):
         'SO_DWORD': fstack('dim dword array {0}[{5} to {4}][{3} to {2}] order {1}', SCRIPT_VAR(0), *NPOP(5)),
         'SO_STRING': fstack('dim string array {0}[{5} to {4}][{3} to {2}] order {1}', SCRIPT_VAR(0), *NPOP(5)),
     })(op, stack)
-    cmd = Value(op.args[0], signed=False)
-    types = {
-        2: 'bit',
-        3: 'nibble',
-        4: 'byte',
-        5: 'int',
-        6: 'dword',
-        7: 'string',
-    }
-    arr = get_var(op.args[1])
-    order = stack.pop()  # row / column?
-
-    dim1end = stack.pop()
-    dim1start = stack.pop()
-    dim2end = stack.pop()
-    dim2start = stack.pop()
-    return f'$ dim {types[cmd.num]} array {arr}[{dim1start}..{dim1end}][{dim2start}..{dim2end}] order {order}'
-
-
-@regop
-def o100_dim2dim2Array(op, stack, game):
-    return BUILD({
-        'SO_BIT': fstack('dim bit array {0}[{5} to {4}][{3} to {2}] order {1}', SCRIPT_VAR(0), *NPOP(5)),
-        'SO_NIBBLE': fstack('dim nibble array {0}[{5} to {4}][{3} to {2}] order {1}', SCRIPT_VAR(0), *NPOP(5)),
-        'SO_BYTE': fstack('dim byte array {0}[{5} to {4}][{3} to {2}] order {1}', SCRIPT_VAR(0), *NPOP(5)),
-        'SO_INT': fstack('dim int array {0}[{5} to {4}][{3} to {2}] order {1}', SCRIPT_VAR(0), *NPOP(5)),
-        'SO_DWORD': fstack('dim dword array {0}[{5} to {4}][{3} to {2}] order {1}', SCRIPT_VAR(0), *NPOP(5)),
-        'SO_STRING': fstack('dim string array {0}[{5} to {4}][{3} to {2}] order {1}', SCRIPT_VAR(0), *NPOP(5)),
-    })(op, stack)
-    cmd = Value(op.args[0], signed=False)
-    types = {
-        41: 'bit',
-        44: 'nibble',
-        45: 'byte',
-        42: 'int',
-        43: 'dword',
-        77: 'string',
-    }
-    arr = get_var(op.args[1])
-    order = stack.pop()  # row / column?
-
-    dim1end = stack.pop()
-    dim1start = stack.pop()
-    dim2end = stack.pop()
-    dim2start = stack.pop()
-    return f'$ dim {types[cmd.num]} array {arr}[{dim1start}..{dim1end}][{dim2start}..{dim2end}] order {order}'
-
-
-@regop
-def o100_dim2dimArray(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    types = {
-        41: 'bit',
-        44: 'nibble',
-        45: 'byte',
-        42: 'int',
-        43: 'dword',
-        77: 'string',
-    }
-    arr = get_var(op.args[1])
-    dim2, dim1 = stack.pop(), stack.pop()
-    return f'dim {types[cmd.num]} array {arr}[{dim1}][{dim2}]'
 
 
 @regop
 def o90_redim2dimArray(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    types = {
-        2: 'bit',
-        3: 'nibble',
-        4: 'byte',
-        5: 'int',
-        6: 'dword',
-        7: 'string',
-    }
-    arr = get_var(op.args[1])
-
-    dim1end = stack.pop()
-    dim1start = stack.pop()
-    dim2end = stack.pop()
-    dim2start = stack.pop()
-    return f'$ redim {types[cmd.num]} array {arr}[{dim1start}..{dim1end}][{dim2start}..{dim2end}]'
-
-
-@regop
-def o100_redim2dimArray(op, stack, game):
     return BUILD({
         'SO_BIT': fstack('redim bit array {0}[{4} to {3}][{2} to {1}]', SCRIPT_VAR(0), *NPOP(4)),
         'SO_NIBBLE': fstack('redim nibble array {0}[{4} to {3}][{2} to {1}]', SCRIPT_VAR(0), *NPOP(4)),
@@ -1687,11 +1385,11 @@ def o70_isResourceLoaded(op, stack, game):
 def o100_isResourceLoaded(op, stack, game):
     F_PUSH(
         BUILD({
-            'SO_IMAGE_LOADED': fstack('image-loaded {0}', POP),
-            'SO_ROOM_LOADED': fstack('room-loaded {0}', POP),
-            'SO_COSTUME_LOADED': fstack('costume-loaded {0}', POP),
-            'SO_SOUND_LOADED': fstack('sound-loaded {0}', POP),
-            'SO_SCRIPT_LOADED': fstack('script-loaded {0}', POP),
+            'SO_IMAGE': fstack('image-loaded {0}', POP),
+            # 'SO_ROOM': fstack('room-loaded {0}', POP),
+            'SO_COSTUME': fstack('costume-loaded {0}', POP),
+            'SO_SOUND': fstack('sound-loaded {0}', POP),
+            # 'SO_SCRIPT': fstack('script-loaded {0}', POP),
         })
     )(op, stack)
 
@@ -1742,17 +1440,17 @@ def o6_startSound(op, stack, game):
 
 @regop
 def o60_soundOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    arg = stack.pop()
-    if cmd.num == 222:
-        # windex shows empty string
-        return f'$ set-volume {arg}'
-    if cmd.num == 223:
-        return f'$ unk-sound {arg}'
-    if cmd.num == 224:
-        # windex shows empty string
-        return f'$ set-frequency {arg}'
-    return defop(op, stack, game)
+    return BUILD({
+        'SO_SOUND_START_VOLUME': (
+            # windex shows empty string
+            fstack('sound volume {0}', POP)
+        ),
+        'SO_SOUND_VOLUME_RAMP': fstack('sound volume-ramp {0}', POP),
+        'SO_SOUND_FREQUENCY': (
+            # windex shows empty string
+            fstack('sound frequency {0}', POP)
+        ),
+    })(op, stack)
 
 
 @regop
@@ -1761,95 +1459,31 @@ def o70_soundOps(op, stack, game):
         'SO_SOFT': fstack('\tsoft'),
         'SO_VARIABLE': fstack('sound {2} variable {1} is {0}', *NPOP(3)),
         'SO_SOUND_VOLUME': fstack('sound {1} volume {0}', *NPOP(2)),
+        'SO_SOUND_START_VOLUME': (
+            fstack('\tvolume {0}', POP)
+        ),
         'SO_NOW': fstack('\tnow'),
         'SO_SOUND_START': fstack('start-sound {0}', POP),
         'SO_SOUND_CHANNEL': fstack('\tchannel {0}', POP),
         'SO_AT': fstack('\tat {0}', POP),
         'SO_SOUND_LOOPING': fstack('\tloop'),
-        'SO_END': fstack('\t(end-sfx)'),
-    })(op, stack)
-
-
-@regop
-def o100_soundOps(op, stack, game):
-    return BUILD({
-        'SO_NOW': fstack('\tnow'),
-        'SO_SOUND_CHANNEL': fstack('\tchannel {0}', POP),
+        'SO_END': fstack('\t(end-sound)'),
         'SO_SOUND_MODIFY': fstack('sound {0}', POP),
-        'SO_SOUND_START': fstack('start-sound {0}', POP),
-        'SO_AT': fstack('\tat {0}', POP),
-        'SO_SOUND_LOOPING': fstack('\tloop'),
-        'SO_SOUND_PAN': fstack('\tpan {0}', POP),
         'SO_SOUND_SOFT': fstack('\tsoft'),
         'SO_SOUND_VOLUME': fstack('\tvolume {0}', POP),
-        'SO_END': fstack('\t(end-sfx)'),
+        'SO_SOUND_PAN': fstack('\tpan {0}', POP),
+        'SO_SOUND_FREQUENCY': fstack('\tfrequency {0}', POP),
     })(op, stack)
 
 
 @regop
-def o6_kernelSetFunctions(op, stack, game):
+def kernelSetFunctions(op, stack, game):
     return fstack('kludge {0:svargs}', POP_PARAMS)(op, stack)
 
 
 @regop
-def o8_kernelSetFunctions(op, stack, game):
-    return fstack('kludge {0:svargs}', POP_PARAMS)(op, stack)
-
-
-@regop
-def o6_kernelGetFunctions(op, stack, game):
-    stack.append(fstack('kludge {0:svargs}', POP_PARAMS)(op, stack))
-
-
-@regop
-def o8_kernelGetFunctions(op, stack, game):
-    stack.append(fstack('kludge {0:svargs}', POP_PARAMS)(op, stack))
-
-
-@regop
-def o60_kernelSetFunctions(op, stack, game):
-    params = get_params(stack)
-    return fstack('kludge {0:svargs}', POP_PARAMS)(op, stack)
-
-
-@regop
-def o60_kernelGetFunctions(op, stack, game):
-    stack.append(fstack('kludge {0:svargs}', POP_PARAMS)(op, stack))
-
-
-@regop
-def o71_kernelSetFunctions(op, stack, game):
-    return fstack('kludge {0:svargs}', POP_PARAMS)(op, stack)
-    # params = get_params(stack)
-    # return f'kludge {params[0]} {params[1:]}'
-    # if params[0].num == 1:
-    #     return f'$ restore-background {" ".join(params[1:])}'
-    # if params[0].num == 21:
-    #     return f'$ skip-draw on'
-    # if params[0].num == 22:
-    #     return f'$ skip-draw off'
-    # if params[0].num == 23:
-    #     return f'$ clear-charset-mask'
-    # if params[0].num == 24:
-    #     return f'$ redraw-all-actors-skip'
-    # if params[0].num == 25:
-    #     return f'$ redraw-all-actors-no-skip'
-    # raise ValueError(params)
-
-
-@regop
-def o72_kernelGetFunctions(op, stack, game):
-    stack.append(fstack('kludge {0:svargs}', POP_PARAMS)(op, stack))
-
-
-@regop
-def o90_kernelSetFunctions(op, stack, game):
-    return fstack('kludge {0:svargs}', POP_PARAMS)(op, stack)
-
-
-@regop
-def o90_kernelGetFunctions(op, stack, game):
-    stack.append(fstack('kludge {0:svargs}', POP_PARAMS)(op, stack))
+def kernelGetFunctions(op, stack, game):
+    F_PUSH(fstack('kludge {0:svargs}', POP_PARAMS))(op, stack)
 
 
 @regop
@@ -1900,11 +1534,6 @@ def o6_stopSound(op, stack, game):
 
 
 @regop
-def o6_endOverride(op, stack, game):
-    return 'override off'
-
-
-@regop
 def o6_isSoundRunning(op, stack, game):
     stack.append(f'sound-running {stack.pop()}')
 
@@ -1937,43 +1566,21 @@ def o6_roomOps(op, stack, game):
             # windex show empty string here
             fstack('palette {0}', POP)
         ),
-    })(op, stack)
 
+        # Since HE 60
+        **GUARD(
+            game.he_version >= 60,
+            {
+                'SO_ROOM_SAVEGAME_BY_NAME': GUARD(
+                    game.he_version < 72,
+                    fstack('saveload-game {0:msg} name {1}', MSG_ARG(0), POP),
+                    fstack('saveload-game {1} name {0}', POP_STR, POP),
+                ),
+                'SO_ROOM_PALETTE_IN_ROOM': fstack('palette {1} in-room {0}', *NPOP(2)),
+                'SO_OBJECT_ORDER': fstack('object-order {1} {0}', *NPOP(2)),
+                'SO_ROOM_COPY_PALETTE': fstack('palette {1} in-slot {0}', *NPOP(2)),
+            }, {})
 
-@regop
-def o60_roomOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 220:
-        from_slot = stack.pop()
-        to_slot = stack.pop()
-        return f'palette copy-color from {from_slot} to {to_slot}'
-    if cmd.num == 221:
-        return f'saveload-game {stack.pop()} name {msg_val(op.args[1])}'
-    if cmd.num == 234:
-        obj2 = stack.pop()
-        obj1 = stack.pop()
-        return f'object-order {obj1} {obj2}'
-    return o6_roomOps(op, stack, game)
-
-
-@regop
-def o72_roomOps(op, stack, game):
-    return BUILD({
-        # 'SO_ROOM_SCROLL': fstack('room-scroll is {1} {0}', *NPOP(2)),
-        # 'SO_ROOM_SCREEN': fstack('set-screen {1} to {0}', *NPOP(2)),
-        'SO_ROOM_PALETTE': fstack('palette {3} {2} {1} in-slot {0}', *NPOP(4)),
-        'SO_ROOM_INTENSITY': fstack('palette intensity {2} in-slot {1} to {0}', *NPOP(3)),
-        'SO_ROOM_SAVEGAME_BY_NAME': fstack('saveload-game {1} name {0}', POP_STR, POP),
-        'SO_ROOM_FADE': fstack('fades {0}', POP),
-        'SO_RGB_ROOM_INTENSITY': fstack('palette intensity {4} {3} {2} in-slot {1} to {0}', *NPOP(5)),
-        # 'SO_ROOM_TRANSFORM': fstack('palette transform {3} in-slot {2} to {1} steps {0}', *NPOP(4)),
-        # 'SO_CYCLE_SPEED': fstack('palette cycle-speed {1} is {0}', *NPOP(2)),
-        'SO_ROOM_NEW_PALETTE': (
-            # windex show empty string here
-            fstack('palette {0}', POP)
-        ),
-        # 'SO_ROOM_COPY_PALETTE': fstack('palette {1} in-slot {0}', *NPOP(2)),
-        'SO_OBJECT_ORDER': fstack('object-order {1} {0}', *NPOP(2)),
     })(op, stack)
 
 
@@ -1982,7 +1589,7 @@ def o8_roomOps(op, stack, game):
     return BUILD({
         'SO_ROOM_PALETTE': fstack('palette {3} {2} {1} in-slot {0}', *NPOP(4)),
         'SO_ROOM_FADE': fstack('fades {0}', POP),
-        'SO_ROOM_RGB_INTENSITY': fstack('palette intensity {4} {3} {2} in-slot {1} to {0}', *NPOP(5)),
+        'SO_RGB_ROOM_INTENSITY': fstack('palette intensity {4} {3} {2} in-slot {1} to {0}', *NPOP(5)),
         'SO_ROOM_TRANSFORM': fstack('palette transform {3} in-slot {2} to {1} steps {0}', *NPOP(4)),
         'SO_ROOM_NEW_PALETTE': fstack('palette {0}', POP),
         'SO_ROOM_SAVE_GAME': fstack('save-game'),
@@ -1991,30 +1598,15 @@ def o8_roomOps(op, stack, game):
 
 
 @regop
-def o100_roomOps(op, stack, game):
-    return BUILD({
-        # 'SO_ROOM_PALETTE': fstack('palette {3} {2} {1} in-slot {0}', *NPOP(4)),
-        # 'SO_OBJECT_ORDER': fstack('object-order {1} {0}', *NPOP(2)),
-        # 'SO_ROOM_SCROLL': fstack('room-scroll is {1} {0}', *NPOP(2)),
-        # 'SO_ROOM_SCREEN': fstack('set-screen {1} to {0}', *NPOP(2)),
-        # 'SO_RGB_ROOM_INTENSITY': fstack('palette intensity {4} {3} {2} in-slot {1} to {0}', *NPOP(5)),
-        # 'SO_ROOM_INTENSITY': fstack('palette intensity {2} in-slot {1} to {0}', *NPOP(3)),
-        'SO_ROOM_FADE': fstack('fades {0}', POP),
-        # 'SO_ROOM_NEW_PALETTE': (
-        #     # windex show empty string here
-        #     fstack('palette {0}', POP)
-        # ),
-        # 'SO_ROOM_SAVEGAME_BY_NAME': fstack('saveload-game {1} name {0}', POP_STR, POP),
-        # 'SO_ROOM_PALETTE_IN_ROOM': fstack('palette {1} in-room {0}', *NPOP(2)),
-    })(op, stack)
-
-
-@regop
-def o6_verbOps(op, stack, game):
+def verbOps(op, stack, game):
     return BUILD({
         'SO_VERB_INIT': fstack('verb {0}', POP),
-        # 'SO_VERB_IMAGE': fstack('\timage {0}', POP),
-        'SO_VERB_NAME': fstack('\tname {0:msg}', MSG_ARG(0)),
+        'SO_VERB_IMAGE': fstack('\timage {0}', POP),
+        'SO_VERB_NAME': GUARD(
+            game.he_version < 72,
+            fstack('\tname {0:msg}', MSG_ARG(0)),
+            fstack('\tname {0}', POP_STR),
+        ),
         'SO_VERB_COLOR': fstack('\tcolor {0}', POP),
         'SO_VERB_HICOLOR': fstack('\thicolor {0}', POP),
         'SO_VERB_AT': fstack('\tat {1},{0}', *NPOP(2)),
@@ -2026,39 +1618,11 @@ def o6_verbOps(op, stack, game):
         'SO_VERB_DIM': fstack('\tdim'),
         'SO_VERB_KEY': fstack('\tkey {0}', POP),
         'SO_VERB_CENTER': fstack('\tcenter'),
-        # TODO: 'SO_VERB_NAME_STR'
+        # 'SO_VERB_NAME_STR': fstack('\tname {0}', POP),
         'SO_VERB_IMAGE_IN_ROOM': fstack('\timage {1} in-room {0}', *NPOP(2)),
         'SO_VERB_BAKCOLOR': fstack('\tbakcolor {0}', POP),
         'SO_END': fstack('\t(end-verb)'),
-    })(op, stack)
-
-
-@regop
-def o72_verbOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 125:
-        string = pop_str(stack)
-        return f'\tname {string}\\'
-    return o6_verbOps(op, stack, game)
-
-
-@regop
-def o8_verbOps(op, stack, game):
-    return BUILD({
-        'SO_VERB_INIT': fstack('verb {0}', POP),
-        'SO_VERB_NEW': fstack('\tnew'),
-        'SO_VERB_DELETE': fstack('\tdelete'),
-        'SO_VERB_NAME': fstack('\tname {0:msg}', MSG_ARG(0)),
-        'SO_VERB_AT': fstack('\tat {1},{0}', *NPOP(2)),
-        'SO_VERB_ON': fstack('\ton'),
-        'SO_VERB_OFF': fstack('\toff'),
-        'SO_VERB_COLOR': fstack('\tcolor {0}', POP),
-        'SO_VERB_HICOLOR': fstack('\thicolor {0}', POP),
-        'SO_VERB_DIMCOLOR': fstack('\tdimcolor {0}', POP),
-        'SO_VERB_DIM': fstack('\tdim'),
-        'SO_VERB_KEY': fstack('\tkey {0}', POP),
-        'SO_VERB_IMAGE': fstack('\timage {1} in-room {0}', *NPOP(2)),
-        'SO_VERB_CENTER': fstack('\tcenter'),
+        # V8
         'SO_VERB_LINE_SPACING': fstack('\tspacing {0}', POP),
     })(op, stack)
 
@@ -2123,7 +1687,7 @@ def o6_setObjectName(op, stack, game):
 
 @regop
 def o72_printWizImage(op, stack, game):
-    return f'$ print-wiz-image {stack.pop()}'
+    return f'print-image {stack.pop()}'
 
 
 @regop
@@ -2157,6 +1721,29 @@ def o6_cursorCommand(op, stack, game):
 
 
 @regop
+def o80_cursorCommand(op, stack, game):
+    return BUILD({
+        'SO_CURSOR_ON': fstack('cursor on'),
+        'SO_CURSOR_OFF': fstack('cursor off'),
+        'SO_USERPUT_ON': fstack('userput on'),
+        'SO_USERPUT_OFF': fstack('userput off'),
+        'SO_CURSOR_SOFT_ON': fstack('cursor soft-on'),
+        'SO_CURSOR_SOFT_OFF': fstack('cursor soft-off'),
+        'SO_USERPUT_SOFT_ON': fstack('userput soft-on'),
+        'SO_USERPUT_SOFT_OFF': fstack('userput soft-off'),
+        # 'SO_CURSOR_IMAGE': fstack('cursor image {0}', POP),
+        'SO_CURSOR_HOTSPOT': fstack('cursor hotspot {1},{0}', *NPOP(2)),
+        'SO_CHARSET_SET': fstack('charset {0}', POP),
+        'SO_CHARSET_COLOR': fstack('charset color {0:csvargs}', POP_PARAMS),
+        'SO_CURSOR_IMAGE': fstack('cursor image {0}', POP),
+        'SO_CURSOR_COLOR_IMAGE': fstack('cursor color image {0}', POP),
+        'SO_BUTTON': fstack('button {1} image {0}', *NPOP(2)),
+        'SO_CURSOR_COLOR_PAL_IMAGE': fstack('cursor color image {1} palette {0}', *NPOP(2)),
+        'SO_CHARSET': fstack('charset {0}', POP),
+    })(op, stack)
+
+
+@regop
 def o8_cursorCommand(op, stack, game):
     return BUILD({
         'SO_CURSOR_ON': fstack('cursor on'),
@@ -2176,47 +1763,6 @@ def o8_cursorCommand(op, stack, game):
         'SO_CHARSET_SET': fstack('charset {0}', POP),
         'SO_CHARSET_COLOR': fstack('charset color {0:csvargs}', POP_PARAMS),
         'SO_CURSOR_PUT': fstack('put-cursor {1},{0}', *NPOP(2)),
-    })(op, stack)
-
-
-@regop
-def o80_cursorCommand(op, stack, game):
-    return BUILD({
-        'SO_CURSOR_ON': fstack('cursor on'),
-        'SO_CURSOR_OFF': fstack('cursor off'),
-        'SO_USERPUT_ON': fstack('userput on'),
-        'SO_USERPUT_OFF': fstack('userput off'),
-        'SO_CURSOR_SOFT_ON': fstack('cursor soft-on'),
-        'SO_CURSOR_SOFT_OFF': fstack('cursor soft-off'),
-        'SO_USERPUT_SOFT_ON': fstack('userput soft-on'),
-        'SO_USERPUT_SOFT_OFF': fstack('userput soft-off'),
-        # 'SO_CURSOR_IMAGE': fstack('cursor image {0}', POP),
-        # 'SO_CURSOR_HOTSPOT': fstack('cursor hotspot {1},{0}', *NPOP(2)),
-        'SO_CHARSET_SET': fstack('charset {0}', POP),
-        'SO_CHARSET_COLOR': fstack('charset color {0:csvargs}', POP_PARAMS),
-        'SO_CURSOR_IMAGE': fstack('cursor image {0}', POP),
-        'SO_CURSOR_COLOR_IMAGE': fstack('cursor color image {0}', POP),
-    })(op, stack)
-
-
-@regop
-def o100_cursorCommand(op, stack, game):
-    return BUILD({
-        # 'SO_CURSOR_IMAGE': fstack('cursor image {0}', POP),
-        # 'SO_CURSOR_COLOR_IMAGE': fstack('cursor color image {0}', POP),
-        # 'SO_CURSOR_COLOR_PAL_IMAGE': fstack('cursor color image {1} palette {0}', *NPOP(2)),
-        'SO_CURSOR_ON': fstack('cursor on'),
-        # 'SO_CURSOR_OFF': fstack('cursor off'),
-        'SO_USERPUT_ON': fstack('userput on'),
-        'SO_USERPUT_OFF': fstack('userput off'),
-        # 'SO_CURSOR_SOFT_ON': fstack('cursor soft-on'),
-        # 'SO_CURSOR_SOFT_OFF': fstack('cursor soft-off'),
-        # 'SO_USERPUT_SOFT_ON': fstack('userput soft-on'),
-        # 'SO_USERPUT_SOFT_OFF': fstack('userput soft-off'),
-        'SO_CHARSET': fstack('charset {0}', POP),
-        # 'SO_CHARSET_COLOR': fstack('charset color {0:csvargs}', POP_PARAMS),
-        # 'SO_CURSOR_IMAGE': fstack('cursor image {0}', POP),
-        # 'SO_CURSOR_HOTSPOT': fstack('cursor hotspot {1},{0}', *NPOP(2)),
     })(op, stack)
 
 
@@ -2259,6 +1805,7 @@ def actorOps(op, stack, game):
         'SO_ACTOR_WALK_PAUSE': fstack('\tstop-walk'),
         'SO_ACTOR_WALK_RESUME': fstack('\tresume-walk'),
         'SO_ACTOR_DEPTH': fstack('\tto-zplane {0}', POP),
+        'SO_ACTOR_STOP': fstack('\tstop'),
 
         # Since HE60
         'SO_ACTOR_DEFAULT_CLIPPED': fstack('\tdefault-box {3},{2} to {1},{0}', *NPOP(4)),
@@ -2267,161 +1814,26 @@ def actorOps(op, stack, game):
         'SO_CONDITION': fstack('\tcondition {0:csvargs}', POP_PARAMS),
         'SO_TALK_CONDITION': fstack('\ttalk-condition {0}', POP),
         'SO_PRIORITY': fstack('\torder {0}', POP),
-        'SO_TALKIE': fstack('\ttalkie {1} {0}', POP_STR, POP),
+        'SO_TALKIE': (
+            fstack('\ttalkie {1} {0}', POP_STR, POP) if game.he_version >= 72
+            else fstack('\ttalkie {1} {0}', MSG_ARG(0), POP)
+        ),
         'SO_BACKGROUND_ON': fstack('\tbak on'),
         # 'SO_BACKGROUND_OFF': fstack('\tbak off'),
-        # 'SO_CHARSET_SET': fstack('\tcharset {0}', POP),
+        'SO_CHARSET_SET': fstack('\tcharset {0}', POP),
 
-        # 'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
-        # 'SO_CLIPPED': fstack('\tbox {3},{2} to {1},{0}', *NPOP(4)),
-        # 'SO_ERASE': fstack('\terase {0}', POP),
+        'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
+        'SO_CLIPPED': fstack('\tclip {3},{2} to {1},{0}', *NPOP(4)),
+        'SO_ERASE': fstack('\terase {0}', POP),
+
+        # Since HE 90
+        'SO_NEW_GENERAL_PROPERTY': fstack('\tproperty {1} is {0}', *NPOP(2)),
+
+        # Since HE 100
+        'SO_ACTOR_SOUNDS': fstack('\tsound {0:csvargs}', POP_PARAMS),
+        'SO_VARIABLE': fstack('\tvariable {1} is {0}', *NPOP(2)),
+        'SO_ROOM_PALETTE': fstack('\tpalette {0}', POP),
     })(op, stack)
-
-
-@regop
-def o90_getLinesIntersectionPoint(op, stack, game):
-    xvar = get_var(op.args[0])
-    yvar = get_var(op.args[1])
-    line2_y2 = stack.pop()
-    line2_x2 = stack.pop()
-    line2_y1 = stack.pop()
-    line2_x1 = stack.pop()
-    line1_y2 = stack.pop()
-    line1_x2 = stack.pop()
-    line1_y1 = stack.pop()
-    line1_x1 = stack.pop()
-    stack.append(
-        f'intersection ({line1_x1},{line1_y1} to {line1_x2},{line1_y2}), ({line2_x1},{line2_y1} to {line2_x2},{line2_y2}) in {xvar},{yvar}',
-    )
-    return
-
-
-@regop
-def o60_actorOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 218:
-        return '\tbackground-on'
-    if cmd.num == 219:
-        return '\tbackground-off'
-    if cmd.num == 225:
-        slot = stack.pop()
-        return f'\ttalkie {slot} {msg_val(op.args[1])}\\'
-    return o6_actorOps(op, stack, game)
-
-
-@regop
-def o6_getActorLayer(op, stack, game):
-    stack.append(f'actor-zplane {stack.pop()}')
-    return
-
-
-@regop
-def o100_actorOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 6:
-        ypos = stack.pop()
-        xpos = stack.pop()
-        return f'\tat {xpos},{ypos}'
-    if cmd.num == 9:
-        return '\tbackground-on'
-    if cmd.num == 22:
-        return f'\tcondition {get_params(stack)}'
-    if cmd.num == 25:
-        return f'\tcostume {stack.pop()}'
-    if cmd.num == 59:
-        return f'\torder {stack.pop()}'
-    if cmd.num == 63:
-        return f'\tpalette {stack.pop()}'
-    if cmd.num == 70:
-        return f'\tshadow {stack.pop()}'
-    if cmd.num == 74:
-        y = stack.pop()
-        x = stack.pop()
-        return f'\tstep-dist {x},{y}'
-    # if cmd.num == 103:
-    #     return '\tanimation default'
-    # if cmd.num == 104:
-    #     return f'\tinit-animation {stack.pop()}'
-    if cmd.num == 140:
-        stop = stack.pop()
-        start = stack.pop()
-        return f'\ttalk-animation {start} {stop}'
-    # if cmd.num == 106:
-    #     return f'\twalk-animation {stack.pop()}'
-    # if cmd.num == 107:
-    #     return f'\tstand-animation {stack.pop()}'
-    if cmd.num == 4:
-        return f'\tanimation-speed {stack.pop()}'
-    # if cmd.num == 109:
-    #     return '\tdefault'
-    if cmd.num == 133:
-        return f'\televation {stack.pop()}'
-    if cmd.num == 57:
-        new_color = stack.pop()
-        old_color = stack.pop()
-        return f'\tcolor {old_color} is {new_color}'
-    if cmd.num == 141:
-        color = stack.pop()
-        return f'\ttalk-color {color}'
-    # if cmd.num == 113:
-    #     return f'\tname {msg_val(op.args[1])}'
-    if cmd.num == 131:
-        return f'\twidth {stack.pop()}'
-    if cmd.num == 65:
-        return f'\tscale {stack.pop()}'
-    if cmd.num == 89:
-        return '\tnever-zclip'
-    if cmd.num == 87:
-        return f'\talways-zclip {stack.pop()}'
-    if cmd.num == 128:
-        bottom = stack.pop()
-        right = stack.pop()
-        top = stack.pop()
-        left = stack.pop()
-        return f'actor default-clip {left},{top} to {right},{bottom}'
-    if cmd.num == 135:
-        return '\tignore-boxes'
-    # if cmd.num == 119:
-    #     return f'\tfollow-boxes'
-    # if cmd.num == 120:
-    #     return f'\tspecial-draw {stack.pop()}'
-    if cmd.num == 142:
-        return f'\ttalk-condition {stack.pop()}'
-    if cmd.num == 143:
-        ypos = stack.pop()
-        xpos = stack.pop()
-        return f'\ttext-offset {xpos},{ypos}'
-    if cmd.num == 129:
-        return f'actor {stack.pop()}'
-    if cmd.num == 130:
-        return f'\tsound {get_params(stack)}'
-    if cmd.num == 83:
-        value = stack.pop()
-        var = stack.pop()
-        return f'\tanimation-var {var} {value}'
-    if cmd.num == 137:
-        return '\tignore-turns on'
-    if cmd.num == 126:
-        return '\tignore-turns off'
-    if cmd.num == 53:
-        return '\tnew'
-    # if cmd.num == 128:
-    #     return f'\tstop'
-    # if cmd.num == 129:
-    #     return f'\tface {stack.pop()}'
-    # if cmd.num == 130:
-    #     return f'\tturn {stack.pop()}'
-    # if cmd.num == 135:
-    #     return f'\tvolume {stack.pop()}'
-    # if cmd.num == 136:
-    #     return f'\tfrequency {stack.pop()}'
-    # if cmd.num == 137:
-    #     return f'\tpan {stack.pop()}'
-    if cmd.num == 78:
-        string = pop_str(stack)
-        slot = stack.pop()
-        return f'\ttalkie {slot} {string}\\'
-    return defop(op, stack, game)
 
 
 @regop
@@ -2461,21 +1873,20 @@ def o8_actorOps(op, stack, game):
         'SO_ACTOR_FREQUENCY': fstack('\tfrequency {0}', POP),
         'SO_ACTOR_PAN': fstack('\tpan {0}', POP),
     })(op, stack)
-    # if cmd.num == 78:
-    #     return f'\tsound {get_params(stack)}'
-    # # TODO: 82 - animation - 3 pops
-    # TODO: 228 - actor-walk-script 1 pop
-    # TODO: 229 - actor-stop - no pops
-    # TODO: 230 - direction - 1 pop
-    # TODO: 233 - stop-walk - no pops
-    # TODO: 234 - resume-walk - no pops
-    # TODO: 235 - talk-script - 1 pop
-    return defop(op, stack, game)
 
 
 @regop
-def o72_resetCutscene(op, stack, game):
-    return '$ reset-cut-scene'
+def o90_getLinesIntersectionPoint(op, stack, game):
+    F_PUSH(
+        fstack('find-segment-intersection {9},{8} ({7},{6} to {5},{4}), ({3},{2} to {1},{0})', *NPOP(8), SCRIPT_VAR(1), SCRIPT_VAR(0))
+    )(op, stack)
+
+
+@regop
+def o6_getActorLayer(op, stack, game):
+    F_PUSH(
+        fstack('actor-zplane {0}', POP)
+    )(op, stack)
 
 
 @regop
@@ -2485,43 +1896,13 @@ def o90_setSpriteInfo(op, stack, game):
         'SO_STEP_DIST_Y': fstack('\tstep-dist-y {0}', POP),
         'SO_GROUP': fstack('\tgroup {0}', POP),
         'SO_INIT': fstack('sprite {1} to {0}', *NPOP(2)) if game.version > 98 else fstack('sprite {0}', POP),
-        # 'SO_ANGLE': fstack('\tangle {0}', POP),
-        'SO_ANIMATION': fstack('\tanimation {0}', POP),
-        # 'SO_ANIMATION_SPEED': fstack('\tanimation-speed {0}', POP),
-        'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
-        # 'SO_AT_IMAGE': fstack('\tsource image {0}', POP),
-        'SO_CLASS': fstack('\tclass [{0:csvargs}]', POP_PARAMS),
-        # 'SO_ERASE': fstack('\terase {0}', POP),
-        'SO_IMAGE': fstack('\timage {0}', POP),
-        # 'SO_MASK': fstack('\tmask image {0}', POP),
-        'SO_MOVE': fstack('\tmove {1},{0}', *NPOP(2)),
-        'SO_NEW': fstack('\tnew'),
-        # 'SO_NEW_GENERAL_PROPERTY': fstack('\tproperty {1} is {0}', *NPOP(2)),
-        # 'SO_PALETTE': fstack('\tpalette {0}', POP),
-        'SO_PRIORITY': fstack('\torder {0}', POP),
-        'SO_PROPERTY': fstack('\tflag {1} is {0}', *NPOP(2)),
-        'SO_RESTART': fstack('\trestart restart'),
-        'SO_SCALE': fstack('\tscale {0}', POP),
-        'SO_SHADOW': fstack('\tshadow {0}', POP),
-        'SO_STATE': fstack('\tstate {0}', POP),
-        'SO_STEP_DIST': fstack('\tstep-dist {1},{0}', *NPOP(2)),
-        'SO_UPDATE': fstack('\tupdate-type {0}', POP),
-        'SO_ACTOR_VARIABLE': fstack('\tvariable {1} is {0}', *NPOP(2)),
-    })(op, stack)
-
-
-@regop
-def o100_setSpriteInfo(op, stack, game):
-    return BUILD({
-        'SO_INIT': fstack('sprite {1} to {0}', *NPOP(2)),
-        # 'SO_ANGLE': fstack('\tangle {0}', POP),
+        'SO_ANGLE': fstack('\tangle {0}', POP),
         'SO_ANIMATION': fstack('\tanimation {0}', POP),
         'SO_ANIMATION_SPEED': fstack('\tanimation-speed {0}', POP),
         'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
         'SO_AT_IMAGE': fstack('\tsource image {0}', POP),
         'SO_CLASS': fstack('\tclass [{0:csvargs}]', POP_PARAMS),
         'SO_ERASE': fstack('\terase {0}', POP),
-        'SO_GROUP': fstack('\tgroup {0}', POP),
         'SO_IMAGE': fstack('\timage {0}', POP),
         'SO_MASK': fstack('\tmask image {0}', POP),
         'SO_MOVE': fstack('\tmove {1},{0}', *NPOP(2)),
@@ -2534,13 +1915,12 @@ def o100_setSpriteInfo(op, stack, game):
         'SO_SCALE': fstack('\tscale {0}', POP),
         'SO_SHADOW': fstack('\tshadow {0}', POP),
         'SO_STATE': fstack('\tstate {0}', POP),
-        # 'SO_STEP_DIST': fstack('\tstep-dist {1},{0}', *NPOP(2)),
-        # 'SO_STEP_DIST_X': fstack('\tstep-dist-x {0}', POP),
-        # 'SO_STEP_DIST_Y': fstack('\tstep-dist-y {0}', POP),
+        'SO_STEP_DIST': fstack('\tstep-dist {1},{0}', *NPOP(2)),
         'SO_UPDATE': fstack('\tupdate-type {0}', POP),
+        'SO_ACTOR_VARIABLE': fstack('\tvariable {1} is {0}', *NPOP(2)),
         'SO_VARIABLE': fstack('\tvariable {1} is {0}', *NPOP(2)),
     })(op, stack)
- 
+
 
 @regop
 def o90_getSpriteInfo(op, stack, game):
@@ -2556,7 +1936,6 @@ def o90_getSpriteInfo(op, stack, game):
             'SO_GROUP': fstack('sprite {0} group', POP),
             'SO_DRAW_XPOS': fstack('sprite {0} object-draw-x', POP),
             'SO_DRAW_YPOS': fstack('sprite {0} object-draw-y', POP),
-            'SO_PROPERTY': fstack('sprite {1} flag {0}', *NPOP(2)),
             'SO_PRIORITY': fstack('sprite {0} order', POP),
             'SO_FIND': PBUILD({
                 0: fstack('find-sprite {3},{2} group {1} class [{0:csvargs}]', POP_PARAMS, *NPOP(3)),
@@ -2572,53 +1951,36 @@ def o90_getSpriteInfo(op, stack, game):
             'SO_UPDATE': fstack('sprite {0} update-type', POP),
             'SO_SCALE': fstack('sprite {0} scale', POP),
             'SO_CLASS': fstack('sprite {1} class [{0:csvargs}]', POP_PARAMS, POP),
-            'SO_ACTOR_VARIABLE': fstack('sprite {1} variable {0}', *NPOP(2)),
-        })
-    )(op, stack)
+            'SO_ACTOR_VARIABLE': (fstack('sprite {1} variable {0}', *NPOP(2)) if game.he_version < 100 else None),
+            'SO_VARIABLE': (fstack('sprite {1} variable {0}', *NPOP(2)) if game.he_version >= 100 else None),
 
-    # if sub.num == 45:
-    #     # TODO: extra argument for he 98 + another extra for he 99
-    #     # flags = stack.pop()
-    #     # stype = stack.pop()
-    #     group = stack.pop()
-    #     ypos = stack.pop()
-    #     xpos = stack.pop()
-    #     stack.append(f'$ find-sprite {xpos},{ypos} in {group}')
-    #     return
-
-
-
-@regop
-def o100_getSpriteInfo(op, stack, game):
-    F_PUSH(
-        BUILD({
+            'SO_MASK': fstack('sprite {0} mask image', POP),
             'SO_AT_IMAGE': fstack('sprite {0} source image', POP),
-            'SO_CLASS': fstack('sprite {1} class [{0:csvargs}]', POP_PARAMS, POP),
-            'SO_COUNT': fstack('sprite {0} state-count', POP),
-            'SO_DRAW_XPOS': fstack('sprite {0} object-dtaw-x', POP),
-            'SO_DRAW_YPOS': fstack('sprite {0} object-dtaw-y', POP),
-            'SO_FIND': fstack('find-sprite [{0}] {4},{3} group {2} class [{0:csvargs}]', POP_PARAMS, *NPOP(4)),
-            'SO_GROUP': fstack('sprite {0} group', POP),
-            'SO_HEIGHT': fstack('sprite {0} height', POP),
-            'SO_IMAGE': fstack('sprite {0} image', POP),
             'SO_NEW_GENERAL_PROPERTY': fstack('sprite {1} property {0}', *NPOP(2)),
-            'SO_PALETTE': fstack('sprite {0} palette', POP),
-            'SO_PRIORITY': fstack('sprite {0} order', POP),
-            'SO_STATE': fstack('sprite {0} state', POP),
-            'SO_VARIABLE': fstack('sprite {1} variable {0}', *NPOP(2)),
-            'SO_WIDTH': fstack('sprite {0} width', POP),
-            'SO_XPOS': fstack('sprite {0} object-x', POP),
-            'SO_YPOS': fstack('sprite {0} object-y', POP),
+            'SO_PROPERTY': PBUILD({
+                0: fstack('sprite {0} hflip', POP),
+                1: fstack('sprite {0} vflip', POP),
+                # 2: fstack('sprite {0} show', POP),
+                4: fstack('sprite {0} image remap', POP),
+            }),
         })
     )(op, stack)
-
 
 
 @regop
 def o90_setSpriteGroupInfo(op, stack, game):
     return BUILD({
         'SO_INIT': fstack('sprite group {0}', POP),
-        # 'SO_GROUP': PBUILD({}),
+        'SO_GROUP': PBUILD({
+            1: fstack('\tgroup move {1},{0}', *NPOP(2)),
+            2: fstack('\tgroup order {0}', POP),
+            3: fstack('\tgroup group {0}', POP),
+            4: fstack('\tgroup update-type {0}', POP),
+            5: fstack('\tgroup new'),
+            # 6: fstack('\tgroup animation-speed {0}', POP),
+            7: fstack('\tgroup animation-type {0}', POP),
+            8: fstack('\tgroup shadow {0}', POP),
+        }),
         'SO_NEW': fstack('\tnew'),
         'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
         'SO_MOVE': fstack('\tmove {1},{0}', *NPOP(2)),
@@ -2628,69 +1990,6 @@ def o90_setSpriteGroupInfo(op, stack, game):
         'SO_PROPERTY': fstack('\tflag {1} is {0}', *NPOP(2)),
         'SO_NEVER_ZCLIP': fstack('\tnever-zclip'),
     })(op, stack)
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 37:
-        gtype = stack.pop()
-        if gtype.num == 1:
-            dy = stack.pop()
-            dx = stack.pop()
-            return f'\tgroup move {dx},{dy}'
-        elif gtype.num == 2:
-            return f'\tgroup order {stack.pop()}'
-        elif gtype.num == 3:
-            return f'\tgroup group {stack.pop()}'
-        elif gtype.num == 4:
-            return f'\tgroup update-type {stack.pop()}'
-        elif gtype.num == 5:
-            return '\tgroup new'
-        elif gtype.num == 6:
-            return f'\tgroup animation-speed {stack.pop()}'
-        elif gtype.num == 7:
-            return f'\tgroup animation-type {stack.pop()}'
-        elif gtype.num == 8:
-            return f'\tgroup shadow {stack.pop()}'
-        else:
-            raise NotImplementedError(op, gtype)
-
-
-@regop
-def o100_setSpriteGroupInfo(op, stack, game):
-    return BUILD({
-        'SO_INIT': fstack('sprite group {0}', POP),
-        # 'SO_GROUP': PBUILD({}),
-        'SO_NEW': fstack('\tnew'),
-        'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
-        'SO_MOVE': fstack('\tmove {1},{0}', *NPOP(2)),
-        'SO_CLIPPED': fstack('\tclip {3},{2} to {1},{0}', *NPOP(4)),
-        'SO_IMAGE': fstack('\timage {0}', POP),
-        'SO_PRIORITY': fstack('\torder {0}', POP),
-        'SO_PROPERTY': fstack('\tflag {1} is {0}', *NPOP(2)),
-        'SO_NEVER_ZCLIP': fstack('\tnever-zclip'),
-    })(op, stack)
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 38:
-        gtype = stack.pop()
-        if gtype.num == 1:
-            dy = stack.pop()
-            dx = stack.pop()
-            return f'\tgroup move {dx},{dy}'
-        elif gtype.num == 2:
-            return f'\tgroup order {stack.pop()}'
-        elif gtype.num == 3:
-            return f'\tgroup group {stack.pop()}'
-        elif gtype.num == 4:
-            return f'\tgroup update-type {stack.pop()}'
-        elif gtype.num == 5:
-            return '\tgroup new'
-        elif gtype.num == 6:
-            return f'\tgroup animation-speed {stack.pop()}'
-        elif gtype.num == 7:
-            return f'\tgroup animation-type {stack.pop()}'
-        elif gtype.num == 8:
-            return f'\tgroup shadow {stack.pop()}'
-        else:
-            raise NotImplementedError(op, gtype)
-    return defop(op, stack, game)
 
 
 @regop
@@ -2705,20 +2004,9 @@ def o90_getDistanceBetweenPoints(op, stack, game):
 
 @regop
 def o90_getPolygonOverlap(op, stack, game):
-    poly2 = get_params(stack)
-    poly1 = get_params(stack)
-    action = stack.pop()
-    stack.append(f'$ polygon-overlap {action} {poly1} {poly2}')
-
-
-@regop
-def o90_getSegmentAngle(op, stack, game):
-    y2 = stack.pop()
-    x2 = stack.pop()
-    y1 = stack.pop()
-    x1 = stack.pop()
-    stack.append(f'$ angle {x1},{y1} to {x2},{y2}')
-    return
+    F_PUSH(
+        fstack('overlap {2} ([{1:csvargs}],[{0:csvargs}])', POP_PARAMS, POP_PARAMS, POP)
+    )(op, stack)
 
 
 @regop
@@ -2734,58 +2022,23 @@ def o90_getSpriteGroupInfo(op, stack, game):
 
 
 @regop
-def o100_getSpriteGroupInfo(op, stack, game):
-    F_PUSH(
-        BUILD({
-            'SO_ARRAY': fstack('sprite group {0} sprite []', POP),
-            'SO_PRIORITY': fstack('sprite group {0} order', POP),
-            'SO_XPOS': fstack('sprite group {0} object-x', POP),
-            'SO_YPOS': fstack('sprite group {0} object-y', POP),
-        })
-    )(op, stack)
-
-
-@regop
 def o80_drawLine(op, stack, game):
     return BUILD({
-        # 'SO_ACTOR': fstack('draw-line {5},{4} to {3},{2} actor {1} step-dist {0}', *NPOP(6)),
+        'SO_ACTOR': fstack('draw-line {5},{4} to {3},{2} actor {1} step-dist {0}', *NPOP(6)),
         # 'SO_IMAGE': fstack('draw-line {5},{4} to {3},{2} image {1} step-dist {0}', *NPOP(6)),
         'SO_COLOR': fstack('draw-line {5},{4} to {3},{2} color {1} step-dist {0}', *NPOP(6)),
     })(op, stack)
 
 
 @regop
-def o100_drawLine(op, stack, game):
-    step = stack.pop()
-    id = stack.pop()
-    y = stack.pop()
-    x = stack.pop()
-    y1 = stack.pop()
-    x1 = stack.pop()
-    sub = Value(op.args[0], signed=False)
-    return f'$ draw-line {sub} {x1},{y1} to {x},{y} {id} {step}'
-
-
-@regop
 def o90_floodFill(op, stack, game):
-    sub = Value(op.args[0], signed=False)
-    if sub.num == 57:
-        return '$ flood-fill-box'
-    if sub.num == 65:
-        ypos = stack.pop()
-        xpos = stack.pop()
-        return f'\tat {xpos},{ypos}'
-    if sub.num == 66:
-        return f'\tflags {stack.pop()}'
-    if sub.num == 67:
-        bottom = stack.pop()
-        right = stack.pop()
-        top = stack.pop()
-        left = stack.pop()
-        return f'$ flood-fill-box {left},{top} to {right},{bottom}'
-    if sub.num == 255:
-        return '\tdraw'
-    return defop(op, stack, game)
+    return BUILD({
+        'SO_INIT': fstack('flood-fill'),
+        'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
+        'SO_COLOR': fstack('\tcolor {0}', POP),
+        'SO_END': fstack('\t(end)'),
+        'SO_CLIPPED': fstack('\tclip {3},{2} to {1},{0}', *NPOP(4)),
+    })(op, stack)
 
 
 @regop
@@ -2818,67 +2071,51 @@ def o80_readConfigFile(op, stack, game):
 
 
 @regop
-def o71_copyString(op, stack, game):
-    stack.append(f'$ copy-string {pop_str(stack)}')
-
-
-@regop
-def o71_concatString(op, stack, game):
-    string2 = pop_str(stack)
-    string1 = pop_str(stack)
-    stack.append(f'$ concat-string {string1} {string2}')
-
-
-@regop
-def o71_compareString(op, stack, game):
-    stack.append(f'$ cmp-string {pop_str(stack)} {pop_str(stack)}')
-
-
-@regop
 def o80_writeConfigFile(op, stack, game):
     return BUILD({
         'SO_DWORD': fstack('write-ini {3} {2} {1} is {0}', POP, POP_STR, POP_STR, POP_STR),
         'SO_STRING': fstack('write-ini string {3} {2} {1} is {0}', POP_STR, POP_STR, POP_STR, POP_STR),
     })
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num in {6, 43}:
-        value = stack.pop()
-        option = pop_str(stack)
-        section = pop_str(stack)
-        filename = pop_str(stack)
-        return f'write-ini {filename} {section} {option} {value}'
-    if cmd.num in {7, 77}:
-        value = pop_str(stack)
-        option = pop_str(stack)
-        section = pop_str(stack)
-        filename = pop_str(stack)
-        return f'write-ini {filename} {section} {option} {value}'
-    return defop(op, stack, game)
+
+
+@regop
+def o71_compareString(op, stack, game):
+    F_PUSH(
+        fstack('string-compare {1} {0}', *NPOP(2))
+    )(op, stack)
 
 
 @regop
 def o8_getObjectImageX(op, stack, game):
-    stack.append(f'object-image-x {stack.pop()}')
+    F_PUSH(
+        fstack('object-image-x {0}', POP),
+    )(op, stack)
 
 
 @regop
 def o8_getObjectImageY(op, stack, game):
-    stack.append(f'object-image-y {stack.pop()}')
+    F_PUSH(
+        fstack('object-image-y {0}', POP),
+    )(op, stack)
 
 
 @regop
 def o8_getObjectImageHeight(op, stack, game):
-    stack.append(f'object-image-height {stack.pop()}')
+    F_PUSH(
+        fstack('object-image-height {0}', POP),
+    )(op, stack)
 
 
 @regop
 def o8_getObjectImageWidth(op, stack, game):
-    stack.append(f'object-image-width {stack.pop()}')
+    F_PUSH(
+        fstack('object-image-width {0}', POP),
+    )(op, stack)
 
 
 @regop
 def o72_getNumFreeArrays(op, stack, game):
-    stack.append('$ num-free-arrays')
+    stack.append('free-arrays')
 
 
 @regop
@@ -2902,24 +2139,31 @@ def o6_getObjectY(op, stack, game):
 
 
 @regop
+def o90_getObjectData(op, stack, game):
+    F_PUSH(BUILD({
+        # Hack to get the object when reading the second subop
+        'SO_INIT': POP,
+        'SO_DRAW_YPOS': fstack('object {0} object-draw-y', POP),
+        'SO_DRAW_XPOS': fstack('object {0} object-draw-x', POP),
+        'SO_STATE': fstack('object {0} state', POP),
+        'SO_WIDTH': fstack('object {0} width', POP),
+        'SO_HEIGHT': fstack('object {0} height', POP),
+        # 'SO_STATE_COUNT': fstack('object {0} state-count'),
+        # 'SO_NEW_GENERAL_PROPERTY': fstack('object {1} property {0}', *NPOP(2)),  # TODO: verify order is correct
+    }))(op, stack)
+
+
+@regop
 def o6_stampObject(op, stack, game):
     return fstack('stamp-object {3} at {2},{1} image {0}', *NPOP(4))
 
 
 @regop
 def o60_redimArray(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    arr = get_var(op.args[1])
-    dim2, dim1 = stack.pop(), stack.pop()
-
-    if dim2 == 0:
-        dim2, dim1 = dim1, dim2  # Swap the two values
-
-    if cmd.num == 199:  # int/word array
-        return f'$ redim int array {arr}[{dim1}][{dim2}]'
-    if cmd.num == 202:  # byte array
-        return f'$ redim byte array {arr}[{dim1}][{dim2}]'
-    return defop(op, stack, game)
+    return BUILD({
+        'SO_BYTE': fstack('redim byte array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
+        'SO_INT': fstack('redim int array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
+    })(op, stack)
 
 
 @regop
@@ -2932,31 +2176,15 @@ def o72_redimArray(op, stack, game):
 
 
 @regop
-def o100_redimArray(op, stack, game):
-    return BUILD({
-        'SO_BYTE': fstack('redim byte array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
-        'SO_INT': fstack('redim int array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
-        'SO_DWORD': fstack('redim dword array {0}[{2}][{1}]', SCRIPT_VAR(0), *NPOP(2)),
-    })(op, stack)
-
-
-@regop
 def o72_drawWizImage(op, stack, game):
-    flags = stack.pop()
-    x1 = stack.pop()
-    y1 = stack.pop()
-    res = stack.pop()
-    return f'$ draw-wiz-image {res} at {x1},{y1} flags {flags}'
+    F_PUSH(
+        fstack('draw-image {3} at {2},{1} {0}', *NPOP(4)),
+    )(op, stack)
 
 
 @regop
 def o72_captureWizImage(op, stack, game):
-    bottom = stack.pop()
-    right = stack.pop()
-    top = stack.pop()
-    left = stack.pop()
-    res = stack.pop()
-    return f'$ capture-wiz-image {res} {left},{top} to {right},{bottom}'
+    return fstack('capture-image {4} at {3},{2} to {1},{0}', *NPOP(5))(op, stack)
 
 
 @regop
@@ -2974,172 +2202,52 @@ def o90_wizImageOps(op, stack, game):
         'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
         'SO_AT_IMAGE': fstack('\tsource image {0}', POP),
         'SO_CLIPPED': fstack('\tclip {3},{2} to {1},{0}', *NPOP(4)),
-        'SO_COLOR_LIST': fstack('\tcolor {1} to {0}', *NPOP(2)),
+        'SO_COLOR': (fstack('\tcolor {1} to {0}', *NPOP(2)) if game.he_version <= 98 else None),
+        'SO_COLOR_LIST': (fstack('\tcolor {1} to {0}', *NPOP(2)) if game.he_version >= 98 else None),  # HE 98+
         'SO_NEW': fstack('\tnew'),
         'SO_PALETTE':  fstack('\tpalette {0}', POP),
         'SO_POLY_TO_POLY': fstack('\tcapture {2} from polygon {1} to polygon {0}', *NPOP(3)),
         'SO_SAVE': fstack('\tsave {1} {0}', POP_STR, POP),
         'SO_SCALE': fstack('\tscale {0}', POP),
         'SO_END': fstack('\t(end-wiz)'),
-        'SO_FONT_CREATE': fstack('\tfont-create font {5} style {4} size {3} foreground {2} background {1}', *NPOP(5), POP_STR),
+        'SO_FONT_CREATE': fstack('\tfont-create font {4} style {3} size {2} foreground {1} background {0}', *NPOP(4), POP_STR),
         'SO_FONT_END': fstack('\tfont-end'),
         'SO_FONT_RENDER': fstack('\tfont-render {2} at {1},{0}', *NPOP(2), POP_STR),
         'SO_FONT_START': fstack('\tfont-start'),
         'SO_RENDER_FLOOD_FILL': fstack('\tflood-fill {2},{1} color {0}', *NPOP(3)),
         'SO_RENDER_INTO_IMAGE': fstack('\timage {0}', POP),
         'SO_RENDER_RECTANGLE': fstack('\tdraw-box {4},{3} to {2},{1} color {0}', *NPOP(5)),
+        'SO_CURSOR_HOTSPOT': fstack('\thotspot {1},{0}', *NPOP(2)),
         'SO_HISTOGRAM': fstack('\thotspot {1},{0}', *NPOP(2)),  # SO_CURSOR_HOTSPOT
+        'SO_RENDER_LINE': fstack('\tdraw-line {4},{3} to {2},{1} color {0}', *NPOP(5)),
         'SO_SET_POLYGON': fstack('\tpolygon {0}', POP),
-    })(op, stack)
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 66:  # SO_COLOR
-        a = stack.pop()
-        b = stack.pop()
-        return f'\tpalette {b} in-slot {a}'
-    if cmd.num == 67:
-        bottom = stack.pop()
-        right = stack.pop()
-        top = stack.pop()
-        left = stack.pop()
-        return f'\tbox {left},{top} to {right},{bottom}'
-    if cmd.num == 86:
-        palette = stack.pop()
-        return f'\tpalette {palette}'
-    if cmd.num == 92:
-        scale = stack.pop()
-        return f'\tscale {scale}'
-    if cmd.num == 98:
-        shadow = stack.pop()
-        return f'\tshadow {shadow}'
-    if cmd.num == 133:
-        color = stack.pop()
-        bottom = stack.pop()
-        right = stack.pop()
-        top = stack.pop()
-        left = stack.pop()
-        return f'\tfill-box {left},{top} to {right},{bottom} with-color {color}'
-    if cmd.num == 134:
-        color = stack.pop()
-        bottom = stack.pop()
-        right = stack.pop()
-        top = stack.pop()
-        left = stack.pop()
-        return f'\tfill-line {left},{top} to {right},{bottom} with-color {color}'
-    if cmd.num == 136:
-        color = stack.pop()
-        top = stack.pop()
-        left = stack.pop()
-        return f'\tfill-flood {left},{top} with color {color}'
-    if cmd.num == 137:
-        res = stack.pop()
-        return f'\tresource {res}'
-    if cmd.num == 217:
-        return '\tempty'
-    if cmd.num == 255:
-        return '\t(end-wiz)'
-    return defop(op, stack, game)
-
-
-@regop
-def o100_wizImageOps(op, stack, game):
-    return BUILD({
-        'SO_INIT': fstack('image {0}', POP),
-        'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
-        'SO_AT_IMAGE': fstack('\tsource image {0}', POP),
-        'SO_CAPTURE': fstack('\tcapture {4} at {3},{2} to {1},{0}', *NPOP(5)),
-        'SO_CLIPPED': fstack('\tclip {3},{2} to {1},{0}', *NPOP(4)),
-        'SO_COLOR_LIST': fstack('\tcolor {1} to {0}', *NPOP(2)),
-        'SO_DRAW': fstack('\tdraw'),
-        'SO_HEIGHT': fstack('\theight {0}', POP),
-        'SO_LOAD': fstack('\tload {0}', POP_STR),
-        'SO_NEW': fstack('\tnew'),
-        'SO_NOW': fstack('draw-image {4} at {3},{2} state {1} {0}', *NPOP(5)),
-        'SO_PALETTE':  fstack('\tpalette {0}', POP),
-        'SO_POLY_TO_POLY': fstack('\tcapture {2} from polygon {1} to polygon {0}', *NPOP(3)),
-        'SO_SAVE': fstack('\tsave {1} {0}', POP_STR, POP),
-        'SO_SCALE': fstack('\tscale {0}', POP),
-        'SO_SET_FLAGS': fstack('\tset-flags {0}', POP),
-        'SO_STATE': fstack('\tstate {0}', POP),
-        'SO_WIDTH': fstack('\twidth {0}', POP),
-        'SO_END': fstack('\t(end-wiz)'),
-        'SO_FONT_CREATE': fstack('\tfont-create font {5} style {4} size {3} foreground {2} background {1}', *NPOP(5), POP_STR),
-        'SO_FONT_END': fstack('\tfont-end'),
-        'SO_FONT_RENDER': fstack('\tfont-render {2} at {1},{0}', *NPOP(2), POP_STR),
-        'SO_FONT_START': fstack('\tfont-start'),
-        'SO_RENDER_FLOOD_FILL': fstack('\tflood-fill {2},{1} color {0}', *NPOP(3)),
-        'SO_RENDER_INTO_IMAGE': fstack('\timage {0}', POP),
-        'SO_RENDER_RECTANGLE': fstack('\tdraw-box {4},{3} to {2},{1} color {0}', *NPOP(5)),
-        'SO_HISTOGRAM': fstack('\thotspot {1},{0}', *NPOP(2)),  # SO_CURSOR_HOTSPOT
+        'SO_SHADOW': fstack('\tshadow {0}', POP),
+        'SO_ANGLE': fstack('\tangle {0}', POP),
+        'SO_NEW_GENERAL_PROPERTY': fstack('\tproperty {1} is {0}', *NPOP(2)),
+        'SO_RENDER_ELLIPSE': fstack('\tdraw-ellipse {7},{6} to {5},{4} at {3},{2} steps {1} color {0}', *NPOP(8)),
     })(op, stack)
 
 
 @regop
 def o90_getPaletteData(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 66:
-        color = stack.pop()
-        slot = stack.pop()
-        stack.append(f'$ from-slot {slot} color {color}')
-        return
-    if cmd.num == 217:
-        b = stack.pop()
-        g = stack.pop()
-        r = stack.pop()
-        stack.append(f'$ color-value of {r},{g},{b}')
-        return
-    return defop(op, stack, game)
-
-
-@regop
-def o100_getPaletteData(op, stack, game):
     F_PUSH(
         BUILD({
-            'SO_CHANNEL': fstack('rgb {1} channel {0}', *NPOP(2)),
+            'SO_COLOR': fstack('palette {1} slot {0} color', *NPOP(2)),
             'SO_NEW': fstack('rgb {2},{1},{0}', *NPOP(3)),
             'SO_STATE': fstack('palette {2} slot {1} channel {0}', *NPOP(3)),
-            'SO_COLOR': fstack('palette {1} slot {0} color', *NPOP(2)),
-        })
+            # HE 100
+            'SO_CHANNEL': fstack('rgb {1} channel {0}', *NPOP(2)),
+        }),
     )(op, stack)
 
 
 @regop
 def o90_paletteOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 57:
-        palette = stack.pop()
-        return f'$ palette {palette}'
-    if cmd.num == 63:
-        ypos = stack.pop()
-        xpos = stack.pop()
-        return f'\tat {xpos},{ypos}'
-    if cmd.num == 66:
-        b = stack.pop()
-        g = stack.pop()
-        r = stack.pop()
-        unk = stack.pop()
-        color = stack.pop()
-        return f'\tcolor {color} {unk} value {r},{g},{b}'
-    if cmd.num == 70:
-        color = stack.pop()
-        end = stack.pop()
-        start = stack.pop()
-        return f'\tset-color {start} to {end} value {color}'
-    if cmd.num == 86:
-        palette = stack.pop()
-        return f'\tcopy-from {palette}'
-    if cmd.num == 217:
-        return '\treset'
-    if cmd.num == 255:
-        return '\t(end)'
-    return defop(op, stack, game)
-
-
-@regop
-def o100_paletteOps(op, stack, game):
     return BUILD({
         'SO_INIT': fstack('new palette {0}', POP),
         'SO_COLOR': fstack('\tslot {4} to {3} rgb {2},{1},{0}', *NPOP(5)),
         'SO_COSTUME': fstack('\tfrom costume {0}', POP),
+        'SO_PALETTE': fstack('\tfrom palette {0}', POP),
         'SO_TO': fstack('\tslot {2} to {1} color {0}', *NPOP(3)),
         'SO_IMAGE': fstack('\tfrom image {1} state {0}', *NPOP(2)),
         'SO_NEW': fstack('\tnew'),
@@ -3174,6 +2282,8 @@ def o6_wait(op, stack, game):
         'SO_WAIT_FOR_MESSAGE': fstack('wait-for-message'),
         'SO_WAIT_FOR_CAMERA': fstack('wait-for-camera'),
         'SO_WAIT_FOR_SENTENCE': fstack('wait-for-sentence'),
+
+        # not for HE
         'SO_WAIT_FOR_ANIMATION': fstack('wait-for-animation {0} ; [ref {1}]', POP, REF_ARG(0)),
         'SO_WAIT_FOR_TURN': fstack('wait-for-turn {0} ; [ref {1}]', POP, REF_ARG(0)),
     })(op, stack)
@@ -3190,15 +2300,8 @@ def o8_wait(op, stack, game):
 
 
 @regop
-def o100_wait(op, stack, game):
-    sub = Value(op.args[0], signed=False)
-    if sub.num == 128:
-        return f'wait-for-actor {stack.pop()} ; [ref {adr(op.args[1])}]'
-    if sub.num == 130:
-        return 'wait-for-message'
-    if sub.num == 129:
-        return 'wait-for-camera'
-    return defop(op, stack, game)
+def o80_sourceDebug(op, stack, game):
+    return fstack('source-debug {1} {0}', ARG(0), ARG(1))(op, stack)
 
 
 @regop
@@ -3295,13 +2398,24 @@ def o8_systemOps(op, stack, game):
 
 
 @regop
-def o100_systemOps(op, stack, game):
+def o70_systemOps(op, stack, game):
     return BUILD({
-        'SO_FLUSH_OBJECT_DRAW_QUE': fstack('flush-object-draw-que'),
-        'SO_UPDATE_SCREEN': fstack('update-screen'),
         'SO_RESTART': fstack('restart'),
         'SO_QUIT': fstack('quit'),
         'SO_QUIT_QUIT': fstack('quit quit'),
+        'SO_RESTART_STRING': fstack('restart {0:msg}', MSG_ARG(0)),
+    })(op, stack)
+
+
+@regop
+def o72_systemOps(op, stack, game):
+    return BUILD({
+        'SO_RESTART': fstack('restart'),
+        'SO_QUIT': fstack('quit'),
+        'SO_QUIT_QUIT': fstack('quit quit'),
+        'SO_RESTART_STRING': fstack('restart {0}', POP_STR),
+        'SO_FLUSH_OBJECT_DRAW_QUE': fstack('flush-object-draw-que'),
+        'SO_UPDATE_SCREEN': fstack('update-screen'),
     })(op, stack)
 
 
@@ -3318,36 +2432,11 @@ def o6_saveRestoreVerbs(op, stack, game):
 
 
 @regop
-def o70_systemOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 158:
-        return '$ restart'
-    if cmd.num == 160:
-        return '$ prompt-exit'
-    if cmd.num == 244:
-        return '$ quit'
-    # TODO: 150/151: Start Executable
-    # TODO: 252/253: Start Game (same as Start Executable?)
-    return defop(op, stack, game)
-
-
-@regop
-def o72_systemOps(op, stack, game):
-    return BUILD({
-        'SO_FLUSH_OBJECT_DRAW_QUE': fstack('flush-object-draw-que'),
-        'SO_UPDATE_SCREEN': fstack('update-screen'),
-        'SO_RESTART': fstack('restart'),
-        'SO_QUIT': fstack('quit'),
-        'SO_QUIT_QUIT': fstack('quit quit'),
-    })(op, stack)
-
-
-@regop
 def o70_setSystemMessage(op, stack, game):
-    sub = Value(op.args[0], signed=False)
-    string = op.args[1]
-    if sub.num == 243:
-        return f'$ window-title {string}'
+    return BUILD({
+        'SO_TITLE_BAR': fstack('title-bar {0:msg}', MSG_ARG(0)),
+        'SO_PAUSE_TITLE': fstack('pause-title {0:msg}', MSG_ARG(0)),
+    })(op, stack)
 
 
 @regop
@@ -3355,14 +2444,6 @@ def o72_setSystemMessage(op, stack, game):
     return BUILD({
         'SO_TITLE_BAR': fstack('title-bar {0}', POP_STR),
         'SO_PAUSE_TITLE': fstack('pause-title {0}', POP_STR),
-    })(op, stack)
-
-
-@regop
-def o100_setSystemMessage(op, stack, game):
-    return BUILD({
-        'SO_TITLE_BAR': fstack('title-bar {0}', POP_STR),
-        # 'SO_PAUSE_TITLE': fstack('pause-title {0}', POP_STR),
     })(op, stack)
 
 
@@ -3419,6 +2500,13 @@ def o8_resourceRoutines(op, stack, game):
 
 
 @regop
+def o72_findObjectWithClassOf(op, stack, game):
+    F_PUSH(
+        fstack('find-object {2},{1} class [{0:csvargs}]', POP_PARAMS, *NPOP(2)),
+    )(op, stack)
+
+
+@regop
 def o70_resourceRoutines(op, stack, game):
     return BUILD({
         'SO_LOAD_SCRIPT': fstack('load-script {0}', POP),
@@ -3428,19 +2516,19 @@ def o70_resourceRoutines(op, stack, game):
         # 'SO_NUKE_SCRIPT': fstack('nuke-script {0}', POP),
         'SO_NUKE_SOUND': fstack('nuke-sound {0}', POP),
         'SO_NUKE_COSTUME': fstack('nuke-costume {0}', POP),
-        # 'SO_NUKE_ROOM': fstack('nuke-room {0}', POP),
+        'SO_NUKE_ROOM': fstack('nuke-room {0}', POP),
         'SO_LOCK_SCRIPT': fstack('lock-script {0}', POP),
         'SO_LOCK_SOUND': fstack('lock-sound {0}', POP),
         'SO_LOCK_COSTUME': fstack('lock-costume {0}', POP),
-        # 'SO_LOCK_ROOM': fstack('lock-room {0}', POP),
-        # 'SO_UNLOCK_SCRIPT': fstack('unlock-script {0}', POP),
+        'SO_LOCK_ROOM': fstack('lock-room {0}', POP),
+        'SO_UNLOCK_SCRIPT': fstack('unlock-script {0}', POP),
         'SO_UNLOCK_SOUND': fstack('unlock-sound {0}', POP),
         'SO_UNLOCK_COSTUME': fstack('unlock-costume {0}', POP),
-        # 'SO_UNLOCK_ROOM': fstack('unlock-room {0}', POP),
-        # 'SO_CLEAR_HEAP': fstack('clear-heap'),
+        'SO_UNLOCK_ROOM': fstack('unlock-room {0}', POP),
+        'SO_CLEAR_HEAP': fstack('clear-heap'),
         'SO_LOAD_CHARSET': fstack('load-charset {0}', POP),
         'SO_LOAD_OBJECT': fstack('load-object {0}', POP),
-        # 'SO_PRELOAD_SCRIPT': fstack('preload-script {0}', POP),
+        'SO_PRELOAD_SCRIPT': fstack('preload-script {0}', POP),
         'SO_PRELOAD_SOUND': fstack('preload-sound {0}', POP),
         'SO_PRELOAD_COSTUME': fstack('preload-costume {0}', POP),
         'SO_PRELOAD_ROOM': fstack('preload-room {0}', POP),
@@ -3449,9 +2537,10 @@ def o70_resourceRoutines(op, stack, game):
         'SO_LOAD_IMAGE': fstack('load-image {0}', POP),
         'SO_LOCK_IMAGE': fstack('lock-image {0}', POP),
         'SO_PRELOAD_IMAGE': fstack('preload-image {0}', POP),
-        'SO_LOCK_FLOBJECT': fstack('lock-object {0}', POP),
-        # 'SO_UNLOCK_FLOBJECT': fstack('unlock-object {0}', POP),
-        # 'SO_PRELOAD_FLUSH': fstack('preload flush'),
+        'SO_LOCK_FLOBJECT': fstack('lock-flobject {0}', POP),
+        'SO_UNLOCK_FLOBJECT': fstack('unlock-flobject {0}', POP),
+        'SO_PRELOAD_FLUSH': fstack('preload flush'),
+        'SO_NUKE_CHARSET': fstack('nuke-charset {0}', POP),
     })(op, stack)
 
 
@@ -3472,6 +2561,9 @@ def o100_resourceRoutines(op, stack, game):
         'SO_NUKE': fstack('\tnuke'),
         'SO_PRELOAD': fstack('\tpreload'),
         'SO_UNLOCK': fstack('\tunlock'),
+        'SO_FLOBJECT': fstack('flobject {0}', POP),
+        'SO_OFF_HEAP': fstack('off-heap'),
+        'SO_ON_HEAP': fstack('on-heap'),
     })(op, stack)
 
 
@@ -3547,8 +2639,9 @@ def o6_shuffle(op, stack, game):
 
 @regop
 def o72_getResourceSize(op, stack, game):
-    res = stack.pop()
-    stack.append(f'$ size-of sfx {res}')
+    F_PUSH(
+        fstack('sound-size {0}', POP),
+    )(op, stack)
 
 
 @regop
@@ -3635,18 +2728,19 @@ def o6_getPixel(op, stack, game):
 
 @regop
 def o72_getPixel(op, stack, game):
-    ypos = stack.pop()
-    xpos = stack.pop()
-    sources = {9: 'background', 218: 'background', 8: 'foreground', 219: 'foreground'}
-    src = Value(op.args[0], signed=False)
-    stack.append(f'pixel {xpos}, {ypos} of {sources[src.num]}')
+    F_PUSH(
+        BUILD({
+            'SO_BACKGROUND_ON': fstack('pixel background {1},{0}', *NPOP(2)),
+            'SO_BACKGROUND_OFF': fstack('pixel {1},{0}', *NPOP(2)),
+        })
+    )(op, stack)
 
 
 @regop
 def o71_polygonHit(op, stack, game):
-    ypos = stack.pop()
-    xpos = stack.pop()
-    stack.append(f'$ polygon-hit {xpos} {ypos}')
+    F_PUSH(
+        fstack('find-polygon {1}, {0}', *NPOP(2)),
+    )(op, stack)
 
 
 @regop
@@ -3698,64 +2792,15 @@ def o72_writeFile(op, stack, game):
 
 
 @regop
-def o100_readFile(op, stack, game):
-    F_PUSH(
-        BUILD({
-            'SO_ARRAY': fstack('read-file {1} byte array [{0}]', *NPOP(2)),
-            'SO_INT': fstack('read-file {0} int', POP),
-            'SO_DWORD': fstack('read-file {0} dword', POP),
-            'SO_BYTE': fstack('read-file {0} byte', POP),
-        })
-    )(op, stack)
-    # sub = Value(op.args[0], signed=False)
-    # types = {42: 'int', 43: 'dword', 45: 'byte'}
-    # if sub.num == 5:
-    #     size = stack.pop()
-    #     slot = stack.pop()
-    #     stack.append(f'$ read-file {Value(op.args[1])} {slot} size {size}')
-    #     return
-    # if sub.num in types:
-    #     slot = stack.pop()
-    #     stack.append(f'$ read-file {types[sub.num]} {slot}')
-    #     return
-    # return defop(op, stack, game)
-
-
-@regop
-def o100_writeFile(op, stack, game):
-    return BUILD({
-        'SO_ARRAY': fstack('write-file {1} byte array {0}', *NPOP(2)),
-        'SO_INT': fstack('write-file {1} int {0}', *NPOP(2)),
-        'SO_DWORD': fstack('write-file {1} dword {0}', *NPOP(2)),
-        'SO_BYTE': fstack('write-file {1} byte {0}', *NPOP(2)),
-    })(op, stack)
-
-
-@regop
 def o72_readFile(op, stack, game):
     F_PUSH(
         BUILD({
-            'SO_ARRAY': fstack('read-file {1} byte array [{0}]', *NPOP(2)),
+            'SO_BYTE': fstack('read-file {0} byte', POP),
             'SO_INT': fstack('read-file {0} int', POP),
             'SO_DWORD': fstack('read-file {0} dword', POP),
-            'SO_BYTE': fstack('read-file {0} byte', POP),
+            'SO_ARRAY': fstack('read-file {1} byte array [{0}]', *NPOP(2)),
         })
     )(op, stack)
-    # sub = Value(op.args[0], signed=False)
-    # types = {
-    #     4: 'byte',
-    #     5: 'int',
-    #     6: 'dword',
-    #     8: 'array',
-    # }
-    # if sub.num == 8:
-    #     size = stack.pop()
-    #     slot = stack.pop()
-    #     stack.append(f'$ read-file {Value(op.args[1])} {slot} size {size}')
-    #     return
-    # slot = stack.pop()
-    # stack.append(f'$ read-file {slot} {types[sub.num]}')
-    # return
 
 
 @regop
@@ -3786,16 +2831,27 @@ def o60_readFilePos(op, stack, game):
 
 @regop
 def o71_appendString(op, stack, game):
-    ln = stack.pop()
-    src_offs = stack.pop()
-    src = stack.pop()
-    stack.append(f'string-copy {src} from {src_offs} to {ln}')
+    F_PUSH(
+        fstack('string-copy {2} from {1} to {0}', *NPOP(3)),
+    )(op, stack)
+
+
+@regop
+def o71_copyString(op, stack, game):
+    F_PUSH(fstack('string-copy {0}', POP))(op, stack)
+
+
+@regop
+def o71_concatString(op, stack, game):
+    F_PUSH(
+        fstack('string-copy {1} add {0}', *NPOP(2)),
+    )(op, stack)
 
 
 @regop
 def o80_stringToInt(op, stack, game):
     string = stack.pop()
-    stack.append(Caster(f'$ string-to-number {string}', cast='number'))
+    stack.append(Caster(f'string-number {string}', cast='number'))
 
 
 @regop
@@ -3810,9 +2866,9 @@ def o72_findAllObjects(op, stack, game):
 
 @regop
 def o90_findAllObjectsWithClassOf(op, stack, game):
-    classes = get_params(stack)
-    room = stack.pop()
-    stack.append(f'find-all-objects {room} of-class {classes}')
+    F_PUSH(
+        fstack('find-all-objects {1} class [{0:csvargs}]', POP_PARAMS, POP),
+    )(op, stack)
 
 
 @regop
@@ -3826,107 +2882,30 @@ def o6_putActorAtXY(op, stack, game):
 
 
 @regop
+def o6_putActorAtObject(op, stack, game):
+    room = stack.pop() if game.version < 7 else 0  # NOTE: 0 is valid also for <7
+    obj = stack.pop()
+    act = stack.pop()
+    room = '' if room == 0 else f' in-room {room}'
+    return f'put-actor {act} at-object {obj}{room}'
+
+
+@regop
 def o71_getCharIndexInString(op, stack, game):
     value = stack.pop()
     value.cast = 'char'
     end = stack.pop()
     pos = stack.pop()
     arr = stack.pop()
-    stack.append(f'$ index {arr} from {pos} to {end} find {value}')
-
-
-@regop
-def o6_putActorAtObject(op, stack, game):
-    room = stack.pop() if game.version < 7 else 0  # NOTE: 0 is valid also for <7
-    obj = stack.pop()
-    act = stack.pop()
-    room = '' if room == 0 else f' in room {room}'
-    return f'put-actor {act} at-object {obj}{room}'
-
-
-@regop
-def o6_startScriptQuick(op, stack, game):
-    return fstack('start-script {0}{1:pvargs}', POP_PARAMS, POP)(op, stack)
-
-
-
-@regop
-def o6_startScriptQuick2(op, stack, game):
-    params = get_params(stack)
-    param_str = ', '.join(str(param) for param in params)
-    if param_str:
-        param_str = f' ( {param_str} )'
-    scr = stack.pop()
-    stack.append(f'@{scr}{param_str}')
-    # stack.append(f'start-script rec {scr}{param_str}')
-
-
-@regop
-def o90_priorityChainScript(op, stack, game):
-    params = get_params(stack)
-    param_str = ', '.join(str(param) for param in params)
-    if param_str:
-        param_str = f' ( {param_str} )'
-    cycle = stack.pop()
-    scr = stack.pop()
-    flags = Value(op.args[0], signed=False)
-    return f'@@{scr}[{flags}]{{{cycle}}}{param_str}'
-
-
-@regop
-def o100_priorityChainScript(op, stack, game):
-    return BUILD({
-        'SO_NONE': fstack('start-script {2} order {1}{0:pvargs}', POP_PARAMS, POP, POP),
-        # 'SO_BAK': fstack('start-script bak {1}{0:pvargs}', POP_PARAMS, POP),
-        # 'SO_REC': fstack('start-script rec {1}{0:pvargs}', POP_PARAMS, POP),
-        # 'SO_BAK_REC': fstack('start-script bak rec {1}{0:pvargs}', POP_PARAMS, POP),
-    })(op, stack)
-    params = get_params(stack)
-    param_str = ', '.join(str(param) for param in params)
-    if param_str:
-        param_str = f' ( {param_str} )'
-    cycle = stack.pop()
-    scr = stack.pop()
-    flags = Value(op.args[0], signed=False)
-    return f'@@{scr}[{flags}]{{{cycle}}}{param_str}'
-
-
-@regop
-def o90_priorityStartScript(op, stack, game):
-    params = get_params(stack)
-    param_str = ', '.join(str(param) for param in params)
-    if param_str:
-        param_str = f' ( {param_str} )'
-    cycle = stack.pop()
-    scr = stack.pop()
-    flags = Value(op.args[0], signed=False)
-    return f'@@!{scr}[{flags}]{{{cycle}}}{param_str}'
-
-
-@regop
-def o100_startScript(op, stack, game):
-    return BUILD({
-        'SO_NONE': fstack('start-script {1}{0:pvargs}', POP_PARAMS, POP),
-        # 'SO_BAK': fstack('start-script bak {1}{0:pvargs}', POP_PARAMS, POP),
-        'SO_REC': fstack('start-script rec {1}{0:pvargs}', POP_PARAMS, POP),
-        # 'SO_BAK_REC': fstack('start-script bak rec {1}{0:pvargs}', POP_PARAMS, POP),
-    })(op, stack)
-    params = get_params(stack)
-    param_str = ', '.join(str(param) for param in params)
-    if param_str:
-        param_str = f' ( {param_str} )'
-    scr = stack.pop()
-    flags = Value(op.args[0], signed=False)
-    bak = ' bak' if flags.num in {128, 129} else ''
-    rec = ' rec' if flags.num in {129, 130} else ''
-    return f'start-script{bak}{rec} {scr}{param_str}'
+    stack.append(f'string-search {arr} from {pos} to {end} for {value}')
 
 
 @regop
 def o6_panCameraTo(op, stack, game):
-    # TODO: v7 uses 2 pops, x y
-    xpos = stack.pop()
-    return f'camera-pan-to {xpos}'
+    # # TODO: v7 uses 2 pops, x y
+    # if game.version >= 7:
+    #     return fstack('camera-pan-to {1},{0}', *NPOP(2))(op, stack)
+    return fstack('camera-pan-to {0}', POP)(op, stack)
 
 
 @regop
@@ -3977,9 +2956,9 @@ def o72_getArrayDimSize(op, stack, game):
 
 @regop
 def o80_getSoundVar(op, stack, game):
-    var = stack.pop()
-    sound = stack.pop()
-    stack.append(f'$ sfx-var {sound} {var}')
+    F_PUSH(
+        fstack('sound {1} variable {0}', *NPOP(2)),
+    )(op, stack)
 
 
 @regop
@@ -3989,16 +2968,8 @@ def o80_createSound(op, stack, game):
         'SO_NEW': fstack('\tnew'),
         'SO_SOUND_START': fstack('create-sound {0}', POP),
         'SO_END': fstack('\t(end-create-sound)'),
-    })(op, stack)
-
-
-@regop
-def o100_createSound(op, stack, game):
-    return BUILD({
-        'SO_SOUND_ADD': fstack('\tadd {0}', POP),
-        'SO_NEW': fstack('\tnew'),
+        # HE 100
         'SO_INIT': fstack('create-sound {0}', POP),
-        'SO_END': fstack('\t(end-create-sound)'),
     })(op, stack)
 
 
@@ -4054,12 +3025,12 @@ def o90_getActorData(op, stack, game):
 
 @regop
 def o60_localizeArrayToScript(op, stack, game):
-    return f'localize array {stack.pop()}'
+    return f'localize {stack.pop()}'
 
 
 @regop
 def o80_localizeArrayToRoom(op, stack, game):
-    return f'localize array [room] {stack.pop()}'
+    return f'room localize {stack.pop()}'
 
 
 @regop
@@ -4076,51 +3047,23 @@ def o8_startVideo(op, stack, game):
 
 
 @regop
-def o100_polygonOps(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 28:
-        to = stack.pop()
-        src = stack.pop()
-        return f'$ erase-polygon from {src} to {to}'
-    if cmd.num in {68, 69}:
-        vert4y = stack.pop()
-        vert4x = stack.pop()
-        vert3y = stack.pop()
-        vert3x = stack.pop()
-        vert2y = stack.pop()
-        vert2x = stack.pop()
-        vert1y = stack.pop()
-        vert1x = stack.pop()
-        id = stack.pop()
-        return f'$ draw-polygon {id} [{cmd}] {vert1x},{vert1y} {vert2x},{vert2y} {vert3x},{vert3y} {vert4x},{vert4y}'
-    return defop(op, stack, game)
-
-
-@regop
 def o71_polygonOps(op, stack, game):
     return BUILD({
         'SO_SET_POLYGON': fstack('set-polygon {8} at {7},{6} to {5},{4} to {3},{2} to {1},{0}', *NPOP(9)),
-        'SO_DELETE_POLYGON': fstack('delete-polygon {1} to {0}', *NPOP(2)),
         'SO_SET_POLYGON_LOCAL': fstack('set-polygon {8} at {7},{6} to {5},{4} to {3},{2} to {1},{0} local', *NPOP(9)),
-
+        'SO_DELETE_POLYGON': fstack('delete-polygon {1} to {0}', *NPOP(2)),
     })(op, stack)
 
 
 @regop
 def o100_debugInput(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 0:
-        return f's_debug = debug-input {pop_str(stack)}'
-    if cmd.num == 26:
-        return f'\tcount {stack.pop()}'
-    if cmd.num == 27:
-        return f'\tdefault {pop_str(stack)}'
-    if cmd.num == 80:
-        return f'\ttitle {pop_str(stack)}'
-    if cmd.num == 92:
-        stack.append('s_debug')
-        return
-    return defop(op, stack, game)
+    return BUILD({
+        'SO_INIT': fstack('s_debug = debug-input {0}', POP_STR),
+        'SO_COUNT': fstack('\tsize {0}', POP),
+        'SO_DEFAULT': fstack('\tdefault', POP_STR),
+        'SO_TITLE_BAR': fstack('\ttitle-bar', POP_STR),
+        'SO_END': F_PUSH(fstack('s_debug')),
+    })(op, stack)
 
 
 @regop
@@ -4130,10 +3073,7 @@ def o6_drawObject(op, stack, game):
 
 @regop
 def o6_drawObjectAt(op, stack, game):
-    ypos = stack.pop()
-    xpos = stack.pop()
-    obj = stack.pop()
-    return f'draw-object {obj} at {xpos},{ypos}'
+    return fstack('draw-object {2} at {1},{0}', *NPOP(3))(op, stack)
 
 
 @regop
@@ -4143,28 +3083,6 @@ def o72_drawObject(op, stack, game):
         'SO_IMAGE': fstack('draw-object {1} image {0}', *NPOP(2)),
         'SO_AT': fstack('draw-object {2} at {1},{0}', *NPOP(3)),
     })(op, stack)
-
-
-
-@regop
-def o100_drawObject(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 6:
-        ypos = stack.pop()
-        xpos = stack.pop()
-        obj = stack.pop()
-        return f'draw-object {obj} at {xpos},{ypos}'
-    if cmd.num == 7:
-        state = stack.pop()
-        ypos = stack.pop()
-        xpos = stack.pop()
-        obj = stack.pop()
-        return f'draw-object {obj} at {xpos},{ypos} image {state}'
-    if cmd.num == 40:
-        state = stack.pop()
-        obj = stack.pop()
-        return f'draw-object {obj} image {state}'
-    return defop(op, stack, game)
 
 
 @regop
@@ -4196,8 +3114,9 @@ def o6_getState(op, stack, game):
 
 @regop
 def o72_getSoundPosition(op, stack, game):
-    snd = stack.pop()
-    stack.append(f'$ sfx-position {snd}')
+    F_PUSH(
+        fstack('sound-position {0}', POP),
+    )(op, stack)
 
 
 @regop
@@ -4208,17 +3127,12 @@ def o6_getObjectY(op, stack, game):
 
 @regop
 def o90_sortArray(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    # 134 is the same as 129 for HE100
-    if cmd.num in (129, 134):
-        arr = get_var(op.args[1])
-        order = stack.pop()
-        dim1end = stack.pop()
-        dim1start = stack.pop()
-        dim2end = stack.pop()
-        dim2start = stack.pop()
-        return f'$ sort {arr}[{dim2start}..{dim2end}][{dim1start}..{dim1end}] {order}'
-    return defop(op, stack, game)
+    return BUILD({
+        'SO_SORT': PBUILD({
+            -1: fstack('array {0} sort < [{4} to {3}] [{2} to {1}]', SCRIPT_VAR(0), *NPOP(4)),
+            1: fstack('array {0} sort > [{4} to {3}] [{2} to {1}]', SCRIPT_VAR(0), *NPOP(4)),
+        }),
+    })(op, stack)
 
 
 @regop
@@ -4234,47 +3148,27 @@ def o90_getWizData(op, stack, game):
             'SO_COLOR': fstack('image {3} state {2} color {1},{0}', *NPOP(4)),
             'SO_NEW_GENERAL_PROPERTY': fstack('image {1} property {0}', *NPOP(2)),
             'SO_FONT_START': fstack('image {2} text-extent {1} property {0}', POP, POP_STR, POP),
+            'SO_HISTOGRAM': fstack('image {5} state {4} histogram clip {3},{2} to {1},{0}', *NPOP(6)),
         })
     )(op, stack)
 
 
 @regop
 def o90_fontEnum(op, stack, game):
-    cmd = Value(op.args[0], signed=False)
-    if cmd.num == 0 if game.he_version >= 100 else cmd.num == 57:
-        # Init
-        stack.append(f'$ font-enum-init')
-        return
-    if cmd.num == 60 if game.he_version >= 100 else cmd.num == 42:
-        # Property
-        subCmd = stack.pop()
-        unk = stack.pop()
-        if subCmd.num == 1:
-            # FONT_ENUM_GET
-            stack.append(f'$ font-enum-get {unk}')
-            return
-        if subCmd.num == 2:
-            # FONT_ENUM_FIND
-            stack.append(f'$ font-enum-find {unk}')
-            return
-    return defop(op, stack, game)
+    F_PUSH(
+        BUILD({
+            'SO_INIT': fstack('font-enumerate enum-start'),
+            'SO_PROPERTY': PBUILD({
+                1: fstack('font-enumerate get {0}', POP),  # FONT_ENUM_GET
+                2: fstack('font-enumerate find {0}', POP_STR),  # FONT_ENUM_FIND
+            })
+        })
+    )(op, stack)
 
 
 @regop
-def o100_getWizData(op, stack, game):
-    F_PUSH(
-        BUILD({
-            'SO_XPOS': fstack('image {1} state {0} object-x', *NPOP(2)),
-            'SO_YPOS': fstack('image {1} state {0} object-y', *NPOP(2)),
-            'SO_WIDTH': fstack('image {1} state {0} width', *NPOP(2)),
-            'SO_HEIGHT': fstack('image {1} state {0} height', *NPOP(2)),
-            'SO_COUNT': fstack('image {0} state-count', POP),
-            'SO_FIND': fstack('image {3} state {2} pixel {1},{0}', *NPOP(4)),
-            'SO_COLOR': fstack('image {3} state {2} color {1},{0}', *NPOP(4)),
-            'SO_NEW_GENERAL_PROPERTY': fstack('image {1} property {0}', *NPOP(2)),
-            'SO_FONT_START': fstack('image {2} text-extent {1} property {0}', POP, POP_STR, POP),
-        })
-    )(op, stack)
+def o80_drawWizPolygon(op, stack, game):
+    return fstack('draw-image {1} polygon {0}', *NPOP(2))(op, stack)
 
 
 @regop
@@ -4713,7 +3607,11 @@ def decompile_script(elem, game, verbose=False, transform=True):
     indent = '\t'
     # print('====================')
     bytecode = descumm_iter(script_data, optable, base_offset=8)
+    # from nutcracker.sputm.script.bytecode import print_bytecode
+    # bytecode = dict(bytecode)
     # print_bytecode(bytecode)
+    # bytecode = iter(bytecode.items())
+
 
     hrefs = set()
     srefs = {0}
