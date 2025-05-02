@@ -1,6 +1,6 @@
-from collections.abc import Callable, Iterable, Iterator
-from typing import IO, Protocol
 import itertools
+from collections.abc import Callable, Iterable, Iterator
+from typing import IO, Protocol, Self
 
 
 def read_message(
@@ -113,7 +113,7 @@ class Statement:
         ops: Iterable[Callable[[IO[bytes]], Iterable[ScriptArg]]],
         opcode: int,
         stream: IO[bytes],
-    ) -> None:
+    ) -> 'Self':
         return cls(
             name,
             opcode,

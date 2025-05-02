@@ -10,12 +10,12 @@ from nutcracker.utils.funcutils import flatten
 from .parser import CString, RefOffset, ScriptArg, Statement
 
 S_Arg = TypeVar('S_Arg', bound=ScriptArg)
-ByteCode = Mapping[int, Statement]
+ByteCode = Mapping[int, Statement | SomeOp]
 
 
 def get_argtype(args: Iterable[ScriptArg], argtype: type[S_Arg]) -> Iterable[S_Arg]:
     for arg in args:
-        if isinstance(arg, SomeOp):
+        if isinstance(arg, Statement | SomeOp):
             yield from get_argtype(arg.args, argtype)
         elif isinstance(arg, argtype):
             yield arg
