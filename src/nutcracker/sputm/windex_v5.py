@@ -449,7 +449,7 @@ def o5_stringOps_wd(op):
 
 @regop('o5_getStringWidth')
 def o5_getStringWidth_wd(op):
-    return fstat('{0} = $ string-width {1}', *op.args)
+    return fstat('{0} = string-width {1}', *op.args)
 
 
 @regop('o5_isNotEqual')
@@ -792,12 +792,12 @@ def o5_roomOps_wd(op, version=5):
             'SO_RGB_ROOM_INTENSITY': (
                 # windex displays empty string here for some reason
                 # not found in SCUMM refrence, string is made up
-                'palette intensity [rgb] {0} {1} {2} in-slot {4} to {5}'
+                'palette intensity {0} {1} {2} in-slot {4} to {5}'
             ),
             'SO_ROOM_SHADOW': (
                 # windex displays empty string here for some reason
                 # not found in SCUMM refrence, string is made up
-                'room-shadow [rgb] {0} {1} {2} in-slot {4} to {5}'
+                'room-shadow {0} {1} {2} in-slot {4} to {5}'
             ),
             'SO_SAVE_STRING': 'save-string {0} {1:msg}',
             'SO_LOAD_STRING': 'load-string {0} {1:msg}',

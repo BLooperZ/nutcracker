@@ -17,6 +17,11 @@ from nutcracker.sputm.script.bytecode import (
     verb_script,
 )
 from nutcracker.sputm.script.opcodes import (
+    OPCODES_v6,
+    OPCODES_v8,
+    OpTable,
+)
+from nutcracker.sputm.script.opcodes_he import (
     OPCODES_he60,
     OPCODES_he70,
     OPCODES_he71,
@@ -26,9 +31,6 @@ from nutcracker.sputm.script.opcodes import (
     OPCODES_he90,
     OPCODES_he100,
     OPCODES_he101,
-    OPCODES_v6,
-    OPCODES_v8,
-    OpTable,
 )
 from nutcracker.sputm.script.opcodes_v5 import OPCODES_v5
 
