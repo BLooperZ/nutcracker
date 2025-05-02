@@ -146,11 +146,11 @@ class SubOpsV6(ReverseLookup):
     SO_VERB_INIT = 196
     SO_ACTOR_INIT = 197
     SO_ACTOR_VARIABLE = 198
-    SO_INT_ARRAY = 199
-    SO_BIT_ARRAY = 200
-    SO_NIBBLE_ARRAY = 201
-    SO_BYTE_ARRAY = 202
-    SO_STRING_ARRAY = 203
+    SO_INT = 199  # SO_INT_ARRAY
+    SO_BIT = 200  # SO_BIT_ARRAY
+    SO_NIBBLE = 201  # SO_NIBBLE_ARRAY
+    SO_BYTE = 202  # SO_BYTE_ARRAY
+    SO_STRING = 203  # SO_STRING_ARRAY
     SO_UNDIM_ARRAY = 204
     SO_ASSIGN_STRING = 205
 
@@ -181,8 +181,8 @@ class SubOpsV6(ReverseLookup):
 
 
 class SubOpsV8(ReverseLookup):
-    SO_INT_ARRAY = 10  # SO_ARRAY_SCUMMVAR
-    SO_STRING_ARRAY = 11  # SO_ARRAY_STRING
+    SO_INT = 10  # SO_ARRAY_SCUMMVAR
+    SO_STRING = 11  # SO_ARRAY_STRING
     SO_UNDIM_ARRAY = 12  # SO_ARRAY_UNDIM
 
     SO_ASSIGN_STRING = 20
@@ -224,7 +224,7 @@ class SubOpsV8(ReverseLookup):
     SO_ROOM_PALETTE = 82
 
     SO_ROOM_FADE = 87
-    SO_ROOM_RGB_INTENSITY = 88
+    SO_RGB_ROOM_INTENSITY = 88  # SO_ROOM_RGB_INTENSITY
     SO_ROOM_TRANSFORM = 89
 
     SO_ROOM_NEW_PALETTE = 92
@@ -284,7 +284,7 @@ class SubOpsV8(ReverseLookup):
     SO_VERB_DIMCOLOR = 160
     SO_VERB_DIM = 161
     SO_VERB_KEY = 162
-    SO_VERB_IMAGE = 163
+    SO_VERB_IMAGE_IN_ROOM = 163  # SO_VERB_IMAGE
     SO_VERB_NAME_STR = 164
     SO_VERB_CENTER = 165
     SO_VERB_CHARSET = 166
@@ -400,7 +400,7 @@ OPCODES_v6: OpTable = realize({
     0x18: makeop('o6_land'),  # logical and
     0x19: makeop('o6_lor'),  # logical or
     0x1A: makeop('o6_pop'),
-    # TODO: 0x42: makeop('o6_writeByteVar'),
+    0x42: makeop('o6_writeByteVar', IMBYTE),
     0x43: makeop('o6_writeWordVar', IMWORD),
     # TODO: 0x46: makeop('o6_byteArrayWrite'),
     0x47: makeop('o6_wordArrayWrite', IMWORD),
@@ -480,7 +480,7 @@ OPCODES_v6: OpTable = realize({
     0x9D: makeop('actorOps', SUBOP(SubOpsV6, {
         SubOpsV6.SO_ACTOR_NAME: (MSG_OP,),
     })),
-    0x9E: makeop('o6_verbOps', SUBOP(SubOpsV6, {
+    0x9E: makeop('verbOps', SUBOP(SubOpsV6, {
         SubOpsV6.SO_VERB_NAME: (MSG_OP,),
     })),
     0x9F: makeop('o6_getActorFromXY'),
@@ -533,29 +533,29 @@ OPCODES_v6: OpTable = realize({
     0xBA: makeop('o6_talkActor', MSG_OP),
     0xBB: makeop('o6_talkEgo', MSG_OP),
     0xBC: makeop('dimArray', SUBOP(SubOpsV6, {
-        SubOpsV6.SO_INT_ARRAY: (IMWORD,),
-        SubOpsV6.SO_BIT_ARRAY: (IMWORD,),
-        SubOpsV6.SO_NIBBLE_ARRAY: (IMWORD,),
-        SubOpsV6.SO_BYTE_ARRAY: (IMWORD,),
-        SubOpsV6.SO_STRING_ARRAY: (IMWORD,),
+        SubOpsV6.SO_INT: (IMWORD,),
+        SubOpsV6.SO_BIT: (IMWORD,),
+        SubOpsV6.SO_NIBBLE: (IMWORD,),
+        SubOpsV6.SO_BYTE: (IMWORD,),
+        SubOpsV6.SO_STRING: (IMWORD,),
         SubOpsV6.SO_UNDIM_ARRAY: (IMWORD,),
     })),
-    0xBD: makeop('o6_dummy'),
+    0xBD: makeop('o6_stopObjectCodeReturn'),
     0xBE: makeop('o6_startObjectQuick'),
     0xBF: makeop('o6_startScriptQuick2'),
     0xC0: makeop('dim2dimArray', SUBOP(SubOpsV6, {
-        SubOpsV6.SO_INT_ARRAY: (IMWORD,),
-        SubOpsV6.SO_BIT_ARRAY: (IMWORD,),
-        SubOpsV6.SO_NIBBLE_ARRAY: (IMWORD,),
-        SubOpsV6.SO_BYTE_ARRAY: (IMWORD,),
-        SubOpsV6.SO_STRING_ARRAY: (IMWORD,),
+        SubOpsV6.SO_INT: (IMWORD,),
+        SubOpsV6.SO_BIT: (IMWORD,),
+        SubOpsV6.SO_NIBBLE: (IMWORD,),
+        SubOpsV6.SO_BYTE: (IMWORD,),
+        SubOpsV6.SO_STRING: (IMWORD,),
     })),
     0xC4: makeop('o6_abs'),
     0xC5: makeop('o6_distObjectObject'),
     # TODO: 0xc6: makeop('o6_distObjectPt'),
     0xC7: makeop('o6_distPtPt'),
-    0xC8: makeop('o6_kernelGetFunctions'),
-    0xC9: makeop('o6_kernelSetFunctions'),
+    0xC8: makeop('kernelGetFunctions'),
+    0xC9: makeop('kernelSetFunctions'),
     0xCA: makeop('o6_delayFrames'),
     0xCB: makeop('o6_pickOneOf'),
     0xCC: makeop('o6_pickOneOfDefault'),
@@ -617,16 +617,16 @@ OPCODES_v8: OpTable = realize({
     0x6E: makeop('o6_wordVarInc', IMDWORD),
     0x6F: makeop('o6_wordVarDec', IMDWORD),
     0x70: makeop('dimArray', SUBOP(SubOpsV8, {
-        SubOpsV8.SO_INT_ARRAY: (IMDWORD,),
-        SubOpsV8.SO_STRING_ARRAY: (IMDWORD,),
+        SubOpsV8.SO_INT: (IMDWORD,),
+        SubOpsV8.SO_STRING: (IMDWORD,),
         SubOpsV8.SO_UNDIM_ARRAY: (IMDWORD,),
     })),
     0x71: makeop('o6_wordArrayWrite', IMDWORD),
     0x72: makeop('o6_wordArrayInc', IMDWORD),
     0x73: makeop('o6_wordArrayDec', IMDWORD),
     0x74: makeop('dim2dimArray', SUBOP(SubOpsV8, {
-        SubOpsV8.SO_INT_ARRAY: (IMDWORD,),
-        SubOpsV8.SO_STRING_ARRAY: (IMDWORD,),
+        SubOpsV8.SO_INT: (IMDWORD,),
+        SubOpsV8.SO_STRING: (IMDWORD,),
     })),
     0x75: makeop('o6_wordArrayIndexedWrite', IMDWORD),
     0x76: makeop('arrayOps', SUBOP(SubOpsV8, {
@@ -639,7 +639,7 @@ OPCODES_v8: OpTable = realize({
     0x7B: makeop('o6_stopObjectCodeScript'),  # o6_stopObjectCode
     0x7C: makeop('o6_stopScript'),
     0x7D: makeop('o6_jumpToScript'),
-    0x7E: makeop('o6_dummy'),
+    0x7E: makeop('o6_stopObjectCodeReturn'),
     0x7F: makeop('o6_startObject'),
     0x80: makeop('o6_stopObjectScript'),
     0x81: makeop('o6_cutscene'),
@@ -698,9 +698,8 @@ OPCODES_v8: OpTable = realize({
         SubOpsV8.SO_ACTOR_NAME: (MSG_OP_V8,),
     })),
     0xAD: makeop('o8_cameraOps', SUBOP(SubOpsV8)),
-    0xAE: makeop('o8_verbOps', SUBOP(SubOpsV8, {
+    0xAE: makeop('verbOps', SUBOP(SubOpsV8, {
         SubOpsV8.SO_VERB_NAME: (MSG_OP_V8,),
-        SubOpsV8.SO_VERB_NAME_STR: (MSG_OP_V8,),
     })),
     0xAF: makeop('o6_startSound'),
     0xB0: makeop('o6_startMusic'),
@@ -712,7 +711,7 @@ OPCODES_v8: OpTable = realize({
     0xB6: makeop('o6_getDateTime'),
     0xB7: makeop('o6_drawBox'),
     0xB9: makeop('o8_startVideo', MSG_OP_V8),
-    0xBA: makeop('o8_kernelSetFunctions'),
+    0xBA: makeop('kernelSetFunctions'),
     0xC8: makeop('o6_startScriptQuick2'),
     0xC9: makeop('o6_startObjectQuick'),
     0xCA: makeop('o6_pickOneOf'),
@@ -726,7 +725,7 @@ OPCODES_v8: OpTable = realize({
     0xD3: makeop('o6_isScriptRunning'),
     0xD5: makeop('o6_isSoundRunning'),
     0xD6: makeop('o6_abs'),
-    0xD8: makeop('o8_kernelGetFunctions'),
+    0xD8: makeop('kernelGetFunctions'),
     0xD9: makeop('o6_isActorInBox'),
     0xDA: makeop('o6_getVerbEntrypoint'),
     0xDB: makeop('o6_getActorFromXY'),
