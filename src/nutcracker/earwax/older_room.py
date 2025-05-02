@@ -1,7 +1,7 @@
 import os
 import struct
 
-from nutcracker.kernel.index import create_element
+from nutcracker.earwax.resource import create_element
 
 from .preset import earwax
 
