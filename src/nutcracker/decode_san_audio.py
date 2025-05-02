@@ -45,7 +45,8 @@ def verify_nframes(frames, nframes):
 if __name__ == '__main__':
     import argparse
 
-    from nutcracker.smush import anim, smush
+    from nutcracker.smush import anim
+    from nutcracker.smush.preset import smush
 
     parser = argparse.ArgumentParser(description='read smush file')
     parser.add_argument('filename', help='filename to read from')

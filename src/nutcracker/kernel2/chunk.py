@@ -167,7 +167,7 @@ def read_chunk_header(
     return offset + cfg.header_dtype.itemsize(), chunk_header
 
 
-class UnexpectedBufferSizeError(EOFError):
+class UnexpectedBufferSizeError(ValueError):
     def __init__(self, expected: int, given: int, buffer: ArrayBuffer) -> None:
         super().__init__(f'chunk data size mismatch: {expected} != {given}')
         self.expected = expected

@@ -3,29 +3,31 @@ import io
 import itertools
 import os
 import struct
+from collections.abc import Sequence
 
+from nutcracker.codex import bpp_cost
+from nutcracker.graphics.image import convert_to_pil_image
+from nutcracker.kernel2.element import Element
+from nutcracker.sputm.preset import sputm
 from nutcracker.sputm.room.pproom import get_rooms, read_room_settings
 from nutcracker.sputm.tree import open_game_resource
+from nutcracker.utils.funcutils import flatten
 
 UINT32LE = struct.Struct('<I')
 UINT16LE = struct.Struct('<H')
 SINT16LE = struct.Struct('<h')
 
 
-from nutcracker.codex import bpp_cost
-from nutcracker.graphics.image import convert_to_pil_image
-from nutcracker.utils.funcutils import flatten
-
-from ..preset import sputm
-
-
-def read_cost_resource(cost, room_palette, version):
+def read_cost_resource(cost: Element, room_palette: Sequence[int], version: int) -> None:
     with io.BytesIO(cost.data) as stream:
         size = 1
+        header = b''
+        off_fix = 6
         if version == 6:
             size = UINT32LE.unpack(stream.read(UINT32LE.size))[0]
             header = stream.read(2)
             assert header == b'CO'
+            off_fix = 0
         num_anim = stream.read(1)[0] + (1 if size > 0 else 0)
         assert num_anim > 0
         flags = stream.read(1)[0]
@@ -53,7 +55,7 @@ def read_cost_resource(cost, room_palette, version):
                 continue
             if off in parsed_offs:
                 continue
-            assert stream.tell() == off, (stream.tell(), off)
+            assert stream.tell() + off_fix == off, (stream.tell(), off)
             parsed_offs |= {off}
             limb_mask = UINT16LE.unpack(stream.read(UINT16LE.size))[0]
             # print('LIMB MASK', f'{limb_mask:016b}')
@@ -71,15 +73,15 @@ def read_cost_resource(cost, room_palette, version):
 
         # print('GLIMB MASK', f'{glimb_mask:016b}')
         assert glimb_mask != 0, glimb_mask
-        assert stream.tell() == anim_cmds_offset, (stream.tell(), anim_cmds_offset)
-        cmds = stream.read(limbs_offsets[0] - stream.tell())
+        assert stream.tell() + off_fix == anim_cmds_offset, (stream.tell(), anim_cmds_offset)
+        cmds = stream.read(limbs_offsets[0] - off_fix - stream.tell())
 
         cpic_offs = []
 
         diff_limbs = sorted(set(limbs_offsets))
         if len(diff_limbs) > 1:
             for limb_idx, off in enumerate(diff_limbs[:-1]):
-                assert stream.tell() == off, (stream.tell(), off)
+                assert stream.tell() + off_fix == off, (stream.tell(), off)
                 num_pics = (diff_limbs[limb_idx + 1] - off) // 2
                 pic_offs = [
                     UINT16LE.unpack(stream.read(UINT16LE.size))[0]
@@ -87,19 +89,19 @@ def read_cost_resource(cost, room_palette, version):
                 ]
                 cpic_offs += pic_offs
         else:
-            assert stream.tell() == diff_limbs[0], (stream.tell(), diff_limbs[0])
+            assert stream.tell() + off_fix == diff_limbs[0], (stream.tell(), diff_limbs[0])
             cpic_offs = [UINT16LE.unpack(stream.read(UINT16LE.size))[0]]
-            while stream.tell() < cpic_offs[0]:
+            while stream.tell() + off_fix < cpic_offs[0]:
                 cpic_offs.append(UINT16LE.unpack(stream.read(UINT16LE.size))[0])
 
         flag_skip = None
         for off in cpic_offs:
             if off == 0:
                 continue
-            if stream.tell() + 1 == off:
+            if stream.tell() + off_fix + 1 == off:
                 pad = stream.read(1)
                 # assert pad == b'\0', (stream.tell(), off, pad)
-            assert stream.tell() == off, (stream.tell(), off)
+            assert stream.tell() + off_fix == off, (stream.tell(), off)
             width = UINT16LE.unpack(stream.read(UINT16LE.size))[0]
             height = UINT16LE.unpack(stream.read(UINT16LE.size))[0]
             rel_x = SINT16LE.unpack(stream.read(SINT16LE.size))[0]
@@ -175,6 +177,8 @@ if __name__ == '__main__':
                         palette,
                         gameres.game.version,
                     ):
+                        if im.size[0] == 0 or im.size[1] == 0:
+                            continue
                         im.save(
                             f'COST_out/{basename}/{os.path.basename(lflf.attribs["path"])}_{os.path.basename(cost.attribs["path"])}_{off:08X}.png',
                         )

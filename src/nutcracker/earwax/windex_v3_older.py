@@ -1,7 +1,7 @@
 import io
 import os
 from collections import deque
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterator
 from typing import IO
 
 from nutcracker.earwax.older_sizeonly import open_game_resource
@@ -11,7 +11,7 @@ from nutcracker.earwax.windex_v4 import (
     get_room_scripts,
     global_script,
 )
-from nutcracker.kernel.element import Element
+from nutcracker.kernel2.element import Element
 from nutcracker.sputm.script.bytecode import (
     BytecodeParseError,
     descumm_iter,
@@ -72,7 +72,7 @@ def dump_script_file(
     room: Element,
     decompile: Callable[[Element], Iterator[str]],
     outfile: IO[str],
-):
+) -> None:
     children = list(room.children())
     print(children)
     for elem in get_global_scripts(children):
