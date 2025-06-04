@@ -655,26 +655,26 @@ OPCODES_v8: OpTable = realize({
     0x8C: makeop('o6_panCameraTo'),
     0x8D: makeop('o6_actorFollowCamera'),
     0x8E: makeop('o6_setCameraAt'),
-    0x8F: makeop('o8_printActor', SUBOP(SubOpsV8, {
+    0x8F: makeop('o6_printActor', SUBOP(SubOpsV8, {
         SubOpsV8.SO_TEXTSTRING: (MSG_OP_V8,),
-    })),  # o6_printActor
-    0x90: makeop('o8_printEgo', SUBOP(SubOpsV8, {
+    })),
+    0x90: makeop('o6_printEgo', SUBOP(SubOpsV8, {
         SubOpsV8.SO_TEXTSTRING: (MSG_OP_V8,),
-    })),  # o6_printEgo
-    0x91: makeop('o8_talkActor', MSG_OP_V8),  # o6_talkActor
-    0x92: makeop('o8_talkEgo', MSG_OP_V8),  # o6_talkEgo
-    0x93: makeop('o8_printLine', SUBOP(SubOpsV8, {
+    })),
+    0x91: makeop('o6_talkActor', MSG_OP_V8),
+    0x92: makeop('o6_talkEgo', MSG_OP_V8),
+    0x93: makeop('o6_printLine', SUBOP(SubOpsV8, {
         SubOpsV8.SO_TEXTSTRING: (MSG_OP_V8,),
-    })),  # o6_printLine
-    0x94: makeop('o8_printText', SUBOP(SubOpsV8, {
+    })),
+    0x94: makeop('o6_printText', SUBOP(SubOpsV8, {
         SubOpsV8.SO_TEXTSTRING: (MSG_OP_V8,),
-    })),  # o6_printText
-    0x95: makeop('o8_printDebug', SUBOP(SubOpsV8, {
+    })),
+    0x95: makeop('o6_printDebug', SUBOP(SubOpsV8, {
         SubOpsV8.SO_TEXTSTRING: (MSG_OP_V8,),
-    })),  # o6_printDebug
-    0x96: makeop('o8_printSystem', SUBOP(SubOpsV8, {
+    })),
+    0x96: makeop('o6_printSystem', SUBOP(SubOpsV8, {
         SubOpsV8.SO_TEXTSTRING: (MSG_OP_V8,),
-    })),  # o6_printSystem
+    })),
     0x97: makeop('o8_blastText', SUBOP(SubOpsV8, {
         SubOpsV8.SO_TEXTSTRING: (MSG_OP_V8,),
     })),

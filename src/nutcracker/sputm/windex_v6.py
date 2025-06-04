@@ -424,7 +424,7 @@ def ARG(num):
 def BYTE_ARG(num):
     def inner(op, stack):
         assert isinstance(op.args[num], ByteValue), op.args
-        return Value(op.args[num])
+        return Value(op.args[num], signed=False)
     return inner
 
 def WORD_ARG(num):
@@ -1037,15 +1037,10 @@ def o70_readINI(op, stack, game):
 
 @regop
 def o70_writeINI(op, stack, game):
-    sub = stack.pop()
-    value = stack.pop()
-    option = op.args[0]
-    if sub.num == 1:
-        return f'write-ini {option} = {value}'
-    if sub.num == 2:
-        value = op.args[1]
-        return f'write-ini string {option} = {value}'
-    return defop(op, stack, game)
+    return PBUILD({
+        1: fstack('write-ini {1:msg} = {0}', POP, MSG_ARG(0)),
+        2: fstack('write-ini string {1:msg} = {0:msg}', MSG_ARG(1), MSG_ARG(0)),
+    })(op, stack)
 
 
 def CAST(cast, func):
@@ -1074,28 +1069,22 @@ def o72_writeINI(op, stack, game):
 
 @regop
 def o60_rename(op, stack, game):
-    target = op.args[1]
-    source = op.args[0]
-    return f'rename-file {msg_val(source)} to {msg_val(target)}'
+    return fstack('rename-file {1:msg} to {0:msg}', MSG_ARG(1), MSG_ARG(0))(op, stack)
 
 
 @regop
 def o72_rename(op, stack, game):
-    target = pop_str(stack)
-    source = pop_str(stack)
-    return f'rename-file {source} to {target}'
+    return fstack('rename-file {1} to {0}', POP_STR, POP_STR)(op, stack)
 
 
 @regop
 def o72_debugInput(op, stack, game):
-    string = pop_str(stack)
-    stack.append(f'debug-input {string}')
+    F_PUSH(fstack('debug-input {0}', POP_STR))(op, stack)
 
 
 @regop
 def o8_debug(op, stack, game):
-    level = stack.pop()
-    return f'debug {level}'
+    return fstack('debug {0}', POP)(op, stack)
 
 
 @regop
@@ -1108,9 +1097,9 @@ def o72_traceStatus(op, stack, game):
     return fstack('debug {1} {0}', POP, POP_STR)(op, stack)
 
 
-def printer(action, op, stack, *, pop_actor=False):
+def printer(baseop, op, stack):
     return BUILD({
-        'SO_BASEOP': fstack(f'{action} {{0}}', POP) if pop_actor else fstack(f'{action}'),
+        'SO_BASEOP': baseop,
         'SO_AT': fstack('\tat {1},{0}', *NPOP(2)),
         'SO_CLIPPED': fstack('\tclipped {0}', POP),
         'SO_CENTER': fstack('\tcenter'),
@@ -1130,124 +1119,70 @@ def printer(action, op, stack, *, pop_actor=False):
     })(op, stack)
 
 
-@regop
-def o8_printDebug(op, stack, game):
-    return printer('print-debug', op, stack)
-
-
-@regop
-def o8_printText(op, stack, game):
-    return printer('print-text', op, stack)
+def PRINTER(action, *args):
+    def inner(op, stack):
+        return printer(fstack(action, *args), op, stack)
+    return inner
 
 
 @regop
 def o8_blastText(op, stack, game):
-    return printer('blast-text', op, stack)
-
-
-@regop
-def o8_printLine(op, stack, game):
-    return printer('print-line', op, stack)
-
-
-@regop
-def o8_printSystem(op, stack, game):
-    return printer('print-system', op, stack)
-
-
-@regop
-def o8_printEgo(op, stack, game):
-    # with io.BytesIO(b'\x09\x00') as stream:
-    #     stack.append(get_var(WordValue(stream)))
-    return printer('say-line', op, stack)
-
-
-@regop
-def o8_printActor(op, stack, game):
-    return printer('say-line', op, stack, pop_actor=True)
+    return PRINTER('blast-text')(op, stack)
 
 
 @regop
 def o6_printDebug(op, stack, game):
-    return printer('print-debug', op, stack)
+    return PRINTER('print-debug')(op, stack)
 
 
 @regop
 def o6_printText(op, stack, game):
-    return printer('print-text', op, stack)
+    return PRINTER('print-text')(op, stack)
 
 
 @regop
 def o6_printLine(op, stack, game):
-    return printer('print-line', op, stack)
+    return PRINTER('print-line')(op, stack)
 
 
 @regop
 def o6_printSystem(op, stack, game):
-    return printer('print-system', op, stack)
+    return PRINTER('print-system')(op, stack)
 
 
 @regop
 def o6_printEgo(op, stack, game):
-    return printer('say-line', op, stack)
+    return PRINTER('say-line')(op, stack)
 
 
 @regop
 def o6_printActor(op, stack, game):
-    return printer('say-line', op, stack, pop_actor=True)
-
-
-@regop
-def o72_talkActor(op, stack, game):
-    act = stack.pop()
-    return f'say-line {act} {msg_val(op.args[0])}'
-
-
-@regop
-def o72_talkEgo(op, stack, game):
-    return f'say-line {msg_val(op.args[0])}'
+    return PRINTER('say-line {0}', POP)(op, stack)
 
 
 @regop
 def o6_talkEgo(op, stack, game):
-    # with io.BytesIO(b'\x09\x00') as stream:
-    #     stack.append(get_var(WordValue(stream)))
-    return f'say-line {msg_val(op.args[0])}'
+    return fstack('say-line {0:msg}', MSG_ARG(0))(op, stack)
 
 
 @regop
 def o6_talkActor(op, stack, game):
-    act = stack.pop()
-    return f'say-line {act} {msg_val(op.args[0])}'
-
-
-@regop
-def o8_talkActor(op, stack, game):
-    act = stack.pop()
-    return f'say-line {act} {msg_val(op.args[0])}'
+    return fstack('say-line {1} {0:msg}', MSG_ARG(0), POP)(op, stack)
 
 
 @regop
 def o6_setBlastObjectWindow(op, stack, game):
-    bottom = stack.pop()
-    right = stack.pop()
-    top = stack.pop()
-    left = stack.pop()
-    return f'& blast-object-window {left},{top} to {right},{bottom}'
+    return fstack('set-blastport {3},{2} to {1},{0}', *NPOP(4))(op, stack)
 
 
 @regop
 def o71_getStringWidth(op, stack, game):
-    ln = stack.pop()
-    pos = stack.pop()
-    array = stack.pop()
-    stack.append(f'string-width {array} from {pos} to {ln}')
+    F_PUSH(fstack('string-width {2} from {1} to {0}', *NPOP(3)))(op, stack)
 
 
 @regop
 def o8_getStringWidth(op, stack, game):
-    charset = stack.pop()
-    stack.append(f'string-width charset {charset} {msg_val(op.args[0])}')
+    F_PUSH(fstack('string-width charset {1} {0:msg}', MSG_ARG(0), POP))(op, stack)
 
 
 @regop
@@ -1274,26 +1209,22 @@ def o72_resetCutscene(op, stack, game):
 
 @regop
 def o70_createDirectory(op, stack, game):
-    string = op.args[0]
-    return f'create-directory {string}'
+    return fstack('create-directory {0:msg}', MSG_ARG(0))(op, stack)
 
 
 @regop
 def o72_createDirectory(op, stack, game):
-    string = pop_str(stack)
-    return f'create-directory {string}'
+    return fstack('create-directory {0}', POP_STR)(op, stack)
 
 
 @regop
 def o60_deleteFile(op, stack, game):
-    string = op.args[0]
-    return f'delete-file {msg_val(string)}'
+    return fstack('delete-file {0:msg}', MSG_ARG(0))(op, stack)
 
 
 @regop
 def o72_deleteFile(op, stack, game):
-    string = pop_str(stack)
-    return f'delete-file {string}'
+    return fstack('delete-file {0}', POP_STR)(op, stack)
 
 
 @regop
@@ -1396,19 +1327,12 @@ def o100_isResourceLoaded(op, stack, game):
 
 @regop
 def o6_doSentence(op, stack, game):
-    obj_b = stack.pop()
-    flags = stack.pop()
-    obj_a = stack.pop()
-    verb = stack.pop()
-    return f'do-sentence {verb} {obj_a} [{flags}] {obj_b}'
+    return fstack('do-sentence {3} {2} {1} {0}', *NPOP(4))(op, stack)
 
 
 @regop
 def o8_doSentence(op, stack, game):
-    obj_b = stack.pop()
-    obj_a = stack.pop()
-    verb = stack.pop()
-    return f'do-sentence {verb} {obj_a} with {obj_b}'
+    return fstack('do-sentence {2} {1} with {0}', *NPOP(3))(op, stack)
 
 
 @regop
@@ -3192,16 +3116,14 @@ def o6_walkActorToObj(op, stack, game):
 
 @regop
 def o6_distObjectObject(op, stack, game):
-    another = stack.pop()
-    obj = stack.pop()
-    stack.append(f'proximity {obj} {another}')
+    F_PUSH(
+        fstack('proximity {1} to {0}', *NPOP(2)),
+    )(op, stack)
 
 
 @regop
 def o6_distPtPt(op, stack, game):
-    y2, x2 = stack.pop(), stack.pop()
-    y1, x1 = stack.pop(), stack.pop()
-    stack.append(f'proximity {x1},{y1} to {x2},{y2}')
+    F_PUSH(fstack('proximity {3},{2} to {1},{0}', *NPOP(4)))(op, stack)
 
 
 @regop

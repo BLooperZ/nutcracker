@@ -572,8 +572,8 @@ OPCODES_he72: OpTable = realize(
             SubOpsHE72.SO_TEXTSTRING: (MSG_OP,),
             SubOpsHE72.SO_FORMATTED_STRING: (MSG_OP,),
         })),
-        0xBA: makeop('o72_talkActor', MSG_OP),
-        0xBB: makeop('o72_talkEgo', MSG_OP),
+        0xBA: makeop('o6_talkActor', MSG_OP),
+        0xBB: makeop('o6_talkEgo', MSG_OP),
         0xBC: makeop('o72_dimArray', SUBOP(SubOpsHE72, {
             SubOpsHE72.SO_BIT: (IMWORD,),
             SubOpsHE72.SO_NIBBLE: (IMWORD,),
@@ -873,13 +873,13 @@ OPCODES_he100: OpTable = realize(
         0x69: makeop('o6_printActor', SUBOP(SubOpsHE100.Common, {
             SubOpsHE100.Common.SO_TEXTSTRING: (MSG_OP,),
             SubOpsHE100.Common.SO_FORMATTED_STRING: (MSG_OP,),
-        })),  # o6_printActor
+        })),
         0x6A: makeop('o6_printEgo', SUBOP(SubOpsHE100.Common, {
             SubOpsHE100.Common.SO_TEXTSTRING: (MSG_OP,),
             SubOpsHE100.Common.SO_FORMATTED_STRING: (MSG_OP,),
-        })),  # o6_printEgo
-        0x6B: makeop('o72_talkActor', MSG_OP),
-        0x6C: makeop('o72_talkEgo', MSG_OP),
+        })),
+        0x6B: makeop('o6_talkActor', MSG_OP),
+        0x6C: makeop('o6_talkEgo', MSG_OP),
         0x6E: makeop('o60_seekFilePos'),
         0x6F: makeop('o6_setBoxFlags'),
         # TODO: 0x71: makeop('o6_setBoxSet'),
