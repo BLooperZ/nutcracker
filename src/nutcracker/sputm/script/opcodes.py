@@ -21,12 +21,18 @@ R = TypeVar('R')
 
 
 class ReverseLookup:
+    _reverse_map: dict[int, str]
+
+    def __init_subclass__(cls) -> None:
+        reverse_map = {}
+        assert cls.__mro__[-2:] == (ReverseLookup, object), cls.__mro__
+        for base in reversed(cls.__mro__[:-2]):
+            reverse_map.update({v: k for k, v in base.__dict__.items() if not k.startswith('_')})
+        cls._reverse_map = reverse_map
+
     @classmethod
     def lookup(cls, value: int) -> str:
-        reverse_map = {}
-        for base in reversed(cls.__mro__):
-            reverse_map.update({v: k for k, v in base.__dict__.items()})
-        return reverse_map[value]
+        return cls._reverse_map[value]
 
 
 class SubOpsV6(ReverseLookup):
@@ -202,24 +208,24 @@ class SubOpsV8(ReverseLookup):
     SO_CAMERA_PAUSE = 50
     SO_CAMERA_RESUME = 51
 
-    SO_HEAP_LOAD_CHARSET = 60
-    SO_HEAP_LOAD_COSTUME = 61
-    SO_HEAP_LOAD_OBJECT = 62
-    SO_HEAP_LOAD_ROOM = 63
-    SO_HEAP_LOAD_SCRIPT = 64
-    SO_HEAP_LOAD_SOUND = 65
-    SO_HEAP_LOCK_COSTUME = 66
-    SO_HEAP_LOCK_ROOM = 67
-    SO_HEAP_LOCK_SCRIPT = 68
-    SO_HEAP_LOCK_SOUND = 69
-    SO_HEAP_UNLOCK_COSTUME = 70
-    SO_HEAP_UNLOCK_ROOM = 71
-    SO_HEAP_UNLOCK_SCRIPT = 72
-    SO_HEAP_UNLOCK_SOUND = 73
-    SO_HEAP_NUKE_COSTUME = 74
-    SO_HEAP_NUKE_ROOM = 75
-    SO_HEAP_NUKE_SCRIPT = 76
-    SO_HEAP_NUKE_SOUND = 77
+    SO_LOAD_CHARSET = 60  # SO_HEAP_LOAD_CHARSET
+    SO_LOAD_COSTUME = 61  # SO_HEAP_LOAD_COSTUME
+    SO_LOAD_OBJECT = 62  # SO_HEAP_LOAD_OBJECT
+    SO_LOAD_ROOM = 63  # SO_HEAP_LOAD_ROOM
+    SO_LOAD_SCRIPT = 64  # SO_HEAP_LOAD_SCRIPT
+    SO_LOAD_SOUND = 65  # SO_HEAP_LOAD_SOUND
+    SO_LOCK_COSTUME = 66  # SO_HEAP_LOCK_COSTUME
+    SO_LOCK_ROOM = 67  # SO_HEAP_LOCK_ROOM
+    SO_LOCK_SCRIPT = 68  # SO_HEAP_LOCK_SCRIPT
+    SO_LOCK_SOUND = 69  # SO_HEAP_LOCK_SOUND
+    SO_UNLOCK_COSTUME = 70  # SO_HEAP_UNLOCK_COSTUME
+    SO_UNLOCK_ROOM = 71  # SO_HEAP_UNLOCK_ROOM
+    SO_UNLOCK_SCRIPT = 72  # SO_HEAP_UNLOCK_SCRIPT
+    SO_UNLOCK_SOUND = 73  # SO_HEAP_UNLOCK_SOUND
+    SO_NUKE_COSTUME = 74  # SO_HEAP_NUKE_COSTUME
+    SO_NUKE_ROOM = 75  # SO_HEAP_NUKE_ROOM
+    SO_NUKE_SCRIPT = 76  # SO_HEAP_NUKE_SCRIPT
+    SO_NUKE_SOUND = 77  # SO_HEAP_NUKE_SOUND
 
     SO_ROOM_PALETTE = 82
 
@@ -416,12 +422,12 @@ OPCODES_v6: OpTable = realize({
     0x5B: makeop('o6_wordArrayDec', IMWORD),
     0x5C: makeop('o6_if', OFFSET),  # jump if
     0x5D: makeop('o6_ifNot', OFFSET),  # jump if not
-    0x5E: makeop('o6_startScript'),
+    0x5E: makeop('startScript'),
     0x5F: makeop('o6_startScriptQuick'),
-    0x60: makeop('o6_startObject'),
+    0x60: makeop('startObject'),
     0x61: makeop('o6_drawObject'),
     0x62: makeop('o6_drawObjectAt'),
-    0x63: makeop('o6_drawBlastObject'),
+    # TODO: 0x63: makeop('o6_drawBlastObject'),
     0x64: makeop('o6_setBlastObjectWindow'),
     0x65: makeop('o6_stopObjectCodeObject'),  # o6_stopObjectCode
     0x66: makeop('o6_stopObjectCodeScript'),  # o6_stopObjectCode
@@ -429,7 +435,7 @@ OPCODES_v6: OpTable = realize({
     0x68: makeop('o6_cutscene'),
     # TODO: 0x69: makeop('o6_stopMusic'),
     0x6A: makeop('o6_freezeUnfreeze'),
-    0x6B: makeop('o6_cursorCommand', SUBOP(SubOpsV6)),
+    0x6B: makeop('cursorCommand', SUBOP(SubOpsV6)),
     0x6C: makeop('o6_breakHere'),
     0x6D: makeop('o6_ifClassOfIs'),
     0x6E: makeop('o6_setClass'),
@@ -475,7 +481,7 @@ OPCODES_v6: OpTable = realize({
     0x98: makeop('o6_isSoundRunning'),
     0x99: makeop('o6_setBoxFlags'),
     0x9A: makeop('o6_createBoxMatrix'),
-    0x9B: makeop('o6_resourceRoutines', SUBOP(SubOpsV6)),
+    0x9B: makeop('resourceRoutines', SUBOP(SubOpsV6)),
     0x9C: makeop('o6_roomOps', SUBOP(SubOpsV6)),
     0x9D: makeop('actorOps', SUBOP(SubOpsV6, {
         SubOpsV6.SO_ACTOR_NAME: (MSG_OP,),
@@ -564,7 +570,7 @@ OPCODES_v6: OpTable = realize({
     0xD1: makeop('o6_stopTalking'),
     0xD2: makeop('o6_getAnimateVariable'),
     0xD4: makeop('o6_shuffle', IMWORD),
-    0xD5: makeop('o6_jumpToScript'),
+    0xD5: makeop('jumpToScript'),
     0xD6: makeop('o6_band'),  # bitwise and
     0xD7: makeop('o6_bor'),  # bitwise or
     0xD8: makeop('o6_isRoomScriptRunning'),
@@ -605,7 +611,7 @@ OPCODES_v8: OpTable = realize({
     0x66: makeop('o6_jump', DOFFSET),
     0x67: makeop('o6_breakHere'),
     0x68: makeop('o6_delayFrames'),
-    0x69: makeop('o8_wait', SUBOP(SubOpsV8, {
+    0x69: makeop('o6_wait', SUBOP(SubOpsV8, {
         SubOpsV8.SO_WAIT_FOR_ACTOR: (DOFFSET,),
         SubOpsV8.SO_WAIT_FOR_ANIMATION: (DOFFSET,),
         SubOpsV8.SO_WAIT_FOR_TURN: (DOFFSET,),
@@ -634,13 +640,13 @@ OPCODES_v8: OpTable = realize({
         SubOpsV8.SO_ASSIGN_INT_LIST: (IMDWORD,),
         SubOpsV8.SO_ASSIGN_2DIM_LIST: (IMDWORD,),
     })),
-    0x79: makeop('o6_startScript'),
+    0x79: makeop('startScript'),
     0x7A: makeop('o6_startScriptQuick'),
     0x7B: makeop('o6_stopObjectCodeScript'),  # o6_stopObjectCode
     0x7C: makeop('o6_stopScript'),
-    0x7D: makeop('o6_jumpToScript'),
+    0x7D: makeop('jumpToScript'),
     0x7E: makeop('o6_stopObjectCodeReturn'),
-    0x7F: makeop('o6_startObject'),
+    0x7F: makeop('startObject'),
     0x80: makeop('o6_stopObjectScript'),
     0x81: makeop('o6_cutscene'),
     0x82: makeop('o6_endCutscene'),
@@ -679,7 +685,7 @@ OPCODES_v8: OpTable = realize({
         SubOpsV8.SO_TEXTSTRING: (MSG_OP_V8,),
     })),
     0x98: makeop('o8_drawObject'),
-    0x9C: makeop('o8_cursorCommand', SUBOP(SubOpsV8)),
+    0x9C: makeop('cursorCommand', SUBOP(SubOpsV8)),
     0x9D: makeop('o6_loadRoom'),
     0x9E: makeop('o6_loadRoomWithEgo'),
     0x9F: makeop('o6_walkActorToObj'),
@@ -692,9 +698,9 @@ OPCODES_v8: OpTable = realize({
     0xA6: makeop('o6_pickupObject'),
     0xA7: makeop('o6_setBoxFlags'),
     0xA8: makeop('o6_createBoxMatrix'),
-    0xAA: makeop('o8_resourceRoutines', SUBOP(SubOpsV8)),
-    0xAB: makeop('o8_roomOps', SUBOP(SubOpsV8)),
-    0xAC: makeop('o8_actorOps', SUBOP(SubOpsV8, {
+    0xAA: makeop('resourceRoutines', SUBOP(SubOpsV8)),
+    0xAB: makeop('o6_roomOps', SUBOP(SubOpsV8)),
+    0xAC: makeop('actorOps', SUBOP(SubOpsV8, {
         SubOpsV8.SO_ACTOR_NAME: (MSG_OP_V8,),
     })),
     0xAD: makeop('o8_cameraOps', SUBOP(SubOpsV8)),
@@ -705,7 +711,7 @@ OPCODES_v8: OpTable = realize({
     0xB0: makeop('o6_startMusic'),
     0xB1: makeop('o6_stopSound'),
     0xB2: makeop('o6_soundKludge'),
-    0xB3: makeop('o8_systemOps', SUBOP(SubOpsV8)),
+    0xB3: makeop('o6_systemOps', SUBOP(SubOpsV8)),
     0xB4: makeop('o6_saveRestoreVerbs', SUBOP(SubOpsV8)),
     0xB5: makeop('o6_setObjectName', MSG_OP_V8),
     0xB6: makeop('o6_getDateTime'),
