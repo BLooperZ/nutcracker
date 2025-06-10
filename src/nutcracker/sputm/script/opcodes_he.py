@@ -420,7 +420,6 @@ OPCODES_he60 = realize(
         **OPCODES_v6,
         0x63: None,
         0x64: None,
-        0x70: makeop('o60_setState'),
         0x9A: None,
         0x9C: makeop('o6_roomOps', SUBOP(SubOpsHE60, {
             SubOpsHE60.SO_ROOM_SAVEGAME_BY_NAME: (MSG_OP,),
@@ -470,14 +469,13 @@ OPCODES_he70: OpTable = realize(
     {
         **OPCODES_he60,
         0x74: makeop('o70_soundOps', SUBOP(SubOpsHE70)),
-        0x84: makeop('o70_pickupObject'),
-        0x8C: makeop('o70_getActorRoom'),
-        0x9B: makeop('o70_resourceRoutines', SUBOP(SubOpsHE70)),
-        0xAE: makeop('o70_systemOps', SUBOP(SubOpsHE70, {
+        0x84: makeop('o6_pickupObject'),
+        0x9B: makeop('resourceRoutines', SUBOP(SubOpsHE70)),
+        0xAE: makeop('o6_systemOps', SUBOP(SubOpsHE70, {
             SubOpsHE70.SO_RESTART_STRING: (MSG_OP,),
         })),
         0xEE: makeop('o70_getStringLen'),
-        0xF2: makeop('o70_isResourceLoaded', SUBOP(SubOpsHE70)),
+        0xF2: makeop('isResourceLoaded', SUBOP(SubOpsHE70)),
         0xF3: makeop('o70_readINI', MSG_OP),
         0xF4: makeop('o70_writeINI', ini_op_v71),
         0xF9: makeop('o70_createDirectory', MSG_OP),
@@ -526,8 +524,8 @@ OPCODES_he72: OpTable = realize(
         0x58: makeop('o72_getTimer', SUBOP(SubOpsHE72)),
         0x59: makeop('o72_setTimer', SUBOP(SubOpsHE72)),
         0x5A: makeop('o72_getSoundPosition'),
-        0x5E: makeop('o72_startScript', SUBOP(SubOpsHE72)),
-        0x60: makeop('o72_startObject', SUBOP(SubOpsHE72)),
+        0x5E: makeop('startScript', SUBOP(SubOpsHE72)),
+        0x60: makeop('startObject', SUBOP(SubOpsHE72)),
         0x61: makeop('o72_drawObject', SUBOP(SubOpsHE72)),
         0x62: makeop('o72_printWizImage'),
         0x63: makeop('o72_getArrayDimSize', IMBYTE, IMWORD),
@@ -536,8 +534,8 @@ OPCODES_he72: OpTable = realize(
         0x9C: makeop('o6_roomOps', SUBOP(SubOpsHE72)),
         0x9D: makeop('actorOps', SUBOP(SubOpsHE72)),
         0x9E: makeop('verbOps', SUBOP(SubOpsHE72)),
-        # TODO: 0xa0: makeop('o72_findObject'),
-        0xA4: makeop('o72_arrayOps', SUBOP(SubOpsHE72, {
+        # TODO: 0xa0: makeop('o6_findObject'),
+        0xA4: makeop('arrayOps', SUBOP(SubOpsHE72, {
             SubOpsHE72.SO_STRING: (IMWORD,),
             SubOpsHE72.SO_COMPLEX_ARRAY_ASSIGNMENT: (IMWORD,),
             SubOpsHE72.SO_COMPLEX_ARRAY_COPY_OPERATION: (IMWORD, IMWORD),
@@ -547,7 +545,7 @@ OPCODES_he72: OpTable = realize(
             SubOpsHE72.SO_ASSIGN_INT_LIST: (IMWORD,),
             SubOpsHE72.SO_ASSIGN_2DIM_LIST: (IMWORD,),
         })),
-        0xAE: makeop('o72_systemOps', SUBOP(SubOpsHE72)),
+        0xAE: makeop('o6_systemOps', SUBOP(SubOpsHE72)),
         0xB4: makeop('o6_printLine', SUBOP(SubOpsHE72, {
             SubOpsHE72.SO_TEXTSTRING: (MSG_OP,),
             SubOpsHE72.SO_FORMATTED_STRING: (MSG_OP,),
@@ -574,7 +572,7 @@ OPCODES_he72: OpTable = realize(
         })),
         0xBA: makeop('o6_talkActor', MSG_OP),
         0xBB: makeop('o6_talkEgo', MSG_OP),
-        0xBC: makeop('o72_dimArray', SUBOP(SubOpsHE72, {
+        0xBC: makeop('dimArray', SUBOP(SubOpsHE72, {
             SubOpsHE72.SO_BIT: (IMWORD,),
             SubOpsHE72.SO_NIBBLE: (IMWORD,),
             SubOpsHE72.SO_BYTE: (IMWORD,),
@@ -583,7 +581,7 @@ OPCODES_he72: OpTable = realize(
             SubOpsHE72.SO_STRING: (IMWORD,),
             SubOpsHE72.SO_UNDIM_ARRAY: (IMWORD,),
         })),
-        0xC0: makeop('o72_dim2dimArray', SUBOP(SubOpsHE72, {
+        0xC0: makeop('dim2dimArray', SUBOP(SubOpsHE72, {
             SubOpsHE72.SO_BIT: (IMWORD,),
             SubOpsHE72.SO_NIBBLE: (IMWORD,),
             SubOpsHE72.SO_BYTE: (IMWORD,),
@@ -593,8 +591,8 @@ OPCODES_he72: OpTable = realize(
         })),
         0xC1: makeop('o72_traceStatus'),
         0xCE: makeop('o72_drawWizImage'),
-        0xCF: makeop('o72_debugInput'),
-        0xD5: makeop('o72_jumpToScript', SUBOP(SubOpsHE72)),
+        0xCF: makeop('debugInput'),
+        0xD5: makeop('jumpToScript', SUBOP(SubOpsHE72)),
         0xDA: makeop('o72_openFile'),
         0xDB: makeop('o72_readFile', SUBOP(SubOpsHE72, {
             SubOpsHE72.SO_ARRAY: (IMBYTE,),
@@ -602,12 +600,11 @@ OPCODES_he72: OpTable = realize(
         0xDC: makeop('o72_writeFile', SUBOP(SubOpsHE72, {
             SubOpsHE72.SO_ARRAY: (IMBYTE,),
         })),
-        0xDD: makeop('o72_findAllObjects'),
         0xDE: makeop('o72_deleteFile'),
         0xDF: makeop('o72_rename'),
-        0xE1: makeop('o72_getPixel', SUBOP(SubOpsHE72)),
+        0xE1: makeop('o6_getPixel', SUBOP(SubOpsHE72)),
         # TODO: 0xe3: makeop('o72_pickVarRandom'),
-        0xEA: makeop('o72_redimArray', SUBOP(SubOpsHE72, {
+        0xEA: makeop('o60_redimArray', SUBOP(SubOpsHE72, {
             SubOpsHE72.SO_BYTE: (IMWORD,),
             SubOpsHE72.SO_INT: (IMWORD,),
             SubOpsHE72.SO_DWORD: (IMWORD,),
@@ -616,7 +613,7 @@ OPCODES_he72: OpTable = realize(
         0xF4: makeop('o72_writeINI', SUBOP(SubOpsHE72)),
         0xF8: makeop('o72_getResourceSize'),
         0xF9: makeop('o72_createDirectory'),
-        0xFA: makeop('o72_setSystemMessage', SUBOP(SubOpsHE72)),
+        0xFA: makeop('o70_setSystemMessage', SUBOP(SubOpsHE72)),
     },
 )
 
@@ -639,15 +636,14 @@ OPCODES_he80: OpTable = realize(
         0x4D: makeop('o80_readConfigFile', SUBOP(SubOpsHE80)),
         0x4E: makeop('o80_writeConfigFile', SUBOP(SubOpsHE80)),
         0x69: None,
-        0x6B: makeop('o80_cursorCommand', SUBOP(SubOpsHE80)),
-        0x70: makeop('o80_setState'),
+        0x6B: makeop('cursorCommand', SUBOP(SubOpsHE80)),
         0x76: None,
         0x94: None,
         0x9E: None,
         0xA5: None,
         0xAC: makeop('o80_drawWizPolygon'),
         0xE0: makeop('o80_drawLine', SUBOP(SubOpsHE80)),
-        0xE3: makeop('o80_pickVarRandom', IMWORD),
+        0xE3: makeop('o6_pickVarRandom', IMWORD),
     },
 )
 
@@ -720,7 +716,7 @@ OPCODES_he100: OpTable = realize(
         0x03: makeop('o90_sortArray', SUBOP(SubOpsHE100.Array, {
             SubOpsHE100.Array.SO_SORT: (IMWORD,),
         })),
-        0x04: makeop('o72_arrayOps', SUBOP(SubOpsHE100.Array, {
+        0x04: makeop('arrayOps', SUBOP(SubOpsHE100.Array, {
             SubOpsHE100.Array.SO_ASSIGN_2DIM_LIST: (IMWORD,),
             SubOpsHE100.Array.SO_ASSIGN_INT_LIST: (IMWORD,),
             SubOpsHE100.Array.SO_COMPLEX_ARRAY_ASSIGNMENT: (IMWORD,),
@@ -742,7 +738,7 @@ OPCODES_he100: OpTable = realize(
         0x0E: makeop('o6_loadRoom'),
         0x0F: makeop('o6_panCameraTo'),
         # TODO: 0x10: makeop('o72_captureWizImage'),
-        0x11: makeop('o72_jumpToScript', SUBOP(SubOpsHE100.Script)),
+        0x11: makeop('jumpToScript', SUBOP(SubOpsHE100.Script)),
         0x12: makeop('o6_setClass'),
         0x13: makeop('o60_closeFile'),
         # TODO: 0x14: makeop('o6_loadRoomWithEgo'),
@@ -754,7 +750,7 @@ OPCODES_he100: OpTable = realize(
         0x1B: makeop('o6_wordVarDec', IMWORD),
         0x1C: makeop('o6_wordArrayDec', IMWORD),
         0x1D: makeop('o72_deleteFile'),
-        0x1E: makeop('o72_dim2dimArray', SUBOP(SubOpsHE100.Array, {
+        0x1E: makeop('dim2dimArray', SUBOP(SubOpsHE100.Array, {
             SubOpsHE100.Array.SO_BIT: (IMWORD,),
             SubOpsHE100.Array.SO_NIBBLE: (IMWORD,),
             SubOpsHE100.Array.SO_BYTE: (IMWORD,),
@@ -763,7 +759,7 @@ OPCODES_he100: OpTable = realize(
             SubOpsHE100.Array.SO_STRING: (IMWORD,),
             SubOpsHE100.Array.SO_UNDIM_ARRAY: (IMWORD,),
         })),
-        0x1F: makeop('o72_dimArray', SUBOP(SubOpsHE100.Array, {
+        0x1F: makeop('dimArray', SUBOP(SubOpsHE100.Array, {
             SubOpsHE100.Array.SO_BIT: (IMWORD,),
             SubOpsHE100.Array.SO_NIBBLE: (IMWORD,),
             SubOpsHE100.Array.SO_BYTE: (IMWORD,),
@@ -792,7 +788,7 @@ OPCODES_he100: OpTable = realize(
         0x31: makeop('o6_getDateTime'),
         0x32: makeop('o90_setSpriteGroupInfo', SUBOP(SubOpsHE100.Common)),
         0x33: makeop('o6_gt'),
-        0x34: makeop('o100_resourceRoutines', SUBOP(SubOpsHE100.Heap)),
+        0x34: makeop('resourceRoutines', SUBOP(SubOpsHE100.Heap)),
         0x35: makeop('o6_if', OFFSET),
         0x36: makeop('o6_ifNot', OFFSET),
         0x37: makeop('o90_wizImageOps', SUBOP(SubOpsHE100.Image)),
@@ -831,7 +827,7 @@ OPCODES_he100: OpTable = realize(
         0x4E: makeop('o72_resetCutscene'),
         0x4F: makeop('o6_setOwner'),
         0x50: makeop('o90_paletteOps', SUBOP(SubOpsHE100.Common)),
-        0x51: makeop('o70_pickupObject'),
+        0x51: makeop('o6_pickupObject'),
         0x52: makeop('o71_polygonOps', SUBOP(SubOpsHE100.Common)),
         0x53: makeop('o6_pop'),
         0x54: makeop('o6_printDebug', SUBOP(SubOpsHE100.Common, {
@@ -861,7 +857,7 @@ OPCODES_he100: OpTable = realize(
         0x60: makeop('o6_pushWordVar', IMWORD),
         0x61: makeop('o6_putActorAtObject'),
         0x62: makeop('o6_putActorAtXY'),
-        0x64: makeop('o72_redimArray', SUBOP(SubOpsHE100.Array, {
+        0x64: makeop('o60_redimArray', SUBOP(SubOpsHE100.Array, {
             SubOpsHE100.Array.SO_BYTE: (IMWORD,),
             SubOpsHE100.Array.SO_INT: (IMWORD,),
             SubOpsHE100.Array.SO_DWORD: (IMWORD,),
@@ -883,7 +879,7 @@ OPCODES_he100: OpTable = realize(
         0x6E: makeop('o60_seekFilePos'),
         0x6F: makeop('o6_setBoxFlags'),
         # TODO: 0x71: makeop('o6_setBoxSet'),
-        0x72: makeop('o72_setSystemMessage', SUBOP(SubOpsHE100.System)),
+        0x72: makeop('o70_setSystemMessage', SUBOP(SubOpsHE100.System)),
         0x73: makeop('o6_shuffle', IMWORD),
         0x74: makeop('o6_delay'),
         # TODO: 0x75: makeop('o6_delayMinutes'),
@@ -892,10 +888,10 @@ OPCODES_he100: OpTable = realize(
         0x78: makeop('o80_sourceDebug', IMDWORD, IMDWORD),
         0x79: makeop('o90_setSpriteInfo', SUBOP(SubOpsHE100.Common)),
         0x7A: makeop('o6_stampObject'),
-        0x7B: makeop('o72_startObject', SUBOP(SubOpsHE100.Script)),
-        0x7C: makeop('o72_startScript', SUBOP(SubOpsHE100.Script)),
+        0x7B: makeop('startObject', SUBOP(SubOpsHE100.Script)),
+        0x7C: makeop('startScript', SUBOP(SubOpsHE100.Script)),
         # TODO: 0x7d: makeop('o6_startScriptQuick'),
-        0x7E: makeop('o80_setState'),
+        0x7E: makeop('o6_setState'),
         0x7F: makeop('o6_stopObjectScript'),
         0x80: makeop('o6_stopScript'),
         0x81: makeop('o6_stopSentence'),
@@ -905,9 +901,9 @@ OPCODES_he100: OpTable = realize(
         0x85: makeop('o6_wordArrayWrite', IMWORD),
         0x86: makeop('o6_wordArrayIndexedWrite', IMWORD),
         0x87: makeop('o6_sub'),
-        0x88: makeop('o72_systemOps', SUBOP(SubOpsHE100.System)),
+        0x88: makeop('o6_systemOps', SUBOP(SubOpsHE100.System)),
         0x8A: makeop('o72_setTimer', SUBOP(SubOpsHE100.Common)),
-        0x8B: makeop('o80_cursorCommand', SUBOP(SubOpsHE100.Cursor)),
+        0x8B: makeop('cursorCommand', SUBOP(SubOpsHE100.Cursor)),
         0x8C: makeop('videoOps', SUBOP(SubOpsHE100.Common)),
         0x8D: makeop('o6_wait', SUBOP(SubOpsHE100.Wait, {
             SubOpsHE100.Wait.SO_WAIT_FOR_ACTOR: (OFFSET,),
@@ -940,21 +936,21 @@ OPCODES_he100: OpTable = realize(
         0xA4: makeop('o6_ifClassOfIs'),
         0xA6: makeop('o90_cond'),
         0xA7: makeop('o90_cos'),
-        0xA8: makeop('o100_debugInput', SUBOP(SubOpsHE100.Common)),
+        0xA8: makeop('debugInput', SUBOP(SubOpsHE100.Common)),
         0xA9: makeop('o80_getFileSize'),
         0xAA: makeop('o6_getActorFromXY'),
-        0xAB: makeop('o72_findAllObjects'),
+        0xAB: makeop('o6_findAllObjects'),
         0xAC: makeop('o90_findAllObjectsWithClassOf'),
         # TODO: 0xad: makeop('o71_findBox'),
         # TODO: 0xae: makeop('o6_findInventory'),
-        0xAF: makeop('o72_findObject'),
+        0xAF: makeop('o6_findObject'),
         0xB0: makeop('o72_findObjectWithClassOf'),
         0xB1: makeop('o71_polygonHit'),
         0xB2: makeop('o90_getLinesIntersectionPoint', IMWORD, IMWORD),
         0xB3: makeop('o90_fontEnum', SUBOP(SubOpsHE100.Common)),
         0xB4: makeop('o72_getNumFreeArrays'),
         0xB5: makeop('o72_getArrayDimSize', IMBYTE, IMWORD),
-        0xB6: makeop('o100_isResourceLoaded', SUBOP(SubOpsHE100.Common)),
+        0xB6: makeop('isResourceLoaded', SUBOP(SubOpsHE100.Common)),
         0xB7: makeop('o100_getResourceSize', SUBOP(SubOpsHE100.Common)),
         0xB8: makeop('o90_getSpriteGroupInfo', SUBOP(SubOpsHE100.Common)),
         0xB9: makeop('o72_getHeap', SUBOP(SubOpsHE100.Heap)),
@@ -975,8 +971,8 @@ OPCODES_he100: OpTable = realize(
         0xC8: makeop('o90_getPaletteData', SUBOP(SubOpsHE100.Common)),
         0xC9: makeop('o6_pickOneOf'),
         0xCA: makeop('o6_pickOneOfDefault'),
-        0xCB: makeop('o80_pickVarRandom', IMWORD),
-        0xCC: makeop('o72_getPixel', SUBOP(SubOpsHE100.Common)),
+        0xCB: makeop('o6_pickVarRandom', IMWORD),
+        0xCC: makeop('o6_getPixel', SUBOP(SubOpsHE100.Common)),
         # TODO: 0xcd: makeop('o6_distObjectObject'),
         # TODO: 0xce: makeop('o6_distObjectPt'),
         # TODO: 0xcf: makeop('o6_distPtPt'),
@@ -1016,6 +1012,6 @@ OPCODES_he100: OpTable = realize(
 OPCODES_he101: OpTable = realize(
     {
         **OPCODES_he100,
-        0xA8: makeop('o72_debugInput'),
+        0xA8: makeop('debugInput'),
     }
 )

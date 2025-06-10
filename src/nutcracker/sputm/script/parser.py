@@ -30,7 +30,7 @@ class CString(ScriptArg):
         self.msg = b''.join(read_message(stream, escape=b'\xff', var_size=var_size))
 
     def __repr__(self) -> str:
-        return f'MSG {self.msg!r}'
+        return f'<MSG {self.msg!r}>'
 
     def to_bytes(self) -> bytes:
         msg = self.msg if self.msg is not None else b''
@@ -42,7 +42,7 @@ class ByteValue(ScriptArg):
         self.op = stream.read(1)
 
     def __repr__(self) -> str:
-        return f'BYTE hex=0x{ord(self.op):02x} dec={ord(self.op)}'
+        return f'<BYTE hex=0x{ord(self.op):02x} dec={ord(self.op)}>'
 
     def to_bytes(self) -> bytes:
         return self.op
@@ -54,7 +54,7 @@ class WordValue(ScriptArg):
 
     def __repr__(self) -> str:
         val = int.from_bytes(self.op, byteorder='little', signed=True)
-        return f'WORD hex=0x{val:04x} dec={val}'
+        return f'<WORD hex=0x{val:04x} dec={val}>'
 
     def to_bytes(self) -> bytes:
         return self.op
@@ -66,14 +66,14 @@ class DWordValue(ScriptArg):
 
     def __repr__(self) -> str:
         val = int.from_bytes(self.op, byteorder='little', signed=True)
-        return f'DWORD hex=0x{val:04x} dec={val}'
+        return f'<DWORD hex=0x{val:04x} dec={val}>'
 
     def to_bytes(self) -> bytes:
         return self.op
 
 
 class RefOffset(ScriptArg):
-    def __init__(self, stream: IO[bytes], word_size: int = 2):
+    def __init__(self, stream: IO[bytes], word_size: int = 2) -> None:
         rel = int.from_bytes(stream.read(word_size), byteorder='little', signed=True)
         self.endpos = stream.tell()
         self.size = word_size
@@ -85,8 +85,8 @@ class RefOffset(ScriptArg):
 
     def __repr__(self) -> str:
         if self.size == 2:
-            return f'REF rel=0x{self.rel:04x} abs=0x{(self.abs):04x}'
-        return f'REF rel=0x{self.rel:08x} abs=0x{(self.abs):08x}'
+            return f'<REF rel=0x{self.rel:04x} abs=0x{(self.abs):04x}>'
+        return f'<REF rel=0x{self.rel:08x} abs=0x{(self.abs):08x}>'
 
     def to_bytes(self) -> bytes:
         return self.rel.to_bytes(self.size, byteorder='little', signed=True)
