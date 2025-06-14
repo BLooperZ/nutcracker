@@ -223,44 +223,53 @@ class VarArgs(ScriptArg):
 
 def WORD_VARARGS(opcode: int, stream: IO[bytes]) -> Iterator[VarArgs]:
     yield VarArgs(
-        SUBMASK_VARARGS(
-            0x1F,
-            {
-                0x01: mop('ARG', PARAMS(WORD)),
-            },
-        )(opcode, stream),
+        SUBMASK_VARARGS(0x1F)({
+            0x01: mop('ARG', PARAMS(WORD)),
+            0x06: mop('ARG6', PARAMS(WORD)),  # Monkey Island 2 - German FM Towns
+        })(opcode, stream),
     )
 
 
 def SUBMASK_VARARGS(
     mask: int,
-    mapping: dict[int, Callable[[int, IO[bytes]], SomeOp]],
-    term: int = 0xFF,
-) -> Callable[[int, IO[bytes]], Iterator[ScriptArg]]:
-    def inner(opcode: int, stream: IO[bytes]) -> Iterator[ScriptArg]:
-        while True:
-            sub = ByteValue.parse(stream)
-            if ord(sub.op) & mask == term & mask:
-                # if ord(sub.op) != mask:
-                #     # This happens in Monkey Island UTE
-                #     print('WARNING: terminating by submask')
-                yield sub
-                break
-            op = ord(sub.op)
-            args = mapping[op & mask](op, stream)
-            yield args
-            if args.terminate:
-                break
+) -> 'Callable[..., Callable[[int, IO[bytes]], Iterator[ScriptArg]]]':
+    def inner(
+        mapping: dict[int, Callable[[int, IO[bytes]], SomeOp]],
+        term: int = 0xFF,
+    ) -> Callable[[int, IO[bytes]], Iterator[ScriptArg]]:
+        def inner2(opcode: int, stream: IO[bytes]) -> Iterator[ScriptArg]:
+            while True:
+                sub = ByteValue.parse(stream)
+                if ord(sub.op) & mask == term & mask:
+                    # if ord(sub.op) != mask:
+                    #     # This happens in Monkey Island UTE
+                    #     print('WARNING: terminating by submask')
+                    yield sub
+                    break
+                op = ord(sub.op)
+                args = mapping[op & mask](op, stream)
+                yield args
+                if args.terminate:
+                    break
+
+        return inner2
 
     return inner
 
 
 def SUBMASK(
-    mask: int, mapping: dict[int, Callable[[int, IO[bytes]], SomeOp]]
-) -> Callable[[int, IO[bytes]], Iterator[SomeOp]]:
-    def inner(opcode: int, stream: IO[bytes]) -> Iterator[SomeOp]:
-        sub = ByteValue.parse(stream)
-        yield mapping[ord(sub.op) & mask](ord(sub.op), stream)
+    mask: int,
+) -> (
+    'Callable[[dict[int, Callable[[int, IO[bytes]], SomeOp]]], Callable[[int, IO[bytes]], Iterator[SomeOp]]]'
+):
+    def inner(
+        mapping: dict[int, Callable[[int, IO[bytes]], SomeOp]],
+    ) -> Callable[[int, IO[bytes]], Iterator[SomeOp]]:
+        def inner2(opcode: int, stream: IO[bytes]) -> Iterator[SomeOp]:
+            sub = ByteValue.parse(stream)
+            yield mapping[ord(sub.op) & mask](ord(sub.op), stream)
+
+        return inner2
 
     return inner
 
@@ -286,21 +295,18 @@ def MSG_OP(opcode: int, stream: IO[bytes]) -> Iterator[CString]:
 def STRING_SUBARGS(
     version: int = 5,
 ) -> Callable[[int, IO[bytes]], Iterator[ScriptArg]]:
-    return SUBMASK_VARARGS(
-        0x1F,
-        {
-            0x00: mop('SO_AT', PARAMS(2 * WORD)),
-            0x01: mop('SO_COLOR', PARAMS(BYTE)),
-            0x02: mop('SO_CLIPPED', PARAMS(WORD)),
-            0x03: mop('SO_ERASE', PARAMS(2 * WORD)),
-            0x04: mop('SO_CENTER'),
-            0x05: mop('??UNKONWN5??'),
-            0x06: mop('HEIGHT', PARAMS(WORD)) if version == 3 else mop('SO_LEFT'),
-            0x07: mop('SO_OVERHEAD'),
-            0x08: mop('SO_SAY_VOICE', PARAMS(2 * WORD)),
-            0x0F: mop('SO_TEXTSTRING', MSG_OP, terminate=True),
-        },
-    )
+    return SUBMASK_VARARGS(0x1F)({
+        0x00: mop('SO_AT', PARAMS(2 * WORD)),
+        0x01: mop('SO_COLOR', PARAMS(BYTE)),
+        0x02: mop('SO_CLIPPED', PARAMS(WORD)),
+        0x03: mop('SO_ERASE', PARAMS(2 * WORD)),
+        0x04: mop('SO_CENTER'),
+        0x05: mop('??UNKONWN5??'),
+        0x06: mop('HEIGHT', PARAMS(WORD)) if version == 3 else mop('SO_LEFT'),
+        0x07: mop('SO_OVERHEAD'),
+        0x08: mop('SO_SAY_VOICE', PARAMS(2 * WORD)),
+        0x0F: mop('SO_TEXTSTRING', MSG_OP, terminate=True),
+    })
 
 
 def VAR(opcode: int, stream: IO[bytes]) -> Iterator[Variable]:
@@ -377,7 +383,7 @@ def o5_stopObjectCode(opcode: int, stream: IO[bytes]) -> SomeOp:
         ('o5_cutscene', {0x40}, WORD_VARARGS),
         ('o5_freezeScripts', {0x60, 0xE0}, PARAMS(BYTE)),
         ('o5_breakHere', {0x80}),
-        ('o5_stopObjectCode', {0xA0}),
+        ('o5_stopObjectCodeScript', {0xA0}),
         ('o5_endCutscene', {0xC0}),
     )(opcode, stream)
 
@@ -424,13 +430,10 @@ def o5_drawObject(opcode: int, stream: IO[bytes]) -> SomeOp:
             'o5_drawObject',
             {0x05, 0x45, 0x85, 0xC5},
             PARAMS(WORD),
-            SUBMASK_VARARGS(
-                0x1F,
-                {
-                    0x01: mop('AT', PARAMS(2 * WORD), terminate=True),
-                    0x02: mop('STATE', PARAMS(WORD), terminate=True),
-                },
-            ),
+            SUBMASK_VARARGS(0x1F)({
+                0x01: mop('AT', PARAMS(2 * WORD), terminate=True),
+                0x02: mop('STATE', PARAMS(WORD), terminate=True),
+            }),
         ),
         ('o5_pickupObject', {0x25, 0x65, 0xA5, 0xE5}, PARAMS(WORD + BYTE)),
     )(opcode, stream)
@@ -452,16 +455,13 @@ def o5_setState(opcode: int, stream: IO[bytes]) -> SomeOp:
         (
             'o5_stringOps',
             {0x27},
-            SUBMASK(
-                0x1F,
-                {
-                    0x01: mop('ASSIGN-STRING', PARAMS(BYTE), MSG_OP),
-                    0x02: mop('ASSIGN-STRING-VAR', PARAMS(2 * BYTE)),
-                    0x03: mop('ASSIGN-INDEX', PARAMS(3 * BYTE)),
-                    0x04: mop('ASSIGN-VAR', RESULT, PARAMS(2 * BYTE)),
-                    0x05: mop('STRING-INDEX', PARAMS(2 * BYTE)),
-                },
-            ),
+            SUBMASK(0x1F)({
+                0x01: mop('ASSIGN-STRING', PARAMS(BYTE), MSG_OP),
+                0x02: mop('ASSIGN-STRING-VAR', PARAMS(2 * BYTE)),
+                0x03: mop('ASSIGN-INDEX', PARAMS(3 * BYTE)),
+                0x04: mop('ASSIGN-VAR', RESULT, PARAMS(2 * BYTE)),
+                0x05: mop('STRING-INDEX', PARAMS(2 * BYTE)),
+            }),
         ),
         ('o5_dummy', {0xA7}),
         ('o5_getStringWidth', {0x67, 0xE7}, RESULT, PARAMS(BYTE)),
@@ -497,14 +497,11 @@ def o5_getVerbEntrypoint(opcode: int, stream: IO[bytes]) -> SomeOp:
         (
             'o5_saveRestoreVerbs',
             {0xAB},
-            SUBMASK(
-                0x1F,
-                {
-                    0x01: mop('SO_SAVE_VERBS', PARAMS(3 * BYTE)),
-                    0x02: mop('SO_RESTORE_VERBS', PARAMS(3 * BYTE)),
-                    # TODO: 0x03: mop('SO_DELETE_VERBS', PARAMS(3 * BYTE)),
-                },
-            ),
+            SUBMASK(0x1F)({
+                0x01: mop('SO_SAVE_VERBS', PARAMS(3 * BYTE)),
+                0x02: mop('SO_RESTORE_VERBS', PARAMS(3 * BYTE)),
+                # TODO: 0x03: mop('SO_DELETE_VERBS', PARAMS(3 * BYTE)),
+            }),
         ),
     )(opcode, stream)
 
@@ -514,74 +511,65 @@ def o5_resourceRoutines(opcode: int, stream: IO[bytes]) -> SomeOp:
         (
             'o5_resourceRoutines',
             {0x0C, 0x8C},
-            SUBMASK(
-                0x3F,
-                {
-                    0x01: mop('SO_LOAD_SCRIPT', PARAMS(BYTE)),
-                    0x02: mop('SO_LOAD_SOUND', PARAMS(BYTE)),
-                    0x03: mop('SO_LOAD_COSTUME', PARAMS(BYTE)),
-                    0x04: mop('SO_LOAD_ROOM', PARAMS(BYTE)),
-                    0x05: mop('SO_NUKE_SCRIPT', PARAMS(BYTE)),
-                    0x06: mop('SO_NUKE_SOUND', PARAMS(BYTE)),
-                    0x07: mop('SO_NUKE_COSTUME', PARAMS(BYTE)),
-                    0x08: mop('SO_NUKE_ROOM', PARAMS(BYTE)),
-                    0x09: mop('SO_LOCK_SCRIPT', PARAMS(BYTE)),
-                    0x0A: mop('SO_LOCK_SOUND', PARAMS(BYTE)),
-                    0x0B: mop('SO_LOCK_COSTUME', PARAMS(BYTE)),
-                    0x0C: mop('SO_LOCK_ROOM', PARAMS(BYTE)),
-                    0x0D: mop('SO_UNLOCK_SCRIPT', PARAMS(BYTE)),
-                    0x0E: mop('SO_UNLOCK_SOUND', PARAMS(BYTE)),
-                    0x0F: mop('SO_UNLOCK_COSTUME', PARAMS(BYTE)),
-                    0x10: mop('SO_UNLOCK_ROOM', PARAMS(BYTE)),
-                    0x11: mop('SO_CLEAR_HEAP'),
-                    0x12: mop('SO_LOAD_CHARSET', PARAMS(BYTE)),
-                    0x13: mop('SO_NUKE_CHARSET', PARAMS(BYTE)),
-                    0x14: mop('SO_LOAD_OBJECT', PARAMS(BYTE + WORD)),
-                    0x20: mop('??UNKNOWN20??', PARAMS(BYTE)),
-                    0x21: mop('??UNKNOWN21??', PARAMS(BYTE)),
-                    0x23: mop('??UNKNOWN23??', PARAMS(2 * BYTE)),
-                    0x24: mop('??UNKNOWN24??', PARAMS(2 * BYTE), IMBYTE),
-                    0x25: mop('??UNKNOWN25??', PARAMS(2 * BYTE)),
-                },
-            ),
+            SUBMASK(0x3F)({
+                0x01: mop('SO_LOAD_SCRIPT', PARAMS(BYTE)),
+                0x02: mop('SO_LOAD_SOUND', PARAMS(BYTE)),
+                0x03: mop('SO_LOAD_COSTUME', PARAMS(BYTE)),
+                0x04: mop('SO_LOAD_ROOM', PARAMS(BYTE)),
+                0x05: mop('SO_NUKE_SCRIPT', PARAMS(BYTE)),
+                0x06: mop('SO_NUKE_SOUND', PARAMS(BYTE)),
+                0x07: mop('SO_NUKE_COSTUME', PARAMS(BYTE)),
+                0x08: mop('SO_NUKE_ROOM', PARAMS(BYTE)),
+                0x09: mop('SO_LOCK_SCRIPT', PARAMS(BYTE)),
+                0x0A: mop('SO_LOCK_SOUND', PARAMS(BYTE)),
+                0x0B: mop('SO_LOCK_COSTUME', PARAMS(BYTE)),
+                0x0C: mop('SO_LOCK_ROOM', PARAMS(BYTE)),
+                0x0D: mop('SO_UNLOCK_SCRIPT', PARAMS(BYTE)),
+                0x0E: mop('SO_UNLOCK_SOUND', PARAMS(BYTE)),
+                0x0F: mop('SO_UNLOCK_COSTUME', PARAMS(BYTE)),
+                0x10: mop('SO_UNLOCK_ROOM', PARAMS(BYTE)),
+                0x11: mop('SO_CLEAR_HEAP'),
+                0x12: mop('SO_LOAD_CHARSET', PARAMS(BYTE)),
+                0x13: mop('SO_NUKE_CHARSET', PARAMS(BYTE)),
+                0x14: mop('SO_LOAD_OBJECT', PARAMS(BYTE + WORD)),
+                0x20: mop('??UNKNOWN20??', PARAMS(BYTE)),
+                0x21: mop('??UNKNOWN21??', PARAMS(BYTE)),
+                0x23: mop('??UNKNOWN23??', PARAMS(2 * BYTE)),
+                0x24: mop('??UNKNOWN24??', PARAMS(2 * BYTE), IMBYTE),
+                0x25: mop('??UNKNOWN25??', PARAMS(2 * BYTE)),
+            }),
         ),
         (
             'o5_cursorCommand',
             {0x2C},
-            SUBMASK(
-                0x1F,
-                {
-                    0x01: mop('SO_CURSOR_ON'),
-                    0x02: mop('SO_CURSOR_OFF'),
-                    0x03: mop('SO_USERPUT_ON'),
-                    0x04: mop('SO_USERPUT_OFF'),
-                    0x05: mop('SO_CURSOR_SOFT_ON'),
-                    0x06: mop('SO_CURSOR_SOFT_OFF'),
-                    0x07: mop('SO_USERPUT_SOFT_ON'),
-                    0x08: mop('SO_USERPUT_SOFT_OFF'),
-                    0x0A: mop('SO_CURSOR_IMAGE', PARAMS(2 * BYTE)),
-                    0x0B: mop('SO_CURSOR_HOTSPOT', PARAMS(3 * BYTE)),
-                    0x0C: mop('SO_CURSOR_SET', PARAMS(BYTE)),
-                    0x0D: mop('SO_CHARSET_SET', PARAMS(BYTE)),
-                    0x0E: mop('CHARSET-COLOR', WORD_VARARGS),
-                },
-            ),
+            SUBMASK(0x1F)({
+                0x01: mop('SO_CURSOR_ON'),
+                0x02: mop('SO_CURSOR_OFF'),
+                0x03: mop('SO_USERPUT_ON'),
+                0x04: mop('SO_USERPUT_OFF'),
+                0x05: mop('SO_CURSOR_SOFT_ON'),
+                0x06: mop('SO_CURSOR_SOFT_OFF'),
+                0x07: mop('SO_USERPUT_SOFT_ON'),
+                0x08: mop('SO_USERPUT_SOFT_OFF'),
+                0x0A: mop('SO_CURSOR_IMAGE', PARAMS(2 * BYTE)),
+                0x0B: mop('SO_CURSOR_HOTSPOT', PARAMS(3 * BYTE)),
+                0x0C: mop('SO_CURSOR_SET', PARAMS(BYTE)),
+                0x0D: mop('SO_CHARSET_SET', PARAMS(BYTE)),
+                0x0E: mop('CHARSET-COLOR', WORD_VARARGS),
+            }),
         ),
         (
             'o5_expression',
             {0xAC},
             RESULT,
-            SUBMASK_VARARGS(
-                0x1F,
-                {
-                    0x01: mop('ARG', PARAMS(WORD)),
-                    0x02: mop('ADD'),
-                    0x03: mop('SUBSTRACT'),
-                    0x04: mop('MULTIPLY'),
-                    0x05: mop('DIVIDE'),
-                    0x06: mop('OPERATION', OPERATION),
-                },
-            ),
+            SUBMASK_VARARGS(0x1F)({
+                0x01: mop('ARG', PARAMS(WORD)),
+                0x02: mop('ADD'),
+                0x03: mop('SUBSTRACT'),
+                0x04: mop('MULTIPLY'),
+                0x05: mop('DIVIDE'),
+                0x06: mop('OPERATION', OPERATION),
+            }),
         ),
         ('o5_soundKludge', {0x4C}, WORD_VARARGS),
         ('o5_pseudoRoom', {0xCC}, IMBYTE, BYTE_VARARGS),
@@ -603,15 +591,12 @@ def o5_putActorAtObject(opcode: int, stream: IO[bytes]) -> SomeOp:
         (
             'o5_wait',
             {0xAE},
-            SUBMASK(
-                0x1F,
-                {
-                    0x01: mop('SO_WAIT_FOR_ACTOR', PARAMS(BYTE)),
-                    0x02: mop('SO_WAIT_FOR_MESSAGE'),
-                    0x03: mop('SO_WAIT_FOR_CAMERA'),
-                    0x04: mop('SO_WAIT_FOR_SENTENCE'),
-                },
-            ),
+            SUBMASK(0x1F)({
+                0x01: mop('SO_WAIT_FOR_ACTOR', PARAMS(BYTE)),
+                0x02: mop('SO_WAIT_FOR_MESSAGE'),
+                0x03: mop('SO_WAIT_FOR_CAMERA'),
+                0x04: mop('SO_WAIT_FOR_SENTENCE'),
+            }),
         ),
         ('o5_stopObjectScript', {0x6E, 0xEE}, PARAMS(WORD)),
     )(opcode, stream)
@@ -629,15 +614,12 @@ def o5_getObjectOwner(opcode: int, stream: IO[bytes], version: int = 5) -> SomeO
         (
             'o5_matrixOps',
             {0x30, 0xB0},
-            SUBMASK(
-                0x1F,
-                {
-                    0x01: mop('SET-BOX-STATUS', PARAMS(2 * BYTE)),
-                    0x02: mop('SET-BOX-??', PARAMS(2 * BYTE)),
-                    0x03: mop('SET-BOX-???', PARAMS(2 * BYTE)),
-                    0x04: mop('SET-BOX-PATH'),
-                },
-            ),
+            SUBMASK(0x1F)({
+                0x01: mop('SET-BOX-STATUS', PARAMS(2 * BYTE)),
+                0x02: mop('SET-BOX-??', PARAMS(2 * BYTE)),
+                0x03: mop('SET-BOX-???', PARAMS(2 * BYTE)),
+                0x04: mop('SET-BOX-PATH'),
+            }),
         ),
         ('o5_lights', {0x70, 0xF0}, PARAMS(BYTE), IMBYTE, IMBYTE),
     )(opcode, stream)
@@ -706,9 +688,7 @@ def o5_actorOps(opcode: int, stream: IO[bytes], version: int = 5) -> SomeOp:
         0x0E: mop('SO_INIT_ANIMATION', PARAMS(BYTE)),
         0x10: mop('SO_ACTOR_WIDTH', PARAMS(BYTE)),
         0x11: (
-            mop('SO_ACTOR_SCALE', PARAMS(BYTE))
-            if version == 4
-            else mop('SO_ACTOR_SCALE', PARAMS(2 * BYTE))
+            mop('SO_ACTOR_SCALE', PARAMS(BYTE)) if version == 4 else mop('SO_ACTOR_SCALE', PARAMS(2 * BYTE))
         ),
         0x12: mop('SO_NEVER_ZCLIP'),
         0x13: mop('SO_ALWAYS_ZCLIP', PARAMS(BYTE)),
@@ -719,9 +699,7 @@ def o5_actorOps(opcode: int, stream: IO[bytes], version: int = 5) -> SomeOp:
     }
     if version < 5:
         actor_ops = {
-            op: actor_ops[actor_convert[op - 1]]
-            for op in range(1, 21)
-            if actor_convert[op - 1] in actor_ops
+            op: actor_ops[actor_convert[op - 1]] for op in range(1, 21) if actor_convert[op - 1] in actor_ops
         }
 
     return flatop(
@@ -729,35 +707,32 @@ def o5_actorOps(opcode: int, stream: IO[bytes], version: int = 5) -> SomeOp:
             'o5_actorOps',
             {0x13, 0x53, 0x93, 0xD3},
             PARAMS(BYTE),
-            SUBMASK_VARARGS(0x1F, actor_ops),
+            SUBMASK_VARARGS(0x1F)(actor_ops),
         ),
         (
             'o5_roomOps',
             {0x33, 0x73, 0xB3, 0xF3},
-            SUBMASK(
-                0x1F,
-                {
-                    0x01: mop('SO_ROOM_SCROLL', PARAMS(2 * WORD)),
-                    0x02: mop('SO_ROOM_COLOR', PARAMS(2 * WORD)),
-                    0x03: mop('SO_ROOM_SCREEN', PARAMS(2 * WORD)),
-                    0x04: mop(
-                        'SO_ROOM_PALETTE',
-                        PARAMS(2 * WORD) if version == 4 else PARAMS(3 * WORD, BYTE),
-                    ),
-                    0x05: mop('SO_ROOM_SHAKE_ON'),
-                    0x06: mop('SO_ROOM_SHAKE_OFF'),
-                    0x07: mop('SO_ROOM_SCALE', PARAMS(2 * BYTE, 2 * BYTE, BYTE)),
-                    0x08: mop('SO_ROOM_INTENSITY', PARAMS(3 * BYTE)),
-                    0x09: mop('SO_ROOM_SAVEGAME', PARAMS(2 * BYTE)),
-                    0x0A: mop('SO_ROOM_FADE', PARAMS(WORD)),
-                    0x0B: mop('SO_RGB_ROOM_INTENSITY', PARAMS(3 * WORD, 2 * BYTE)),
-                    0x0C: mop('SO_ROOM_SHADOW', PARAMS(3 * WORD, 2 * BYTE)),
-                    0x0D: mop('SO_SAVE_STRING', PARAMS(BYTE), MSG_OP),
-                    0x0E: mop('SO_LOAD_STRING', PARAMS(BYTE), MSG_OP),
-                    0x0F: mop('SO_ROOM_TRANSFORM', PARAMS(BYTE, 2 * BYTE, BYTE)),
-                    0x10: mop('SO_CYCLE_SPEED', PARAMS(2 * BYTE)),
-                },
-            ),
+            SUBMASK(0x1F)({
+                0x01: mop('SO_ROOM_SCROLL', PARAMS(2 * WORD)),
+                0x02: mop('SO_ROOM_COLOR', PARAMS(2 * WORD)),
+                0x03: mop('SO_ROOM_SCREEN', PARAMS(2 * WORD)),
+                0x04: mop(
+                    'SO_ROOM_PALETTE',
+                    PARAMS(2 * WORD) if version == 4 else PARAMS(3 * WORD, BYTE),
+                ),
+                0x05: mop('SO_ROOM_SHAKE_ON'),
+                0x06: mop('SO_ROOM_SHAKE_OFF'),
+                0x07: mop('SO_ROOM_SCALE', PARAMS(2 * BYTE, 2 * BYTE, BYTE)),
+                0x08: mop('SO_ROOM_INTENSITY', PARAMS(3 * BYTE)),
+                0x09: mop('SO_ROOM_SAVEGAME', PARAMS(2 * BYTE)),
+                0x0A: mop('SO_ROOM_FADE', PARAMS(WORD)),
+                0x0B: mop('SO_RGB_ROOM_INTENSITY', PARAMS(3 * WORD, 2 * BYTE)),
+                0x0C: mop('SO_ROOM_SHADOW', PARAMS(3 * WORD, 2 * BYTE)),
+                0x0D: mop('SO_SAVE_STRING', PARAMS(BYTE), MSG_OP),
+                0x0E: mop('SO_LOAD_STRING', PARAMS(BYTE), MSG_OP),
+                0x0F: mop('SO_ROOM_TRANSFORM', PARAMS(BYTE, 2 * BYTE, BYTE)),
+                0x10: mop('SO_CYCLE_SPEED', PARAMS(2 * BYTE)),
+            }),
         ),
     )(opcode, stream)
 
@@ -799,25 +774,19 @@ def o5_jumpRelative(opcode: int, stream: IO[bytes], version: int = 5) -> SomeOp:
         (
             'o5_beginOverride',
             {0x58},
-            SUBMASK(
-                0xFF,
-                {
-                    0x00: mop('OFF'),
-                    0x01: mop('ON'),
-                },
-            ),
+            SUBMASK(0xFF)({
+                0x00: mop('OFF'),
+                0x01: mop('ON'),
+            }),
         ),
         (
             'o5_systemOps',
             {0x98},
-            SUBMASK(
-                0xFF,
-                {
-                    0x01: mop('SO_RESTART'),
-                    0x02: mop('SO_PAUSE'),
-                    0x03: mop('SO_QUIT'),
-                },
-            ),
+            SUBMASK(0xFF)({
+                0x01: mop('SO_RESTART'),
+                0x02: mop('SO_PAUSE'),
+                0x03: mop('SO_QUIT'),
+            }),
         ),
         ('o5_printEgo', {0xD8}, STRING_SUBARGS(version=version)),
         ('o5_isLessEqual', {0x38, 0xB8}, VAR, PARAMS(WORD), OFFSET),
@@ -838,27 +807,24 @@ def o5_move(opcode: int, stream: IO[bytes]) -> SomeOp:
             'o5_verbOps',
             {0x7A, 0xFA},
             PARAMS(BYTE),
-            SUBMASK_VARARGS(
-                0x1F,
-                {
-                    0x01: mop('SO_VERB_IMAGE', PARAMS(WORD)),
-                    0x02: mop('SO_VERB_NAME', MSG_OP),
-                    0x03: mop('SO_VERB_COLOR', PARAMS(BYTE)),
-                    0x04: mop('SO_VERB_HICOLOR', PARAMS(BYTE)),
-                    0x05: mop('SO_VERB_AT', PARAMS(2 * WORD)),
-                    0x06: mop('SO_VERB_ON'),
-                    0x07: mop('SO_VERB_OFF'),
-                    0x08: mop('SO_VERB_DELETE'),
-                    0x09: mop('SO_VERB_NEW'),
-                    0x10: mop('SO_VERB_DIMCOLOR', PARAMS(BYTE)),
-                    0x11: mop('SO_VERB_DIM'),
-                    0x12: mop('SO_VERB_KEY', PARAMS(BYTE)),
-                    0x13: mop('SO_VERB_CENTER'),
-                    0x14: mop('SO_VERB_NAME_STR', PARAMS(WORD)),
-                    0x16: mop('IMAGE-ROOM', PARAMS(WORD + BYTE)),
-                    0x17: mop('BAKCOLOR', PARAMS(BYTE)),
-                },
-            ),
+            SUBMASK_VARARGS(0x1F)({
+                0x01: mop('SO_VERB_IMAGE', PARAMS(WORD)),
+                0x02: mop('SO_VERB_NAME', MSG_OP),
+                0x03: mop('SO_VERB_COLOR', PARAMS(BYTE)),
+                0x04: mop('SO_VERB_HICOLOR', PARAMS(BYTE)),
+                0x05: mop('SO_VERB_AT', PARAMS(2 * WORD)),
+                0x06: mop('SO_VERB_ON'),
+                0x07: mop('SO_VERB_OFF'),
+                0x08: mop('SO_VERB_DELETE'),
+                0x09: mop('SO_VERB_NEW'),
+                0x10: mop('SO_VERB_DIMCOLOR', PARAMS(BYTE)),
+                0x11: mop('SO_VERB_DIM'),
+                0x12: mop('SO_VERB_KEY', PARAMS(BYTE)),
+                0x13: mop('SO_VERB_CENTER'),
+                0x14: mop('SO_VERB_NAME_STR', PARAMS(WORD)),
+                0x16: mop('IMAGE-ROOM', PARAMS(WORD + BYTE)),
+                0x17: mop('BAKCOLOR', PARAMS(BYTE)),
+            }),
         ),
     )(opcode, stream)
 

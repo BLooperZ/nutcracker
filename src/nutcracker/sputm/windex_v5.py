@@ -7,10 +7,14 @@ from collections import OrderedDict, defaultdict, deque
 from collections.abc import Iterable
 from dataclasses import dataclass
 from string import printable
+from typing import Any
+
+import parse
 
 from nutcracker.kernel2.element import Element
 from nutcracker.sputm.preset import sputm
 from nutcracker.sputm.schema import SCHEMA
+from nutcracker.sputm.script.parser import CString, WordValue
 from nutcracker.sputm.script.shared import (
     BytecodeError,
     ScriptError,
@@ -23,7 +27,7 @@ from nutcracker.sputm.tree import narrow_schema
 
 from .script.bytecode import BytecodeParseError, descumm_iter, get_argtype, script_map
 from .script.opcodes import ByteValue, RefOffset
-from .script.opcodes_v5 import OPCODES_v5, Variable
+from .script.opcodes_v5 import OPCODES_v5, SomeOp, VarArgs, Variable
 from .script.opcodes_v5 import value as ovalue
 
 USE_SEMANTIC_CONTEXT = False
@@ -32,7 +36,7 @@ l_vars = {}
 semlog = defaultdict(dict)
 
 
-def fstat(stat, *args, **kwargs):
+def fstat(stat: str, *args: Any, **kwargs: Any) -> str:
     return stat.format(*[PrintArg(arg) for arg in args], **kwargs)
 
 
@@ -89,6 +93,8 @@ class PrintArg:
             return build_varargs(self.arg.args, sep=', ')
         if format_spec == 'svargs':
             return build_varargs(self.arg.args, sep=' ')
+        if format_spec == 'psvargs':
+            return ' ' + build_varargs(self.arg.args, sep=' ')
         return str(value(self.arg, sem=format_spec))
 
 
@@ -135,9 +141,7 @@ def escape_message(
                     if ord(t) not in {1, 2, 3, 8}:
                         c += stream.read(var_size)
                     c = b''.join(f'\\x{v:02X}'.encode() for v in c)
-            elif c not in (
-                printable.encode() + bytes(range(ord('\xe0'), ord('\xfa') + 1))
-            ):
+            elif c not in printable.encode():
                 c = b''.join(f'\\x{v:02X}'.encode() for v in c)
             elif c == b'\\':
                 c = b'\\\\'
@@ -187,7 +191,7 @@ def colored(arg):
 
 def resolve_expr(exp):
     if isinstance(exp, list):
-        return f"({' '.join(resolve_expr(e) for e in exp)})"
+        return f'({" ".join(resolve_expr(e) for e in exp)})'
     return str(exp)
 
 
@@ -206,12 +210,81 @@ def rpn_to_infix(exp):
 ops = {}
 
 
-def regop(mask):
+def regop(name: str):
     def inner(op):
-        ops[mask] = op
+        ops[name] = op
         return op
 
     return inner
+
+
+@parse.with_pattern('bak |')
+def parse_bak(bak):
+    # Parse a string like "bak" into a boolean value
+    return bak == 'bak '
+
+
+@parse.with_pattern('rec |')
+def parse_rec(rec):
+    # Parse a string like "bak" into a boolean value
+    return rec == 'rec '
+
+
+@parse.with_pattern(r'\s*\S+(\s*,\s*\S+)*|')
+def parse_vargs(vargs):
+    # Parse a string like "arg1, arg2, arg3" into a list of arguments
+    svargs = []
+    args = [arg.strip() for arg in vargs.split(',') if arg.strip()]
+    for arg in args:
+        parg = parse_value(arg)
+        if parg is None:
+            parg = WordValue(int(arg).to_bytes(2, byteorder='little', signed=False))
+            svargs.append(SomeOp('ARG', 0x01, 0, (parg,)))
+        else:
+            svargs.append(SomeOp('ARG', 0x81, 0, (parg,)))
+    svargs.append(ByteValue(bytes([0xFF])))
+    return VarArgs(svargs)
+
+
+@parse.with_pattern(r'\s*\S+(\s+\S+)*|\s*')
+def parse_svargs(svargs):
+    return svargs.strip()
+
+
+@parse.with_pattern(r'\s*\S+(\s+\S+)*|\s*')
+def parse_build(vargs):
+    return vargs.strip()
+
+
+@parse.with_pattern(r'".*"')
+def parse_msg(msg):
+    return unescape_message(msg.strip('"'))
+
+
+def encode_seq(seq: bytes) -> bytes:
+    try:
+        return bytes([int(b'0x' + seq[:2], 16)]) + seq[2:]
+    except:
+        return seq
+
+
+def unescape_message(msg: str) -> bytes:
+    bmsg = msg.encode(**RAW_ENCODING)
+    controls = {0x04: 'n', 0x05: 'v', 0x06: 'o', 0x07: 's'}
+    for control, char in controls.items():
+        fmatch = parse.findall(f'%{char}{{num:d}}%', msg)
+        for m in fmatch:
+            num = m['num']
+            bmsg = bmsg.replace(
+                f'%{char}{num}%'.encode(**RAW_ENCODING),
+                b'\xff' + bytes([control]) + num.to_bytes(2, byteorder='little', signed=False),
+            )
+
+    parts = bmsg.split(b'\\\\x')
+    bmsg = parts[0] + b''.join(encode_seq(part) for part in parts[1:])
+    bmsg = bmsg.replace(b'\\\\', b'\\')
+
+    return bmsg
 
 
 @dataclass
@@ -244,7 +317,7 @@ def parse_expr(args):
             break
         if subop.name == 'OPERATION':
             op = subop.args[0]
-            yield f'({ops.get(op.name, str)(op) or str(op)})'
+            yield f'({destr(ops.get(op.name, str))(op) or str(op)})'
             continue
         fmt = {
             'ARG': '{0}',
@@ -267,6 +340,9 @@ class ConditionalJump:
     def __str__(self) -> str:
         return f'if !({self.expr}) jump {adr(self.ref)}'
 
+    def __eq__(self, value):
+        return self.expr == value.expr and self.ref.abs == value.ref.abs
+
 
 @dataclass
 class UnconditionalJump:
@@ -275,245 +351,861 @@ class UnconditionalJump:
     def __str__(self) -> str:
         return f'jump {adr(self.ref)}'
 
+    def __eq__(self, value):
+        return self.ref.abs == value.ref.abs
+
+
+class WindexStatement:
+    def __init__(self, opcode, *args):
+        self.opcode = opcode
+        self.args = args
+
+    def __repr__(self) -> str:
+        return f'<{self.__class__.__name__} opcode={self.opcode:#04x} args={self.args}>'
+
+    def to_bytes(self) -> bytes:
+        return b''.join([bytes([self.opcode]), *(x.to_bytes() for x in self.args)])
+
 
 @regop('o5_stopObjectCode')
-def o5_stopObjectCode_wd(op):
-    return 'end-object' if op.opcode == 0x00 else 'end-script'
+class StopObjectCode(WindexStatement):
+    def windex(self) -> str:
+        return 'end-object'
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x00
+        res = parse.parse('end-object', src)
+        if res is None:
+            return None
+        return cls(opcode)
+
+
+@regop('o5_stopObjectCodeScript')
+class StopObjectCodeScript(WindexStatement):
+    def windex(self) -> str:
+        return 'end-script'
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0xA0
+        res = parse.parse('end-script', src)
+        if res is None:
+            return None
+        return cls(opcode)
 
 
 @regop('o5_cutscene')
-def o5_cutscene_wd(op):
-    return fstat('cut-scene {0:svargs}', *op.args)
+class CutScene(WindexStatement):
+    def windex(self) -> str:
+        if not self.args:
+            return 'cut-scene'
+        return fstat('cut-scene {0:svargs}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x40
+
+        res = parse.parse('cut-scene', src)
+        if res is not None:
+            return cls(opcode)
+        res = parse.parse('cut-scene {args:vargs}', src, {'vargs': parse_vargs})
+        if res is None:
+            return None
+        return cls(opcode, res['args'])
 
 
 @regop('o5_freezeScripts')
-def o5_freezeScripts_wd(op):
-    scr = op.args[0]
-    if ord(scr.op) == 0:
-        return 'unfreeze-scripts'
-    return fstat('freeze-scripts {0:script}', *op.args)
+class FreezeScripts(WindexStatement):
+    def windex(self) -> str:
+        scr = self.args[0]
+        if ord(scr.op) == 0:
+            return 'unfreeze-scripts'
+        return fstat('freeze-scripts {0:script}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x60
+
+        res = parse.parse('unfreeze-scripts', src)
+        if res is not None:
+            return cls(opcode, PBYTE(0))
+        res = parse.parse('freeze-scripts {0}', src)
+        if res is None:
+            return None
+        args = iter(res)
+        addop, vargs = PARAMS([PBYTE])(args)
+        opcode += addop
+
+        return cls(opcode, *vargs)
 
 
 @regop('o5_breakHere')
-def o5_breakHere_wd(op):
-    return BreakHere()
+class BreakHere2(WindexStatement):
+    def windex(self) -> BreakHere:
+        return BreakHere()
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x80
+
+        res = parse.parse('break-here', src)
+        if res is None:
+            return None
+        return cls(opcode)
 
 
 @regop('o5_endCutscene')
-def o5_endCutscene_wd(op):
-    return 'end-cut-scene'
+class EndCutScene(WindexStatement):
+    def windex(self) -> str:
+        return 'end-cut-scene'
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0xC0
+
+        res = parse.parse('end-cut-scene', src)
+        if res is None:
+            return None
+        return cls(opcode)
 
 
 @regop('o5_putActor')
-def o5_putActor_wd(op):
-    return fstat('put-actor {0:object} at {1},{2}', *op.args)
+class PutActor(WindexStatement):
+    def windex(self) -> str:
+        return fstat('put-actor {0:object} at {1},{2}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x01
+        res = parse.parse('put-actor {0} at {1},{2}', src)
+        addop, args = PARAMS([PBYTE, PWORD, PWORD])(iter(res))
+        opcode += addop
+        return cls(opcode, *args)
 
 
 @regop('o5_startMusic')
-def o5_startMusic_wd(op):
-    return fstat('start-music {0:music}', *op.args)
+class StartMusic(WindexStatement):
+    def windex(self) -> str:
+        return fstat('start-music {0:music}', *self.args)
 
 
 @regop('o5_chainScript')
-def o5_chainScript_wd(op):
-    # TODO: how to detect background/recursive in chain script?
-    return fstat(
-        'chain-script {background}{recursive}{0:script} ({1:cvargs})',
-        *op.args,
-        background='',  # 'bak ' if op.opcode & 0x20 else ''
-        recursive='',  # 'rec ' if op.opcode & 0x40 else ''
-    )
+class ChainScript(WindexStatement):
+    def windex(self) -> str:
+        return fstat(
+            'chain-script {background}{recursive}{0:script} ({1:cvargs})',
+            *self.args,
+            background='',  # 'bak ' if op.opcode & 0x20 else ''
+            recursive='',  # 'rec ' if op.opcode & 0x40 else ''
+        )
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x42
+
+        res = parse.parse(
+            'chain-script {bak:bak}{rec:rec}{0} ({vargs:vargs})',
+            src,
+            {'vargs': parse_vargs, 'bak': parse_bak, 'rec': parse_rec},
+        )
+        if res is None:
+            return None
+        assert not res['rec']
+        assert not res['bak']
+        addop, args = PARAMS([PBYTE])(iter(res))
+        opcode += addop
+
+        return cls(opcode, *args, res['vargs'])
 
 
 @regop('o5_stopScript')
-def o5_stopScript_wd(op):
-    return fstat('stop-script {0:script}', *op.args)
+class StopScript(WindexStatement):
+    def windex(self) -> str:
+        return fstat('stop-script {0:script}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x62
+
+        res = parse.parse('stop-script {0}', src)
+        if res is None:
+            return None
+        addop, args = PARAMS([PBYTE])(iter(res))
+        opcode += addop
+        return cls(opcode, *args)
 
 
 @regop('o5_getActorRoom')
-def o5_getActorRoom_wd(op):
-    return fstat('{0} = actor-room {1:object}', *op.args)
+class GetActorRoom(WindexStatement):
+    def windex(self) -> str:
+        return fstat('{0} = actor-room {1:object}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x03
+
+        res = parse.parse('{0} = actor-room {1}', src)
+        if res is None:
+            return None
+        res = iter(res)
+        var = parse_value(next(res))
+        addop, args = PARAMS([PBYTE])(res)
+        opcode += addop
+        return cls(opcode, var, *args)
 
 
 @regop('o5_getActorY')
-def o5_getActorY_wd(op):
-    return fstat('{0} = actor-y {1:object}', *op.args)
+class GetActorY(WindexStatement):
+    def windex(self) -> str:
+        return fstat('{0} = actor-y {1:object}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x23
+
+        res = parse.parse('{0} = actor-y {1}', src)
+        if res is None:
+            return None
+        res = iter(res)
+        var = parse_value(next(res))
+        addop, args = PARAMS([PWORD])(res)
+        opcode += addop
+        return cls(opcode, var, *args)
 
 
 @regop('o5_getActorX')
-def o5_getActorX_wd(op):
-    return fstat('{0} = actor-x {1:object}', *op.args)
+class GetActorX(WindexStatement):
+    def windex(self) -> str:
+        return fstat('{0} = actor-x {1:object}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x43
+
+        res = parse.parse('{0} = actor-x {1}', src)
+        if res is None:
+            return None
+        res = iter(res)
+        var = parse_value(next(res))
+        addop, args = PARAMS([PWORD])(res)
+        opcode += addop
+        return cls(opcode, var, *args)
 
 
 @regop('o5_getActorFacing')
-def o5_getActorFacing_wd(op):
-    return fstat('{0} = actor-facing {1:object}', *op.args)
+class GetActorFacing(WindexStatement):
+    def windex(self) -> str:
+        return fstat('{0} = actor-facing {1:object}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x63
+
+        res = parse.parse('{0} = actor-facing {1}', src)
+        if res is None:
+            return None
+        res = iter(res)
+        var = parse_value(next(res))
+        addop, args = PARAMS([PBYTE])(res)
+        opcode += addop
+        return cls(opcode, var, *args)
 
 
 @regop('o5_isGreaterEqual')
-def o5_isGreaterEqual_wd(op):
-    *args, offset = op.args
-    return ConditionalJump(
-        fstat('{0} <= {1}', *args),
-        offset,
-    )
+class IsGreaterEqual(WindexStatement):
+    def windex(self) -> ConditionalJump:
+        *args, offset = self.args
+        return ConditionalJump(
+            fstat('{0} <= {1}', *args),
+            offset,
+        )
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x04
+
+        res = parse.parse('if !({left} <= {right}) jump &[{jump:d}]', src)
+        if res is None:
+            return src
+        left = parse_value(res['left'])
+        right = parse_value(res['right'])
+        if right is None:
+            right = WordValue(int(res['right']).to_bytes(2, byteorder='little', signed=False))
+        else:
+            opcode += 0x80
+        target_off = int(res['jump']) - 8
+        endpos = base_off + 1 + len(left.to_bytes()) + len(right.to_bytes()) + 2
+        return cls(opcode, left, right, RefOffset(target_off - endpos, endpos))
 
 
 @regop('o5_isLess')
-def o5_isLess_wd(op):
-    *args, offset = op.args
-    return ConditionalJump(
-        fstat('{0} > {1}', *args),
-        offset,
-    )
+class IsLess(WindexStatement):
+    def windex(self) -> ConditionalJump:
+        *args, offset = self.args
+        return ConditionalJump(
+            fstat('{0} > {1}', *args),
+            offset,
+        )
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x44
+
+        res = parse.parse('if !({left} > {right}) jump &[{jump:d}]', src)
+        if res is None:
+            return src
+        left = parse_value(res['left'])
+        right = parse_value(res['right'])
+        if right is None:
+            right = WordValue(int(res['right']).to_bytes(2, byteorder='little', signed=False))
+        else:
+            opcode += 0x80
+        target_off = int(res['jump']) - 8
+        endpos = base_off + 1 + len(left.to_bytes()) + len(right.to_bytes()) + 2
+        return cls(opcode, left, right, RefOffset(target_off - endpos, endpos))
 
 
 @regop('o5_loadRoomWithEgo')
-def o5_loadRoomWithEgo_wd(op):
-    # TODO: don't display optional  'walk-to x,y' part when x,y are -1,-1
-    # windex:   come-out #161 in-room #13 walk-to #202,#202 (actual value #202,#116)
-    #           come-out #1035 in-room #76
-    # SCUMM refrence: come-out-door object-name in-room room-name [walk x-coord,y-coord]
-    return fstat('come-out {0:object} in-room {1:room} walk-to {2},{3}', *op.args)
+class LoadRoomWithEgo(WindexStatement):
+    def windex(self) -> str:
+        # windex:   come-out #161 in-room #13 walk-to #202,#202 (actual value #202,#116)
+        #           come-out #1035 in-room #76
+        # SCUMM refrence: come-out-door object-name in-room room-name [walk x-coord,y-coord]
+        return fstat('come-out {0:object} in-room {1:room} walk-to {2},{3}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x24
+
+        res = parse.parse('come-out {0} in-room {1} walk-to {2},{3}', src)
+        if res is None:
+            return None
+        args = iter(res)
+        addop, vargs = PARAMS([PWORD, PBYTE])(args)
+        opcode += addop
+        vargs.append(PWORD(next(args)))
+        vargs.append(PWORD(next(args)))
+
+        return cls(opcode, *vargs)
 
 
 @regop('o5_drawObject')
-def o5_drawObject_wd(op):
-    obj, *args = op.args
-    params = builder(
-        {
-            'AT': 'at {0},{1}',
-            'STATE': 'image {0:state}',
-        },
-    )
-    return fstat('draw-object {0:object} {params}', obj, params=params(args))
+class DrawObject(WindexStatement):
+    def windex(self) -> str:
+        obj, *args = self.args
+        params = builder(
+            {
+                'AT': 'at {0},{1}',
+                'STATE': 'image {0:state}',
+            },
+        )
+        return fstat('draw-object {0:object} {params}', obj, params=params(args))
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x05
+
+        mapping = {
+            0x01: ('AT', 'at {0},{1}', (PARAMS([PWORD, PWORD]),)),
+            0x02: ('STATE', 'image {0}', (PARAMS([PWORD]),)),
+        }
+
+        res = parse.parse('draw-object {0:S}{params:vargs}', src, {'vargs': parse_build})
+        if res is None:
+            return None
+        params = []
+        if res['params']:
+            for op, (name, fmt, arg_types) in mapping.items():
+                xres = parse.parse(fmt, res['params'])
+                if xres is not None:
+                    args = iter(xres)
+                    for arg_type in arg_types:
+                        addop, addvargs = arg_type(args)
+                        op += addop
+                        params.append(SomeOp(name, op, 0, tuple(addvargs)))
+                    break
+        else:
+            params.append(ByteValue(bytes([0xFF])))
+        obj = parse_value(res[0])
+        if obj is None:
+            obj = WordValue(int(res[0]).to_bytes(2, byteorder='little', signed=False))
+        else:
+            opcode += 0x80
+        return cls(opcode, obj, *params)
 
 
 @regop('o5_pickupObject')
-def o5_pickUpObject_wd(op):
-    return fstat('pick-up-object {0:object} in-room {1:room}', *op.args)
+class PickUpObject(WindexStatement):
+    def windex(self) -> str:
+        return fstat('pick-up-object {0:object} in-room {1:room}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x25
+
+        res = parse.parse('pick-up-object {0} in-room {1}', src)
+        if res is None:
+            return None
+        addop, args = PARAMS([PWORD, PBYTE])(iter(res))
+        opcode += addop
+        return cls(opcode, *args)
 
 
 @regop('o5_getActorElevation')
-def o5_getActorElevation_wd(op):
-    return fstat('{0} = actor-elevation {1:object}', *op.args)
+class GetActorElevation(WindexStatement):
+    def windex(self) -> str:
+        return fstat('{0} = actor-elevation {1:object}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x06
+
+        res = parse.parse('{0} = actor-elevation {1}', src)
+        if res is None:
+            return None
+        res = iter(res)
+        var = parse_value(next(res))
+        addop, args = PARAMS([PBYTE])(res)
+        opcode += addop
+        return cls(opcode, var, *args)
 
 
 @regop('o5_setVarRange')
-def o5_setVarRange_wd(op):
-    target, num, *rest = op.args
-    assert len(rest) == num.op[0]
-    values = ' '.join(value(val) for val in rest)
-    return fstat('{0} = {values}', target, values=values)
+class SetVarRange(WindexStatement):
+    def windex(self) -> str:
+        target, num, *rest = self.args
+        assert len(rest) == num.op[0]
+        values = ' '.join(value(val) for val in rest)
+        return fstat('{0} = {values}', target, values=values)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x26
+
+        res = parse.parse('{0} = {values:svargs}', src, {'svargs': parse_svargs})
+        if res is None:
+            return None
+        target = parse_value(res[0])
+        svargs = []
+        vargs = [int(arg) for arg in res['values'].split()]
+        svargs.append(ByteValue(bytes([len(vargs)])))
+        if any(arg > 255 for arg in vargs):
+            opcode += 0x80
+            for val in vargs:
+                svargs.append(WordValue(val.to_bytes(2, byteorder='little', signed=False)))
+        else:
+            for val in vargs:
+                svargs.append(ByteValue(bytes([val])))
+        return cls(opcode, target, *svargs)
 
 
 @regop('o5_increment')
-def o5_increment_wd(op):
-    return fstat('++{0}', *op.args)
+class Increment(WindexStatement):
+    def windex(self) -> str:
+        return fstat('++{0}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x46
+
+        res = parse.parse('++{0}', src)
+        if res is None:
+            return None
+        var = parse_value(res[0])
+        return cls(opcode, var)
 
 
 @regop('o5_decrement')
-def o5_decrement_wd(op):
-    return fstat('--{0}', *op.args)
+class Decrement(WindexStatement):
+    def windex(self) -> str:
+        return fstat('--{0}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0xC6
+
+        res = parse.parse('--{var}', src)
+        if res is None:
+            return None
+        var = parse_value(res['var'])
+        return cls(opcode, var)
 
 
 @regop('o5_setState')
-def o5_setState_wd(op):
-    return fstat('state-of {0:object} is {1:state}', *op.args)
+class SetState(WindexStatement):
+    def windex(self) -> str:
+        return fstat('state-of {0:object} is {1:state}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x07
+
+        res = parse.parse('state-of {0} is {1}', src)
+        if res is None:
+            return None
+        res = iter(res)
+        addop, vargs = PARAMS([PWORD, PBYTE])(res)
+        opcode += addop
+
+        return cls(opcode, *vargs)
 
 
 @regop('o5_stringOps')
-def o5_stringOps_wd(op):
-    return builder(
-        {
-            'ASSIGN-STRING': '*{0} = {1:msg}',
-            'ASSIGN-STRING-VAR': (
-                # 0x27 o5_setState { BYTE hex=0x02 dec=2 BYTE hex=0x2f dec=47 BYTE hex=0x30 dec=48 }
-                # *#47 = *#48
-                '*{0} = *{1}'
-            ),
-            'ASSIGN-INDEX': (
-                # 0x27 o5_setState { BYTE hex=0x03 dec=3 BYTE hex=0x15 dec=21 BYTE hex=0x00 dec=0 VAR_9991 }
-                # *#21[#0] = #7
-                '*{0}[{1}] = {2}'
-            ),
-            'ASSIGN-VAR': (
-                # 0x27 o5_setState { BYTE hex=0x44 dec=68 L.2 BYTE hex=0x1e dec=30 L.0 }
-                # L.{0} = *#30[L.{0}]
-                '{0} = *{1}[{2}]'
-            ),
-            'STRING-INDEX': '*{0}[{1}]',
-        },
-    )(op.args)
+class StringOps(WindexStatement):
+    def windex(self) -> str:
+        return builder(
+            {
+                'ASSIGN-STRING': '*{0} = {1:msg}',
+                'ASSIGN-STRING-VAR': (
+                    # 0x27 o5_setState { BYTE hex=0x02 dec=2 BYTE hex=0x2f dec=47 BYTE hex=0x30 dec=48 }
+                    # *#47 = *#48
+                    '*{0} = *{1}'
+                ),
+                'ASSIGN-INDEX': (
+                    # 0x27 o5_setState { BYTE hex=0x03 dec=3 BYTE hex=0x15 dec=21 BYTE hex=0x00 dec=0 VAR_9991 }
+                    # *#21[#0] = #7
+                    '*{0}[{1}] = {2}'
+                ),
+                'ASSIGN-VAR': (
+                    # 0x27 o5_setState { BYTE hex=0x44 dec=68 L.2 BYTE hex=0x1e dec=30 L.0 }
+                    # L.{0} = *#30[L.{0}]
+                    '{0} = *{1}[{2}]'
+                ),
+                'STRING-INDEX': '*{0}[{1}]',
+            },
+        )(self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x27
+
+        mapping = {
+            0x01: ('ASSIGN-STRING', '*{0} = {1:msg}', (PARAMS([PBYTE]), PMSG)),
+            0x02: ('ASSIGN-STRING-VAR', '*{0} = *{1}', (PARAMS([PBYTE, PBYTE]),)),
+            0x03: ('ASSIGN-INDEX', '*{0}[{1}] = {2}', (PARAMS([PBYTE, PBYTE, PBYTE]),)),
+            0x04: ('ASSIGN-VAR', '{0} = *{1}[{2}]', (PVAR, PARAMS([PBYTE, PBYTE]))),
+            0x05: ('STRING-INDEX', '*{0}[{1}]', (PARAMS([PBYTE, PBYTE]),)),
+        }
+
+        for op, (name, fmt, arg_types) in mapping.items():
+            res = parse.parse(fmt, src, {'msg': parse_msg})
+            if res is not None:
+                vargs = []
+                args = iter(res)
+                for arg_type in arg_types:
+                    addop, addvargs = arg_type(args)
+                    op += addop
+                    vargs.extend(addvargs)
+
+                return cls(opcode, SomeOp(name, op, 0, tuple(vargs)))
+
+
+def PBYTE(val):
+    return ByteValue(bytes([int(val)]))
+
+
+def PWORD(val):
+    return WordValue(int(val).to_bytes(2, byteorder='little', signed=False))
+
+
+def PMSG(args):
+    msg = next(args)
+    return 0, [CString(msg)]
+
+
+def PVAR(args):
+    return 0, [parse_value(next(args))]
+
+
+def PARAMS(types):
+    def inner(args):
+        vargs = []
+        addop = 0
+        for atype, mask in zip(types, (0x80, 0x40, 0x20), strict=False):
+            arg = next(args)
+            parg = parse_value(arg)
+            if parg is None:
+                parg = atype(arg)
+            else:
+                addop += mask
+            vargs.append(parg)
+        return addop, vargs
+
+    return inner
 
 
 @regop('o5_getStringWidth')
-def o5_getStringWidth_wd(op):
-    return fstat('{0} = string-width {1}', *op.args)
+class GetStringWidth(WindexStatement):
+    def windex(self) -> str:
+        return fstat('{0} = string-width {1:msg}', *self.args)
 
 
 @regop('o5_isNotEqual')
 def o5_isNotEqual_wd(op):
-    *args, offset = op.args
-    return ConditionalJump(
-        fstat('{0} is-not {1}', *args),
-        offset,
-    )
+    class IsNotEqual(WindexStatement):
+        def windex(self) -> ConditionalJump:
+            *args, offset = self.args
+            return ConditionalJump(
+                fstat('{0} is-not {1}', *args),
+                offset,
+            )
 
 
 @regop('o5_equalZero')
-def o5_equalZero_wd(op):
-    var, offset = op.args
-    return ConditionalJump(
-        fstat('!{0}', var),
-        offset,
-    )
+class EqualZero(WindexStatement):
+    def windex(self) -> ConditionalJump:
+        var, offset = self.args
+        return ConditionalJump(
+            fstat('!{0}', var),
+            offset,
+        )
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x28
+
+        res = parse.parse('if !(!{expr}) jump &[{jump:d}]', src)
+        if res is None:
+            return src
+        expr = parse_value(res['expr'])
+        assert expr is not None
+        target_off = int(res['jump']) - 8
+        endpos = base_off + 1 + len(expr.to_bytes()) + 2
+        return cls(opcode, expr, RefOffset(target_off - endpos, endpos))
 
 
 @regop('o5_notEqualZero')
-def o5_notEqualZero_wd(op):
-    var, offset = op.args
-    return ConditionalJump(
-        fstat('{0}', var),
-        offset,
-    )
+class NotEqualZero(WindexStatement):
+    def windex(self) -> ConditionalJump:
+        var, offset = self.args
+        return ConditionalJump(
+            fstat('{0}', var),
+            offset,
+        )
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0xA8
+
+        res = parse.parse('if !({expr}) jump &[{jump:d}]', src)
+        if res is None:
+            return src
+        expr = parse_value(res['expr'])
+        assert expr is not None
+        target_off = int(res['jump']) - 8
+        endpos = base_off + 1 + len(expr.to_bytes()) + 2
+        return cls(opcode, expr, RefOffset(target_off - endpos, endpos))
+
+
+def parse_value(name: str):
+    defs = {
+        0: 'complex-temp',
+        1: 'selected-actor',
+        2: 'camera-x',
+        3: 'message-going',
+        4: 'selected-room',
+        5: 'override-hit',
+        6: 'machine-speed',
+        7: 'me',
+        8: 'number-of-actors',
+        9: 'current-lights',
+        10: 'current-disk-side',
+        11: 'jiffy1',
+        12: 'jiffy2',
+        13: 'jiffy3',
+        14: 'music-flag',
+        15: 'actor-range-min',
+        16: 'actor-range-max',
+        17: 'camera-min',
+        18: 'camera-max',
+        19: 'min-jiffies',
+        20: 'cursor-x',
+        21: 'cursor-y',
+        22: 'real-selected',
+        23: 'last-sound',
+        24: 'override-key',
+        25: 'actor-talking',
+        26: 'snap-scroll',
+        27: 'camera-script',
+        28: 'enter-room1-script',
+        29: 'enter-room2-script',
+        30: 'exit-room1-script',
+        31: 'exit-room2-script',
+        32: 'build-sentence-script',
+        33: 'sentence-script',
+        34: 'update-inven-script',
+        35: 'cut-scene1-script',
+        36: 'cut-scene2-script',
+        37: 'text-speed',
+        38: 'entered-door',
+        39: 'sputm-debug',
+        40: 'K-of-heap',
+        41: 'sputm-version',
+        42: 'restart-key',
+        43: 'pause-key',
+        44: 'screen-x',
+        45: 'screen-y',
+        46: 'frame-jiffies',
+        47: 'total-jiffies',
+        48: 'sound-mode',
+        49: 'graphics-mode',
+        50: 'save-load-key',
+        51: 'hard-disk',
+        52: 'cursor-state',
+        53: 'userput-state',
+        54: 'text-offset',
+    }
+    from_def = next((k for k, v in defs.items() if v == name), None)
+    if from_def is None:
+        more = parse.parse('{base}[{num}]', name)
+        if more is not None:
+            name = more['base']
+            more = more['num']
+            from_def = next((k for k, v in defs.items() if v == more), None)
+            if from_def is None:
+                if more.startswith('V.'):
+                    more = int(more[2:])
+                    more = Variable(more)
+                elif more.startswith('L.'):
+                    # Local variable
+                    more = int(more[2:])
+                    more = Variable(more + 0x4000)
+                else:
+                    more = WordValue(int(more).to_bytes(2, byteorder='little', signed=False))
+            else:
+                more = Variable(from_def)
+        if name.startswith('L.'):
+            # Local variable
+            num = int(name[2:])
+            return Variable(num + 0x4000, more)
+        if name.startswith('B.'):
+            # Bit variable
+            num = int(name[2:])
+            return Variable(num + 0x8000, more)
+        if name.startswith('V.'):
+            # Variable
+            num = int(name[2:])
+            return Variable(num, more)
+        return None
+    return Variable(from_def)
 
 
 @regop('o5_isEqual')
-def o5_isEqual_wd(op):
-    *args, offset = op.args
-    return ConditionalJump(
-        fstat('{0} is {1}', *args),
-        offset,
-    )
+class IsEqual(WindexStatement):
+    def windex(self) -> ConditionalJump:
+        *args, offset = self.args
+        return ConditionalJump(
+            fstat('{0} is {1}', *args),
+            offset,
+        )
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        # Parse a string like "if !({0} is {1}) jump &[00000008]"
+        # into a ConditionalJump object
+        opcode = 0xC8
+
+        res = parse.parse('if !({left} is {right}) jump &[{jump:d}]', src)
+        if res is None:
+            return src
+        left = parse_value(res['left'])
+        right = parse_value(res['right'])
+        if right is None:
+            right = WordValue(int(res['right']).to_bytes(2, byteorder='little', signed=False))
+            opcode -= 0x80
+        target_off = int(res['jump']) - 8
+        endpos = base_off + 1 + len(left.to_bytes()) + len(right.to_bytes()) + 2
+        return cls(opcode, left, right, RefOffset(target_off - endpos, endpos))
 
 
 @regop('o5_isScriptRunning')
-def o5_isScriptRunning_wd(op):
-    return fstat('{0} = script-running {1:script}', *op.args)
+class IsScriptRunning(WindexStatement):
+    def windex(self) -> str:
+        return fstat('{0} = script-running {1:script}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x68
+
+        res = parse.parse('{0} = script-running {1}', src)
+        if res is None:
+            return None
+        var = parse_value(res[0])
+        scr = parse_value(res[1])
+        if scr is None:
+            scr = ByteValue(bytes([int(res[1])]))
+        else:
+            opcode += 0x80
+        return cls(opcode, var, scr)
 
 
 @regop('o5_faceActor')
-def o5_faceActor_wd(op):
-    # windex shows actor {} face-towards {}
-    # SCUMM reference shows: do-animation actor-name face-towards actor-name
-    # NOTE: obj value might be actually actor, as seen in: ... face-towards selected-actor
-    return fstat('do-animation {0:object} face-towards {1:object}', *op.args)
+class FaceActor(WindexStatement):
+    def windex(self) -> str:
+        # windex shows actor {} face-towards {}
+        # SCUMM reference shows: do-animation actor-name face-towards actor-name
+        return fstat('do-animation {0:object} face-towards {1:object}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x09
+
+        res = parse.parse('do-animation {0} face-towards {1}', src)
+        if res is None:
+            return None
+        addop, args = PARAMS([PBYTE, PWORD])(iter(res))
+        opcode += addop
+        return cls(opcode, *args)
 
 
 @regop('o5_setOwnerOf')
-def o5_setOwnerOf_wd(op):
-    return fstat('owner-of {0:object} is {1:object}', *op.args)
+class SetOwnerOf(WindexStatement):
+    def windex(self) -> str:
+        return fstat('owner-of {0:object} is {1:object}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x29
+
+        res = parse.parse('owner-of {0} is {1}', src)
+        if res is None:
+            return None
+        addop, args = PARAMS([PWORD, PBYTE])(iter(res))
+        opcode += addop
+        return cls(opcode, *args)
 
 
 @regop('o5_startScript')
-def o5_start_script_wd(op):
-    return fstat(
-        'start-script {background}{recursive}{0:script} ({1:cvargs})',
-        *op.args,
-        background='bak ' if op.opcode & 0x20 else '',
-        recursive='rec ' if op.opcode & 0x40 else '',
-    )
+class StartScript(WindexStatement):
+    def windex(self) -> str:
+        return fstat(
+            'start-script {background}{recursive}{0:script} ({1:cvargs})',
+            *self.args,
+            background='bak ' if self.opcode & 0x20 else '',
+            recursive='rec ' if self.opcode & 0x40 else '',
+        )
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x0A
+
+        res = parse.parse(
+            'start-script {bak:bak}{rec:rec}{0} ({vargs:vargs})',
+            src,
+            {'vargs': parse_vargs, 'bak': parse_bak, 'rec': parse_rec},
+        )
+        if res is None:
+            return None
+        if res['bak']:
+            opcode += 0x20
+        if res['rec']:
+            opcode += 0x40
+
+        addop, args = PARAMS([PBYTE])(iter(res))
+        opcode += addop
+
+        return cls(opcode, *args, res['vargs'])
 
 
 @regop('o5_getVerbEntrypoint')
@@ -919,21 +1611,57 @@ def o5_printEgo_wd(op):
 
 
 @regop('o5_isLessEqual')
-def o5_isLessEqual_wd(op):
-    *args, offset = op.args
-    return ConditionalJump(
-        fstat('{0} >= {1}', *args),
-        offset,
-    )
+class IsLessEqual(WindexStatement):
+    def windex(self) -> ConditionalJump:
+        *args, offset = self.args
+        return ConditionalJump(
+            fstat('{0} >= {1}', *args),
+            offset,
+        )
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x38
+
+        res = parse.parse('if !({left} >= {right}) jump &[{jump:d}]', src)
+        if res is None:
+            return src
+        left = parse_value(res['left'])
+        right = parse_value(res['right'])
+        if right is None:
+            right = WordValue(int(res['right']).to_bytes(2, byteorder='little', signed=False))
+        else:
+            opcode += 0x80
+        target_off = int(res['jump']) - 8
+        endpos = base_off + 1 + len(left.to_bytes()) + len(right.to_bytes()) + 2
+        return cls(opcode, left, right, RefOffset(target_off - endpos, endpos))
 
 
 @regop('o5_isGreater')
-def o5_isGreater_wd(op):
-    *args, offset = op.args
-    return ConditionalJump(
-        fstat('{0} < {1}', *args),
-        offset,
-    )
+class IsGreater(WindexStatement):
+    def windex(self) -> ConditionalJump:
+        *args, offset = self.args
+        return ConditionalJump(
+            fstat('{0} < {1}', *args),
+            offset,
+        )
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x78
+
+        res = parse.parse('if !({left} < {right}) jump &[{jump:d}]', src)
+        if res is None:
+            return src
+        left = parse_value(res['left'])
+        right = parse_value(res['right'])
+        if right is None:
+            right = WordValue(int(res['right']).to_bytes(2, byteorder='little', signed=False))
+        else:
+            opcode += 0x80
+        target_off = int(res['jump']) - 8
+        endpos = base_off + 1 + len(left.to_bytes()) + len(right.to_bytes()) + 2
+        return cls(opcode, left, right, RefOffset(target_off - endpos, endpos))
 
 
 @regop('o5_doSentence')
@@ -1025,32 +1753,132 @@ def o5_isSoundRunning_wd(op):
 
 
 @regop('o5_ifClassOfIs')
-def o5_ifClassOfIs_wd(op):
-    *args, offset = op.args
-    return ConditionalJump(
-        fstat('class-of {0:object} is {1:svargs}', *args),
-        offset,
-    )
+class IfClassOfIs(WindexStatement):
+    def windex(self) -> ConditionalJump:
+        *args, offset = self.args
+        return ConditionalJump(
+            fstat('class-of {0:object} is {1:svargs}', *args),
+            offset,
+        )
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        # Parse a string like "if !({0} is {1}) jump &[00000008]"
+        # into a ConditionalJump object
+        opcode = 0x9D
+
+        res = parse.parse('if !(class-of {0} is {1:svargs}) jump &[{jump:d}]', src, {'svargs': parse_svargs})
+        if res is None:
+            return src
+        left = parse_value(res[0])
+        if left is None:
+            left = WordValue(int(res[0]).to_bytes(2, byteorder='little', signed=False))
+            opcode -= 0x80
+        svargs = []
+        args = [arg.strip() for arg in res[1].split() if arg.strip()]
+        for arg in args:
+            parg = parse_value(arg)
+            if parg is None:
+                parg = WordValue(int(arg).to_bytes(2, byteorder='little', signed=False))
+                svargs.append(SomeOp('ARG', 0x01, 0, (parg,)))
+            else:
+                svargs.append(SomeOp('ARG', 0x81, 0, (parg,)))
+        svargs.append(ByteValue(bytes([0xFF])))
+
+        target_off = int(res['jump']) - 8
+        endpos = base_off + 1 + len(left.to_bytes()) + sum(len(varg.to_bytes()) for varg in svargs) + 2
+        return cls(opcode, left, VarArgs(svargs), RefOffset(target_off - endpos, endpos))
 
 
 @regop('o5_findInventory')
-def o5_findInventory_wd(op):
-    return fstat('{0} = find-inventory {1},{2}', *op.args)
+class FindInventory(WindexStatement):
+    def windex(self) -> str:
+        return fstat('{0} = find-inventory {1},{2}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x3D
+
+        res = parse.parse('{0} = find-inventory {1},{2}', src)
+        if res is None:
+            return None
+        args = iter(res)
+        var = parse_value(next(args))
+        addop, vargs = PARAMS([PBYTE, PBYTE])(args)
+        opcode += addop
+
+        return cls(opcode, var, *vargs)
 
 
 @regop('o5_setClass')
-def o5_setClass_wd(op):
-    return fstat('class-of {0:object} is {1:svargs}', *op.args)
+class SetClass(WindexStatement):
+    def windex(self) -> str:
+        return fstat('class-of {0:object} is {1:svargs}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0xDD
+
+        res = parse.parse('class-of {0} is {1:svargs}', src, {'svargs': parse_svargs})
+        if res is None:
+            return src
+        left = parse_value(res[0])
+        if left is None:
+            left = WordValue(int(res[0]).to_bytes(2, byteorder='little', signed=False))
+            opcode -= 0x80
+        svargs = []
+        args = [arg.strip() for arg in res[1].split() if arg.strip()]
+        for arg in args:
+            parg = parse_value(arg)
+            if parg is None:
+                parg = WordValue(int(arg).to_bytes(2, byteorder='little', signed=False))
+                svargs.append(SomeOp('ARG', 0x01, 0, (parg,)))
+            else:
+                svargs.append(SomeOp('ARG', 0x81, 0, (parg,)))
+        svargs.append(ByteValue(bytes([0xFF])))
+        return cls(opcode, left, VarArgs(svargs))
 
 
 @regop('o5_walkActorTo')
-def o5_walkActorTo_wd(op):
-    return fstat('walk {0:object} to {1},{2}', *op.args)
+class WalkActorTo(WindexStatement):
+    def windex(self) -> str:
+        return fstat('walk {0:object} to {1},{2}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x1E
+
+        res = parse.parse('walk {0} to {1},{2}', src)
+        if res is None:
+            return None
+        args = iter(res)
+        addop, vargs = PARAMS([PBYTE, PWORD, PWORD])(args)
+        opcode += addop
+
+        return cls(opcode, *vargs)
 
 
 @regop('o5_drawBox')
-def o5_drawBox_wd(op):
-    return fstat('draw-box {0},{1} to {3},{4} color {5:color}', *op.args)
+class DrawBox(WindexStatement):
+    def windex(self) -> str:
+        return fstat('draw-box {0},{1} to {3},{4} color {5:color}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x3F
+
+        res = parse.parse('draw-box {0},{1} to {2},{3} color {4}', src)
+        if res is None:
+            return None
+        args = iter(res)
+        addop, vargs = PARAMS([PWORD, PWORD])(args)
+        opcode += addop
+
+        addop, vargs2 = PARAMS([PWORD, PWORD, PBYTE])(args)
+        vargs.append(PBYTE(5 + addop))
+        vargs.extend(vargs2)
+
+        return cls(opcode, *vargs)
 
 
 obj_names = {}
@@ -1199,9 +2027,7 @@ def transform_asts(indent, asts, transform=True):
                                     asts[last_label].append(
                                         f'for {init} to {end} {step} {{',
                                     )
-                                    asts[last_label].extend(
-                                        f'\t{st}' for st in asts[label]
-                                    )
+                                    asts[last_label].extend(f'\t{st}' for st in asts[label])
                                     asts[last_label].append('}')
                                     del asts[label]
                                     deleted |= {label}
@@ -1373,17 +2199,9 @@ def transform_asts(indent, asts, transform=True):
 
                 if not skip_deref:
                     for lb in keys:
-                        deps[lb] = [
-                            f'_{label}' if str(ex) == label else ex for ex in deps[lb]
-                        ]
-                    asts = {
-                        f'_{label}' if label == lbl else lbl: block
-                        for lbl, block in asts.items()
-                    }
-                    deps = {
-                        f'_{label}' if label == lbl else lbl: block
-                        for lbl, block in deps.items()
-                    }
+                        deps[lb] = [f'_{label}' if str(ex) == label else ex for ex in deps[lb]]
+                    asts = {f'_{label}' if label == lbl else lbl: block for lbl, block in asts.items()}
+                    deps = {f'_{label}' if label == lbl else lbl: block for lbl, block in deps.items()}
 
         # print(asts)
         # print(deps)
@@ -1424,17 +2242,22 @@ def get_elem_info(elem):
     pref, script_data = script_map[elem.tag](elem.data)
     entries = {}
     if elem.tag == 'VERB':
-        obj_names[gid] = msg_to_print(
-            bytes(sputm.find('OBNA', obcd).data).split(b'\0', maxsplit=1)[0]
-        )
+        obj_names[gid] = msg_to_print(bytes(sputm.find('OBNA', obcd).data).split(b'\0', maxsplit=1)[0])
         pref = list(parse_verb_meta(pref))
         entries = {off: idx[0] for idx, off in pref}
     else:
-        scr_id = (
-            int.from_bytes(pref, byteorder='little', signed=False) if pref else None
-        )
+        scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
         assert scr_id is None or scr_id == gid
     return script_data, gid, entries
+
+
+def destr(func):
+    def inner(stat):
+        if isinstance(func, type) and issubclass(func, WindexStatement):
+            return func(stat.opcode, *stat.args)
+        return func(stat)
+
+    return inner
 
 
 def decompile_script(elem, transform=True):
@@ -1484,7 +2307,7 @@ def decompile_script(elem, transform=True):
         if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
             srefs.add(off)
         try:
-            res = ops.get(stat.name, str)(stat) or stat
+            res = destr(ops.get(stat.name, str))(stat) or stat
         except Exception as exc:
             raise ScriptError(
                 exc,
@@ -1493,6 +2316,13 @@ def decompile_script(elem, transform=True):
                 stat,
                 None,
             ) from exc
+        if isinstance(res, WindexStatement):
+            wx = res.windex()
+            # print(str(wx))
+            parsed = res.parse(stat.offset, str(wx))
+            assert repr(parsed) == repr(res), (repr(parsed), repr(res), stat.to_bytes())
+            assert parsed.to_bytes() == stat.to_bytes(), (repr(parsed), repr(res), stat.to_bytes())
+            res = wx
         asts.append((off, res))
     yield from print_locals(indent)
     l_vars.clear()
@@ -1544,13 +2374,13 @@ if __name__ == '__main__':
 
     for disk in root:
         for room in sputm.findall('LFLF', disk):
-            room_no = rnam.get(room.attribs['gid'], f"room_{room.attribs['gid']}")
+            room_no = rnam.get(room.attribs['gid'], f'room_{room.attribs["gid"]}')
             print(
                 '==========================',
                 room.attribs['path'],
                 room_no,
             )
-            fname = f"{script_dir}/{room.attribs['gid']:04d}_{room_no}.scu"
+            fname = f'{script_dir}/{room.attribs["gid"]:04d}_{room_no}.scu'
 
             with open(fname, 'w') as f:
                 dump_script_file(room_no, room, decompile_script, f)
