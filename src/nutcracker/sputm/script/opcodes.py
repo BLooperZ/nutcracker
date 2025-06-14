@@ -333,31 +333,31 @@ def realize(src: Mapping[T, R | None]) -> dict[T, R]:
 
 
 def IMBYTE(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (ByteValue(stream),)
+    return (ByteValue.parse(stream),)
 
 
 def IMWORD(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (WordValue(stream),)
+    return (WordValue.parse(stream),)
 
 
 def IMDWORD(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (DWordValue(stream),)
+    return (DWordValue.parse(stream),)
 
 
 def OFFSET(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (RefOffset(stream),)
+    return (RefOffset.parse(stream),)
 
 
 def DOFFSET(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (RefOffset(stream, word_size=4),)
+    return (RefOffset.parse(stream, word_size=4),)
 
 
 def MSG_OP(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (CString(stream),)
+    return (CString.parse(stream),)
 
 
 def MSG_OP_V8(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (CString(stream, var_size=4),)
+    return (CString.parse(stream, var_size=4),)
 
 
 def makeop(
@@ -374,7 +374,7 @@ def SUBOP(
     if mapping is None:
         mapping = {}
     def subop(stream: IO[bytes]) -> Iterable[ScriptArg]:
-        cmd = ByteValue(stream)
+        cmd = ByteValue.parse(stream)
         op = ord(cmd.op)
         name = subs.lookup(op)
         factory = makeop(name, *mapping.get(op, ()))

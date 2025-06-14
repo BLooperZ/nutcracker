@@ -145,7 +145,7 @@ def named(arg: 'Variable') -> 'str | Variable':
 def value(arg: 'Variable | ByteValue | WordValue') -> 'str | int':
     if isinstance(arg, Variable):
         return str(named(arg))
-    display = f"{int.from_bytes(arg.op, byteorder='little', signed=False)}"
+    display = f'{int.from_bytes(arg.op, byteorder="little", signed=False)}'
     # Windex shows # before immediate values: return f"#{display}"
     return display
 
@@ -179,10 +179,10 @@ class Variable(ScriptArg):
 
 def get_var(stream: IO[bytes]) -> 'Variable':
     var = Variable(
-        int.from_bytes(WordValue(stream).op, byteorder='little', signed=False),
+        int.from_bytes(WordValue.parse(stream).op, byteorder='little', signed=False),
     )
     if var.num & 0x2000:
-        word = WordValue(stream)
+        word = WordValue.parse(stream)
         more = int.from_bytes(word.op, byteorder='little', signed=False)
         if more & 0x2000:
             return Variable(var.num - 0x2000, Variable(more - 0x2000))
@@ -201,7 +201,7 @@ def get_params(
     assert len(args) <= len(masks)
     for mask, ctype in zip(masks, args, strict=False):
         cconst = cast(Callable[[IO[bytes]], ScriptArg], ctype)
-        param = get_var(stream) if opcode & mask else cconst(stream)
+        param = get_var(stream) if opcode & mask else cconst.parse(stream)
         assert isinstance(param, Variable if opcode & mask else ctype)
         yield param
 
@@ -239,7 +239,7 @@ def SUBMASK_VARARGS(
 ) -> Callable[[int, IO[bytes]], Iterator[ScriptArg]]:
     def inner(opcode: int, stream: IO[bytes]) -> Iterator[ScriptArg]:
         while True:
-            sub = ByteValue(stream)
+            sub = ByteValue.parse(stream)
             if ord(sub.op) & mask == term & mask:
                 # if ord(sub.op) != mask:
                 #     # This happens in Monkey Island UTE
@@ -259,7 +259,7 @@ def SUBMASK(
     mask: int, mapping: dict[int, Callable[[int, IO[bytes]], SomeOp]]
 ) -> Callable[[int, IO[bytes]], Iterator[SomeOp]]:
     def inner(opcode: int, stream: IO[bytes]) -> Iterator[SomeOp]:
-        sub = ByteValue(stream)
+        sub = ByteValue.parse(stream)
         yield mapping[ord(sub.op) & mask](ord(sub.op), stream)
 
     return inner
@@ -271,7 +271,7 @@ def PARAMS(
     def inner(opcode: int, stream: IO[bytes]) -> Iterator[ScriptArg]:
         for idx, arg in enumerate(args):
             if idx != 0:
-                sub = ByteValue(stream)
+                sub = ByteValue.parse(stream)
                 yield sub
                 opcode = ord(sub.op)
             yield from get_params(opcode, stream, arg)
@@ -280,7 +280,7 @@ def PARAMS(
 
 
 def MSG_OP(opcode: int, stream: IO[bytes]) -> Iterator[CString]:
-    yield CString(stream)
+    yield CString.parse(stream)
 
 
 def STRING_SUBARGS(
@@ -308,35 +308,35 @@ def VAR(opcode: int, stream: IO[bytes]) -> Iterator[Variable]:
 
 
 def OFFSET(opcode: int, stream: IO[bytes]) -> Iterator[RefOffset]:
-    yield RefOffset(stream)
+    yield RefOffset.parse(stream)
 
 
 def IMWORD(opcode: int, stream: IO[bytes]) -> Iterator[WordValue]:
-    yield WordValue(stream)
+    yield WordValue.parse(stream)
 
 
 def IMBYTE(opcode: int, stream: IO[bytes]) -> Iterator[ByteValue]:
-    yield ByteValue(stream)
+    yield ByteValue.parse(stream)
 
 
 def OPERATION(opcode: int, stream: IO[bytes]) -> Iterator[SomeOp]:
-    nest = ByteValue(stream)
+    nest = ByteValue.parse(stream)
     yield OPCODES_v5[nest.op[0] & 0x1F](nest.op[0], stream)
 
 
 def BYTE_VARARGS(opcode: int, stream: IO[bytes]) -> Iterator[ByteValue]:
     while True:
-        val = ByteValue(stream)
+        val = ByteValue.parse(stream)
         yield val
         if ord(val.op) == 0:
             break
 
 
 def VAR_RANGE(opcode: int, stream: IO[bytes]) -> Iterator[ByteValue | WordValue]:
-    num = ByteValue(stream)
+    num = ByteValue.parse(stream)
     yield num
     for _ in range(num.op[0]):
-        yield WordValue(stream) if opcode & PARAM_1 else ByteValue(stream)
+        yield WordValue.parse(stream) if opcode & PARAM_1 else ByteValue.parse(stream)
 
 
 def do_sentence_params(opcode: int, stream: IO[bytes]) -> Iterator[ScriptArg]:
