@@ -32,9 +32,9 @@ def ini_op_v71(stream: IO[bytes]) -> Iterable[ScriptArg]:
     typ = ord(stream.read(1))
     stream.seek(2, 1)  # seek back to where it was.
     if typ == 1:
-        return (CString(stream),)
+        return (CString.parse(stream),)
     if typ == 2:
-        return (CString(stream), CString(stream))
+        return (CString.parse(stream), CString.parse(stream))
     raise ValueError(type)
 
 

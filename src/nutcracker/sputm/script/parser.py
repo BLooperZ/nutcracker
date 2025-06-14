@@ -26,8 +26,13 @@ class ScriptArg(Protocol):
 
 
 class CString(ScriptArg):
-    def __init__(self, stream: IO[bytes], var_size: int = 2) -> None:
-        self.msg = b''.join(read_message(stream, escape=b'\xff', var_size=var_size))
+    def __init__(self, msg: bytes, var_size: int = 2) -> None:
+        self.msg = msg
+
+    @classmethod
+    def parse(cls, stream: IO[bytes], var_size: int = 2) -> 'Self':
+        msg = b''.join(read_message(stream, escape=b'\xff', var_size=var_size))
+        return cls(msg)
 
     def __repr__(self) -> str:
         return f'<MSG {self.msg!r}>'
@@ -38,8 +43,13 @@ class CString(ScriptArg):
 
 
 class ByteValue(ScriptArg):
-    def __init__(self, stream: IO[bytes]) -> None:
-        self.op = stream.read(1)
+    def __init__(self, op: bytes) -> None:
+        self.op = op
+
+    @classmethod
+    def parse(cls, stream: IO[bytes]) -> 'Self':
+        op = stream.read(1)
+        return cls(op)
 
     def __repr__(self) -> str:
         return f'<BYTE hex=0x{ord(self.op):02x} dec={ord(self.op)}>'
@@ -49,8 +59,13 @@ class ByteValue(ScriptArg):
 
 
 class WordValue(ScriptArg):
-    def __init__(self, stream: IO[bytes]) -> None:
-        self.op = stream.read(2)
+    def __init__(self, op: bytes) -> None:
+        self.op = op
+
+    @classmethod
+    def parse(cls, stream: IO[bytes]) -> 'Self':
+        op = stream.read(2)
+        return cls(op)
 
     def __repr__(self) -> str:
         val = int.from_bytes(self.op, byteorder='little', signed=True)
@@ -61,8 +76,13 @@ class WordValue(ScriptArg):
 
 
 class DWordValue(ScriptArg):
-    def __init__(self, stream: IO[bytes]) -> None:
-        self.op = stream.read(4)
+    def __init__(self, op: bytes) -> None:
+        self.op = op
+
+    @classmethod
+    def parse(cls, stream: IO[bytes]) -> 'Self':
+        op = stream.read(4)
+        return cls(op)
 
     def __repr__(self) -> str:
         val = int.from_bytes(self.op, byteorder='little', signed=True)
@@ -73,11 +93,20 @@ class DWordValue(ScriptArg):
 
 
 class RefOffset(ScriptArg):
-    def __init__(self, stream: IO[bytes], word_size: int = 2) -> None:
-        rel = int.from_bytes(stream.read(word_size), byteorder='little', signed=True)
-        self.endpos = stream.tell()
+    def __init__(self, rel: int, endpos: int, word_size: int = 2) -> None:
+        self.endpos = endpos
         self.size = word_size
         self.abs = rel + self.endpos
+
+    @classmethod
+    def parse(
+        cls,
+        stream: IO[bytes],
+        word_size: int = 2,
+    ) -> 'Self':
+        rel = int.from_bytes(stream.read(word_size), byteorder='little', signed=True)
+        endpos = stream.tell()
+        return cls(rel, endpos, word_size)
 
     @property
     def rel(self) -> int:
