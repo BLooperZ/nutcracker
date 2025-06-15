@@ -414,13 +414,7 @@ def o5_isGreaterEqual(opcode: int, stream: IO[bytes]) -> SomeOp:
     return flatop(
         ('o5_isGreaterEqual', {0x04, 0x84}, VAR, PARAMS(WORD), OFFSET),
         ('o5_isLess', {0x44, 0xC4}, VAR, PARAMS(WORD), OFFSET),
-        (
-            'o5_loadRoomWithEgo',
-            {0x24, 0x64, 0xA4, 0xE4},
-            PARAMS(WORD + BYTE),
-            IMWORD,
-            IMWORD,
-        ),
+        ('o5_loadRoomWithEgo', {0x24, 0x64, 0xA4, 0xE4}, PARAMS(WORD + BYTE), IMWORD, IMWORD),
     )(opcode, stream)
 
 

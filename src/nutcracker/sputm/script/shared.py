@@ -1,6 +1,9 @@
 import io
 from collections import deque
 from collections.abc import Iterator, Mapping
+from string import printable
+
+from nutcracker.sputm.strings import RAW_ENCODING, EncodingSetting
 
 try:
     # Python 3.10+
@@ -11,7 +14,7 @@ except:
 
 from nutcracker.sputm.script.bytecode import BytecodeParseError
 from nutcracker.sputm.script.opcodes_v5 import SomeOp
-from nutcracker.sputm.script.parser import Statement
+from nutcracker.sputm.script.parser import CString, Statement
 from nutcracker.utils.funcutils import grouper
 
 
@@ -109,3 +112,50 @@ def realize_refs(srefs, hrefs, seq):
     stats = deque(stat for _, stat in seq)
     if stats:
         yield label, stats
+
+
+def escape_message(
+    msg: bytes,
+    escape: bytes | None = None,
+    var_size: int = 2,
+) -> Iterator[bytes]:
+    controls = {0x04: 'n', 0x05: 'v', 0x06: 'o', 0x07: 's'}
+    with io.BytesIO(msg) as stream:
+        while True:
+            c = stream.read(1)
+            if c in {b'', b'\0'}:
+                break
+            assert c is not None
+            if c == escape:
+                t = stream.read(1)
+                if ord(t) in controls:
+                    control = controls[ord(t)]
+                    num = int.from_bytes(
+                        stream.read(var_size),
+                        byteorder='little',
+                        signed=False,
+                    )
+                    c = f'%{control}{num}%'.encode()
+                else:
+                    c += t
+                    if ord(t) not in {1, 2, 3, 8}:
+                        c += stream.read(var_size)
+                    c = b''.join(f'\\x{v:02X}'.encode() for v in c)
+            elif c not in (printable.encode() + bytes(range(ord('\xe0'), ord('\xfa') + 1))):
+                c = b''.join(f'\\x{v:02X}'.encode() for v in c)
+            elif c == b'\\':
+                c = b'\\\\'
+            yield c
+
+
+def msg_to_print(msg: bytes, encoding: EncodingSetting = RAW_ENCODING) -> str:
+    return b''.join(escape_message(msg, escape=b'\xff')).decode(**encoding)
+
+
+def msg_val(arg: CString) -> str:
+    # "\\xFF\\x06\\x6C\\x00" -> "%o108%"
+    # "\\xFF\\x06\\x6D\\x00" -> "%o109%"
+    # "\\xFF\\x06\\x07\\x00" -> "%o7%"
+    # "\\xFF\\x04\\xC2\\x01" -> "%n450%"
+    # "\\xFF\\x05\\x6B\\x00 \\xFF\\x06\\x6C\\x00 \\xFF\\x05\\x6E\\x00 \\xFF\\x06\\x6D\\x00" -> "%v107% %o108% %v110% %o109%"
+    return f'"{msg_to_print(arg.msg)}"'

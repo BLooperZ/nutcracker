@@ -1,12 +1,9 @@
-import io
 import itertools
-import json
 import operator
 import os
 from collections import OrderedDict, defaultdict, deque
 from collections.abc import Iterable
 from dataclasses import dataclass
-from string import printable
 from typing import Any
 
 import parse
@@ -18,11 +15,13 @@ from nutcracker.sputm.script.parser import CString, WordValue
 from nutcracker.sputm.script.shared import (
     BytecodeError,
     ScriptError,
+    msg_to_print,
+    msg_val,
     parse_verb_meta,
     print_asts,
     realize_refs,
 )
-from nutcracker.sputm.strings import RAW_ENCODING, EncodingSetting
+from nutcracker.sputm.strings import RAW_ENCODING
 from nutcracker.sputm.tree import narrow_schema
 
 from .script.bytecode import BytecodeParseError, descumm_iter, get_argtype, script_map
@@ -112,53 +111,6 @@ def get_element_by_path(path: str, root: Iterable[Element]) -> Element | None:
         if path.startswith(elem.attribs['path']):
             return get_element_by_path(path, elem)
     return None
-
-
-def escape_message(
-    msg: bytes,
-    escape: bytes | None = None,
-    var_size: int = 2,
-) -> bytes:
-    controls = {0x04: 'n', 0x05: 'v', 0x06: 'o', 0x07: 's'}
-    with io.BytesIO(msg) as stream:
-        while True:
-            c = stream.read(1)
-            if c in {b'', b'\0'}:
-                break
-            assert c is not None
-            if c == escape:
-                t = stream.read(1)
-                if ord(t) in controls:
-                    control = controls[ord(t)]
-                    num = int.from_bytes(
-                        stream.read(var_size),
-                        byteorder='little',
-                        signed=False,
-                    )
-                    c = f'%{control}{num}%'.encode()
-                else:
-                    c += t
-                    if ord(t) not in {1, 2, 3, 8}:
-                        c += stream.read(var_size)
-                    c = b''.join(f'\\x{v:02X}'.encode() for v in c)
-            elif c not in printable.encode():
-                c = b''.join(f'\\x{v:02X}'.encode() for v in c)
-            elif c == b'\\':
-                c = b'\\\\'
-            yield c
-
-
-def msg_to_print(msg: bytes, encoding: EncodingSetting = RAW_ENCODING) -> str:
-    return b''.join(escape_message(msg, escape=b'\xff')).decode(**encoding)
-
-
-def msg_val(arg):
-    # "\\xFF\\x06\\x6C\\x00" -> "%o108%"
-    # "\\xFF\\x06\\x6D\\x00" -> "%o109%"
-    # "\\xFF\\x06\\x07\\x00" -> "%o7%"
-    # "\\xFF\\x04\\xC2\\x01" -> "%n450%"
-    # "\\xFF\\x05\\x6B\\x00 \\xFF\\x06\\x6C\\x00 \\xFF\\x05\\x6E\\x00 \\xFF\\x06\\x6D\\x00" -> "%v107% %o108% %v110% %o109%"
-    return json.dumps(msg_to_print(arg.msg))
 
 
 def adr(arg):
@@ -261,6 +213,10 @@ def parse_msg(msg):
     return unescape_message(msg.strip('"'))
 
 
+@parse.with_pattern(r'\s*(?![!*])\S+\s*')
+def parse_var(var):
+    return parse_value(var.strip())
+
 def encode_seq(seq: bytes) -> bytes:
     try:
         return bytes([int(b'0x' + seq[:2], 16)]) + seq[2:]
@@ -280,8 +236,8 @@ def unescape_message(msg: str) -> bytes:
                 b'\xff' + bytes([control]) + num.to_bytes(2, byteorder='little', signed=False),
             )
 
-    parts = bmsg.split(b'\\\\x')
-    bmsg = parts[0] + b''.join(encode_seq(part) for part in parts[1:])
+    prefix, *parts = bmsg.split(b'\\x')
+    bmsg = prefix + b''.join(encode_seq(part) for part in parts)
     bmsg = bmsg.replace(b'\\\\', b'\\')
 
     return bmsg
@@ -316,8 +272,22 @@ def parse_expr(args):
         if isinstance(subop, ByteValue) and ord(subop.op) == 0xFF:
             break
         if subop.name == 'OPERATION':
-            op = subop.args[0]
-            yield f'({destr(ops.get(op.name, str))(op) or str(op)})'
+            stat = subop.args[0]
+            res = destr(ops.get(stat.name, str))(stat) or str(stat)
+            # if isinstance(res, WindexStatement):
+            #     wx = res.windex()
+            #     # print(str(wx))
+            #     parsed = res.parse(stat.offset, str(wx))
+            #     # assert repr(parsed) == repr(res), (repr(parsed), repr(res), stat.to_bytes())
+            #     assert parsed.windex() == wx, (repr(parsed), repr(res), stat.to_bytes())
+
+            #     print(f'{wx}')
+            #     if parsed.to_bytes() != stat.to_bytes():
+            #         print('Warning: parsed statement does not match original bytecode:')
+            #         print(f'\t{parsed!r} != {res!r}')
+            #         print(f'\t{parsed.to_bytes()} != {stat.to_bytes()}')
+            #     res = wx
+            yield f'({res})'
             continue
         fmt = {
             'ARG': '{0}',
@@ -362,6 +332,9 @@ class WindexStatement:
 
     def __repr__(self) -> str:
         return f'<{self.__class__.__name__} opcode={self.opcode:#04x} args={self.args}>'
+
+    def __str__(self) -> str:
+        return f'{self.windex()}'  #  ; {self!r}'
 
     def to_bytes(self) -> bytes:
         return b''.join([bytes([self.opcode]), *(x.to_bytes() for x in self.args)])
@@ -479,6 +452,8 @@ class PutActor(WindexStatement):
     def parse(cls, base_off: int, src: str):
         opcode = 0x01
         res = parse.parse('put-actor {0} at {1},{2}', src)
+        if res is None:
+            return None
         addop, args = PARAMS([PBYTE, PWORD, PWORD])(iter(res))
         opcode += addop
         return cls(opcode, *args)
@@ -488,6 +463,18 @@ class PutActor(WindexStatement):
 class StartMusic(WindexStatement):
     def windex(self) -> str:
         return fstat('start-music {0:music}', *self.args)
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x02
+
+        res = parse.parse('start-music {0}', src)
+        if res is None:
+            return None
+        addop, args = PARAMS([PBYTE])(iter(res))
+        opcode += addop
+
+        return cls(opcode, *args)
 
 
 @regop('o5_chainScript')
@@ -545,11 +532,11 @@ class GetActorRoom(WindexStatement):
     def parse(cls, base_off: int, src: str):
         opcode = 0x03
 
-        res = parse.parse('{0} = actor-room {1}', src)
+        res = parse.parse('{0:var} = actor-room {1}', src, {'var': parse_var})
         if res is None:
             return None
         res = iter(res)
-        var = parse_value(next(res))
+        var = next(res)
         addop, args = PARAMS([PBYTE])(res)
         opcode += addop
         return cls(opcode, var, *args)
@@ -564,11 +551,11 @@ class GetActorY(WindexStatement):
     def parse(cls, base_off: int, src: str):
         opcode = 0x23
 
-        res = parse.parse('{0} = actor-y {1}', src)
+        res = parse.parse('{0:var} = actor-y {1}', src, {'var': parse_var})
         if res is None:
             return None
         res = iter(res)
-        var = parse_value(next(res))
+        var = next(res)
         addop, args = PARAMS([PWORD])(res)
         opcode += addop
         return cls(opcode, var, *args)
@@ -583,11 +570,11 @@ class GetActorX(WindexStatement):
     def parse(cls, base_off: int, src: str):
         opcode = 0x43
 
-        res = parse.parse('{0} = actor-x {1}', src)
+        res = parse.parse('{0:var} = actor-x {1}', src, {'var': parse_var})
         if res is None:
             return None
         res = iter(res)
-        var = parse_value(next(res))
+        var = next(res)
         addop, args = PARAMS([PWORD])(res)
         opcode += addop
         return cls(opcode, var, *args)
@@ -602,11 +589,11 @@ class GetActorFacing(WindexStatement):
     def parse(cls, base_off: int, src: str):
         opcode = 0x63
 
-        res = parse.parse('{0} = actor-facing {1}', src)
+        res = parse.parse('{0:var} = actor-facing {1}', src, {'var': parse_var})
         if res is None:
             return None
         res = iter(res)
-        var = parse_value(next(res))
+        var = next(res)
         addop, args = PARAMS([PBYTE])(res)
         opcode += addop
         return cls(opcode, var, *args)
@@ -625,13 +612,13 @@ class IsGreaterEqual(WindexStatement):
     def parse(cls, base_off: int, src: str):
         opcode = 0x04
 
-        res = parse.parse('if !({left} <= {right}) jump &[{jump:d}]', src)
+        res = parse.parse('if !({0:var} <= {1}) jump &[{jump:d}]', src, {'var': parse_var})
         if res is None:
-            return src
-        left = parse_value(res['left'])
-        right = parse_value(res['right'])
+            return None
+        left = res[0]
+        right = parse_value(res[1])
         if right is None:
-            right = WordValue(int(res['right']).to_bytes(2, byteorder='little', signed=False))
+            right = WordValue(int(res[1]).to_bytes(2, byteorder='little', signed=False))
         else:
             opcode += 0x80
         target_off = int(res['jump']) - 8
@@ -652,10 +639,10 @@ class IsLess(WindexStatement):
     def parse(cls, base_off: int, src: str):
         opcode = 0x44
 
-        res = parse.parse('if !({left} > {right}) jump &[{jump:d}]', src)
+        res = parse.parse('if !({left:var} > {right}) jump &[{jump:d}]', src, {'var': parse_var})
         if res is None:
-            return src
-        left = parse_value(res['left'])
+            return None
+        left = res['left']
         right = parse_value(res['right'])
         if right is None:
             right = WordValue(int(res['right']).to_bytes(2, byteorder='little', signed=False))
@@ -714,6 +701,11 @@ class DrawObject(WindexStatement):
         res = parse.parse('draw-object {0:S}{params:vargs}', src, {'vargs': parse_build})
         if res is None:
             return None
+        obj = parse_value(res[0])
+        if obj is None:
+            obj = WordValue(int(res[0]).to_bytes(2, byteorder='little', signed=False))
+        else:
+            opcode += 0x80
         params = []
         if res['params']:
             for op, (name, fmt, arg_types) in mapping.items():
@@ -727,11 +719,6 @@ class DrawObject(WindexStatement):
                     break
         else:
             params.append(ByteValue(bytes([0xFF])))
-        obj = parse_value(res[0])
-        if obj is None:
-            obj = WordValue(int(res[0]).to_bytes(2, byteorder='little', signed=False))
-        else:
-            opcode += 0x80
         return cls(opcode, obj, *params)
 
 
@@ -761,11 +748,11 @@ class GetActorElevation(WindexStatement):
     def parse(cls, base_off: int, src: str):
         opcode = 0x06
 
-        res = parse.parse('{0} = actor-elevation {1}', src)
+        res = parse.parse('{0:var} = actor-elevation {1}', src, {'var': parse_var})
         if res is None:
             return None
         res = iter(res)
-        var = parse_value(next(res))
+        var = next(res)
         addop, args = PARAMS([PBYTE])(res)
         opcode += addop
         return cls(opcode, var, *args)
@@ -777,16 +764,16 @@ class SetVarRange(WindexStatement):
         target, num, *rest = self.args
         assert len(rest) == num.op[0]
         values = ' '.join(value(val) for val in rest)
-        return fstat('{0} = {values}', target, values=values)
+        return fstat('{0} = [{values}]', target, values=values)
 
     @classmethod
     def parse(cls, base_off: int, src: str):
         opcode = 0x26
 
-        res = parse.parse('{0} = {values:svargs}', src, {'svargs': parse_svargs})
+        res = parse.parse('{0:var} = [{values:svargs}]', src, {'var': parse_var, 'svargs': parse_svargs})
         if res is None:
             return None
-        target = parse_value(res[0])
+        target = res[0]
         svargs = []
         vargs = [int(arg) for arg in res['values'].split()]
         svargs.append(ByteValue(bytes([len(vargs)])))
@@ -942,14 +929,29 @@ class GetStringWidth(WindexStatement):
 
 
 @regop('o5_isNotEqual')
-def o5_isNotEqual_wd(op):
-    class IsNotEqual(WindexStatement):
-        def windex(self) -> ConditionalJump:
-            *args, offset = self.args
-            return ConditionalJump(
-                fstat('{0} is-not {1}', *args),
-                offset,
-            )
+class IsNotEqual(WindexStatement):
+    def windex(self) -> ConditionalJump:
+        *args, offset = self.args
+        return ConditionalJump(
+            fstat('{0} is-not {1}', *args),
+            offset,
+        )
+
+    @classmethod
+    def parse(cls, base_off: int, src: str):
+        opcode = 0x88
+
+        res = parse.parse('if !({left:var} is-not {right}) jump &[{jump:d}]', src, {'var': parse_var})
+        if res is None:
+            return None
+        left = res['left']
+        right = parse_value(res['right'])
+        if right is None:
+            right = WordValue(int(res['right']).to_bytes(2, byteorder='little', signed=False))
+            opcode -= 0x80
+        target_off = int(res['jump']) - 8
+        endpos = base_off + 1 + len(left.to_bytes()) + len(right.to_bytes()) + 2
+        return cls(opcode, left, right, RefOffset(target_off - endpos, endpos))
 
 
 @regop('o5_equalZero')
@@ -965,10 +967,10 @@ class EqualZero(WindexStatement):
     def parse(cls, base_off: int, src: str):
         opcode = 0x28
 
-        res = parse.parse('if !(!{expr}) jump &[{jump:d}]', src)
+        res = parse.parse('if !(!{expr:var}) jump &[{jump:d}]', src, {'var': parse_var})
         if res is None:
-            return src
-        expr = parse_value(res['expr'])
+            return None
+        expr = res['expr']
         assert expr is not None
         target_off = int(res['jump']) - 8
         endpos = base_off + 1 + len(expr.to_bytes()) + 2
@@ -988,10 +990,10 @@ class NotEqualZero(WindexStatement):
     def parse(cls, base_off: int, src: str):
         opcode = 0xA8
 
-        res = parse.parse('if !({expr}) jump &[{jump:d}]', src)
+        res = parse.parse('if !({expr:var}) jump &[{jump:d}]', src, {'var': parse_var})
         if res is None:
-            return src
-        expr = parse_value(res['expr'])
+            return None
+        expr = res['expr']
         assert expr is not None
         target_off = int(res['jump']) - 8
         endpos = base_off + 1 + len(expr.to_bytes()) + 2
@@ -1106,10 +1108,10 @@ class IsEqual(WindexStatement):
         # into a ConditionalJump object
         opcode = 0xC8
 
-        res = parse.parse('if !({left} is {right}) jump &[{jump:d}]', src)
+        res = parse.parse('if !({left:var} is {right}) jump &[{jump:d}]', src, {'var': parse_var})
         if res is None:
-            return src
-        left = parse_value(res['left'])
+            return None
+        left = res['left']
         right = parse_value(res['right'])
         if right is None:
             right = WordValue(int(res['right']).to_bytes(2, byteorder='little', signed=False))
@@ -1128,10 +1130,10 @@ class IsScriptRunning(WindexStatement):
     def parse(cls, base_off: int, src: str):
         opcode = 0x68
 
-        res = parse.parse('{0} = script-running {1}', src)
+        res = parse.parse('{0:var} = script-running {1}', src, {'var': parse_var})
         if res is None:
             return None
-        var = parse_value(res[0])
+        var = res[0]
         scr = parse_value(res[1])
         if scr is None:
             scr = ByteValue(bytes([int(res[1])]))
@@ -1625,7 +1627,7 @@ class IsLessEqual(WindexStatement):
 
         res = parse.parse('if !({left} >= {right}) jump &[{jump:d}]', src)
         if res is None:
-            return src
+            return None
         left = parse_value(res['left'])
         right = parse_value(res['right'])
         if right is None:
@@ -1652,7 +1654,7 @@ class IsGreater(WindexStatement):
 
         res = parse.parse('if !({left} < {right}) jump &[{jump:d}]', src)
         if res is None:
-            return src
+            return None
         left = parse_value(res['left'])
         right = parse_value(res['right'])
         if right is None:
@@ -1769,7 +1771,7 @@ class IfClassOfIs(WindexStatement):
 
         res = parse.parse('if !(class-of {0} is {1:svargs}) jump &[{jump:d}]', src, {'svargs': parse_svargs})
         if res is None:
-            return src
+            return None
         left = parse_value(res[0])
         if left is None:
             left = WordValue(int(res[0]).to_bytes(2, byteorder='little', signed=False))
@@ -1799,11 +1801,11 @@ class FindInventory(WindexStatement):
     def parse(cls, base_off: int, src: str):
         opcode = 0x3D
 
-        res = parse.parse('{0} = find-inventory {1},{2}', src)
+        res = parse.parse('{0:var} = find-inventory {1},{2}', src, {'var': parse_var})
         if res is None:
             return None
         args = iter(res)
-        var = parse_value(next(args))
+        var = next(args)
         addop, vargs = PARAMS([PBYTE, PBYTE])(args)
         opcode += addop
 
@@ -1821,7 +1823,7 @@ class SetClass(WindexStatement):
 
         res = parse.parse('class-of {0} is {1:svargs}', src, {'svargs': parse_svargs})
         if res is None:
-            return src
+            return None
         left = parse_value(res[0])
         if left is None:
             left = WordValue(int(res[0]).to_bytes(2, byteorder='little', signed=False))
@@ -1950,6 +1952,20 @@ def collapse_override(asts):
 
 def transform_asts(indent, asts, transform=True):
     if not transform:
+        for label, seq in asts.items():
+            for st in seq:
+                print('============')
+                options = set()
+                for op, func in ops.items():
+                    if isinstance(func, type) and issubclass(func, WindexStatement):
+                        if not getattr(func, 'parse', None):
+                            continue
+                        x = func.parse(0, str(st))
+                        if x is not None:
+                            print('WORKS', op, func, repr(st), '->', repr(x))
+                            options.add(x)
+                options = {x for x in options if x is not None}
+                assert len(options) <= 1, options
         return asts
 
     # Collapse break-here
@@ -2316,13 +2332,19 @@ def decompile_script(elem, transform=True):
                 stat,
                 None,
             ) from exc
-        if isinstance(res, WindexStatement):
-            wx = res.windex()
-            # print(str(wx))
-            parsed = res.parse(stat.offset, str(wx))
-            assert repr(parsed) == repr(res), (repr(parsed), repr(res), stat.to_bytes())
-            assert parsed.to_bytes() == stat.to_bytes(), (repr(parsed), repr(res), stat.to_bytes())
-            res = wx
+        # if isinstance(res, WindexStatement):
+        #     wx = res.windex()
+        #     # print(str(wx))
+        #     parsed = res.parse(stat.offset, str(wx))
+        #     # assert repr(parsed) == repr(res), (repr(parsed), repr(res), stat.to_bytes())
+        #     assert parsed.windex() == wx, (repr(parsed), repr(res), stat.to_bytes())
+
+        #     print(f'{wx}')
+        #     if parsed.to_bytes() != stat.to_bytes():
+        #         print('Warning: parsed statement does not match original bytecode:')
+        #         print(f'\t{parsed!r} != {res!r}')
+        #         print(f'\t{parsed.to_bytes()} != {stat.to_bytes()}')
+        #     res = wx
         asts.append((off, res))
     yield from print_locals(indent)
     l_vars.clear()
