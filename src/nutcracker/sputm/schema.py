@@ -31,6 +31,7 @@ SCHEMA: dict[str, set[str]] = {
         'AWIZ',
         'TALK',
         'TLKE',
+        'WSOU',
         RAWD,
     },
     'ROOM': {
@@ -59,6 +60,9 @@ SCHEMA: dict[str, set[str]] = {
         'TRNS',
         'PALS',
         'OBIM',
+        'BOXD',
+        'BOXM',
+        'SCAL',
         'OBCD',
         'EXCD',
         'ENCD',
@@ -66,6 +70,7 @@ SCHEMA: dict[str, set[str]] = {
         'LSC2',
         'LSCR',
         'POLD',
+        'REMP',
     },
     'RMHD': DATA,
     'RMIM': {
@@ -257,4 +262,6 @@ SCHEMA: dict[str, set[str]] = {
     'SGEN': DATA,
     # LA0
     'ANAM': DATA,
+    'WSOU': DATA,
+    'REMP': DATA,
 }
