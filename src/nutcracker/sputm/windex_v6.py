@@ -2,7 +2,7 @@ import functools
 import io
 import operator
 import os
-from collections import OrderedDict, deque
+from collections import OrderedDict, defaultdict, deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -2288,7 +2288,10 @@ def get_elem_info(game, elem):
     if elem.tag == 'VERB':
         obj_names[gid] = msg_to_print(bytes(sputm.find('OBNA', obcd).data).split(b'\0', maxsplit=1)[0])
         pref = list(parse_verb_meta(pref))
-        entries = {off: idx[0] for idx, off in pref}
+        entries_dict = defaultdict(list)
+        for idx, off in pref:
+            entries_dict[off].append(idx[0])
+        entries = dict(entries_dict)
     else:
         scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
         assert scr_id is None or scr_id == gid
@@ -2353,7 +2356,8 @@ def decompile_script(elem, game, verbose=False, transform=True):
                 yield '\t}'
                 l_vars.clear()
             yield ''  # new line
-            yield f'\tverb {entries[off + 8]} {{'
+            verbs = ' '.join(str(verb) for verb in entries[off + 8])
+            yield f'\tverb {verbs} {{'
             indent = 2 * '\t'
             stack.clear()
         if verbose:

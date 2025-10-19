@@ -2260,7 +2260,10 @@ def get_elem_info(elem):
     if elem.tag == 'VERB':
         obj_names[gid] = msg_to_print(bytes(sputm.find('OBNA', obcd).data).split(b'\0', maxsplit=1)[0])
         pref = list(parse_verb_meta(pref))
-        entries = {off: idx[0] for idx, off in pref}
+        entries_dict = defaultdict(list)
+        for idx, off in pref:
+            entries_dict[off].append(idx[0])
+        entries = dict(entries_dict)
     else:
         scr_id = int.from_bytes(pref, byteorder='little', signed=False) if pref else None
         assert scr_id is None or scr_id == gid
@@ -2318,7 +2321,8 @@ def decompile_script(elem, transform=True):
                 yield '\t}'
                 l_vars.clear()
             yield ''  # new line
-            yield f'\tverb {semantic_key(entries[off + 8], sem="verb")} {{'
+            verbs = ' '.join(semantic_key(verb, sem="verb") for verb in entries[off + 8])
+            yield f'\tverb {verbs} {{'
             indent = 2 * '\t'
         if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
             srefs.add(off)
