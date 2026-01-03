@@ -6,9 +6,8 @@ from collections.abc import Iterable, Iterator, Sequence
 
 from nutcracker.kernel2.chunk import Chunk
 from nutcracker.kernel2.element import Element
-from nutcracker.kernel2.fileio import read_file
+from nutcracker.kernel2.fileio import read_file, write_file
 from nutcracker.sputm.tree import GameResource, GameResourceConfig
-from nutcracker.utils.fileio import write_file
 
 from .index import (
     read_directory_leg as read_dir,

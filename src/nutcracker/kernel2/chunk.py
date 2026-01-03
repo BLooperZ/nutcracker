@@ -55,7 +55,7 @@ class StructuredTuple(ABC, Generic[T]):
 
     @classmethod
     def from_buffer(cls, buffer: ArrayBuffer) -> Self:
-        chunk_header = np.frombuffer(buffer, dtype=cls.dtype, count=1)[0]
+        chunk_header = np.frombuffer(buffer, dtype=cls.dtype, count=1)[0].copy()
         return cls(chunk_header)
 
     def __bytes__(self) -> bytes:

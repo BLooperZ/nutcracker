@@ -97,7 +97,7 @@ def update_element_strings(
     strings = iter(strings)
     for elem in root:
         elem.attribs['offset'] = offset
-        if elem.tag in {'OBNA', 'TEXT'} and elem.data != b'\x00':
+        if elem.tag in {'OBNA', 'TEXT'} and bytes(elem.data) != b'\x00':
             elem.update_raw(next(strings) + b'\x00')
         elif elem.tag in {'LECF', 'LFLF', 'RMDA', 'ROOM', 'OBCD', 'TLKE', *script_map}:
             if elem.tag in script_map:

@@ -46,6 +46,7 @@ def descumm_iter(
     opcodes: OpTable,
     base_offset: int = 0,
 ) -> Iterable[tuple[int, Statement]]:
+    data = bytes(data)
     with io.BytesIO(data) as stream:
         bytecode = {}
         while True:

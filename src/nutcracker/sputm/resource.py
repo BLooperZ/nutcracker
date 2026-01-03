@@ -69,9 +69,9 @@ def get_disk(game: _GameMeta, num: int) -> str:
 
 
 def load_index(index_file: str | os.PathLike[str], chiper_key: int = 0) -> Sequence[Element]:
-    with ResourceFile.load(index_file, key=chiper_key) as index:
+    with ResourceFile.load(index_file, key=chiper_key, copy=False) as index:
         schema = sputm.generate_schema(index)
-        index_root = list(sputm(schema=schema).map_chunks(index))
+        index_root = list(sputm(schema=schema).map_chunks(bytes(index)))
     return index_root
 
 class IndexFileExpectedError(FileNotFoundError):

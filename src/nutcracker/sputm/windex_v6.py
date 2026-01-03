@@ -213,34 +213,16 @@ class BinExpr:
         left = self.left
         if (
             isinstance(left, str)
-            or isinstance(left, Negate)
             or (isinstance(left, BinExpr) and left.pre >= self.pre and left.op != self.op)
         ):
             left = f'({left})'
         right = self.right
         if (
             isinstance(right, str)
-            or isinstance(right, Negate)
             or (isinstance(right, BinExpr) and right.pre >= self.pre and right.op != self.op)
         ):
             right = f'({right})'
         return f'{left} {self.op} {right}'
-
-
-class Negate:
-    def __init__(self, op):
-        self.op = op
-
-    def __repr__(self):
-        return f'!{PrintArg(self.op)}'
-
-
-class Abs:
-    def __init__(self, op):
-        self.op = op
-
-    def __repr__(self):
-        return f'abs({self.op})'
 
 
 @dataclass
@@ -342,7 +324,7 @@ class PrintArg:
             return f'{background}{recursive}'
         if format_spec == 'operation':
             return ' +-&|^'[self.arg.num]
-        if isinstance(self.arg, str) and ' ':
+        if isinstance(self.arg, str) and (' ' in self.arg or self.arg.startswith('@')):
             return f'({self.arg})'
         if isinstance(self.arg, BinExpr):
             return f'({self.arg})'
@@ -540,6 +522,8 @@ def get_ops(
         'o6_wordArrayDec': fstack('--{1}[{0}]', POP, WORD_ARG(0)),
         'o6_wordArrayWrite': fstack('{0}[{2}] = {1}', SCRIPT_VAR(0), *NPOP(2)),
         'o6_wordArrayIndexedWrite': fstack('{0}[{3}][{2}] = {1}', SCRIPT_VAR(0), *NPOP(3)),
+        'o6_not': F_PUSH(fstack('!{0}', POP)),
+        'o6_abs': F_PUSH(fstack('abs {0}', POP)),
         'o6_drawBox': fstack('draw-box {4},{3} to {2},{1} color {0}', *NPOP(5)),
         'o6_setBoxFlags': fstack('set-box {1:svargs} to {0}', POP, POP_PARAMS),
         'o6_setBoxSet': fstack('set-box-set {0}', POP),
@@ -1740,17 +1724,6 @@ def o90_dup_n(op, stack, game):
     stack.append(Value(op.args[0], signed=True))
     params = get_params(stack)
     stack.extend(params * 2)
-
-
-@regop
-def o6_not(op, stack, game):
-    arg = stack.pop()
-    stack.append(Negate(arg))
-
-
-@regop
-def o6_abs(op, stack, game):
-    stack.append(Abs(stack.pop()))
 
 
 @regop

@@ -78,82 +78,82 @@ def read_game_resources(
     _, *disks = game.disks
 
     for didx, disk in enumerate(disks):
-        with ResourceFile.load(
-            os.path.join(game.basedir, disk), key=game.chiper_key
-        ) as resource:
-            # # commented out, use pre-calculated index instead,
-            # # as calculating is time-consuming
-            # s = sputm.generate_schema(resource)
-            # pprint.pprint(s)
-            # root = sputm.map_chunks(resource, idgen=idgens, schema=s)
+        resource = ResourceFile.load(
+            os.path.join(game.basedir, disk), key=game.chiper_key, copy=False
+        )
+        # # commented out, use pre-calculated index instead,
+        # # as calculating is time-consuming
+        # s = sputm.generate_schema(resource)
+        # pprint.pprint(s)
+        # root = sputm.map_chunks(resource, idgen=idgens, schema=s)
 
-            paths: dict[str, Chunk] = {}
-            wraps: dict[str, dict[int, int]] = {}
+        paths: dict[str, Chunk] = {}
+        wraps: dict[str, dict[int, int]] = {}
 
-            def update_element_path(
-                parent: Element | None,
-                chunk: Chunk,
-                offset: int,
-            ) -> dict[str, Any]:
-                if chunk.tag == 'LOFF':
-                    # should not happen in HE games
+        def update_element_path(
+            parent: Element | None,
+            chunk: Chunk,
+            offset: int,
+        ) -> dict[str, Any]:
+            if chunk.tag == 'LOFF':
+                # should not happen in HE games
 
-                    offs = dict(read_directory(chunk.data))
+                offs = dict(read_directory(chunk.data))
 
-                    # # to ignore cloned rooms
-                    # droo = idgens['LFLF']
-                    # droo = {k: v for k, v  in droo.items() if v == (didx + 1, 0)}
-                    # droo = {k: (disk, offs[k]) for k, (disk, _)  in droo.items()}
+                # # to ignore cloned rooms
+                # droo = idgens['LFLF']
+                # droo = {k: v for k, v  in droo.items() if v == (didx + 1, 0)}
+                # droo = {k: (disk, offs[k]) for k, (disk, _)  in droo.items()}
 
-                    droo = {k: (didx + 1, v) for k, v in offs.items()}
-                    idgens['LFLF'] = compare_pid_off(droo, 16 - config.base_fix)
+                droo = {k: (didx + 1, v) for k, v in offs.items()}
+                idgens['LFLF'] = compare_pid_off(droo, 16 - config.base_fix)
 
-                get_gid = idgens.get(chunk.tag)
-                gid: int | None
-                if not parent:
-                    gid = didx + 1
-                elif parent.attribs['path'] in wraps:
-                    gid = wraps[parent.attribs['path']].get(offset)
-                else:
-                    gid = get_gid and get_gid(
-                        parent and parent.attribs['gid'],
-                        chunk.data,
-                        offset,
-                    )
-
-                base = chunk.tag + (
-                    f'_{gid:04d}'
-                    if gid is not None
-                    else ''
-                    if not get_gid
-                    else f'_o_{offset:04X}'
+            get_gid = idgens.get(chunk.tag)
+            gid: int | None
+            if not parent:
+                gid = didx + 1
+            elif parent.attribs['path'] in wraps:
+                gid = wraps[parent.attribs['path']].get(offset)
+            else:
+                gid = get_gid and get_gid(
+                    parent and parent.attribs['gid'],
+                    chunk.data,
+                    offset,
                 )
 
-                dirname = parent.attribs['path'] if parent else ''
-                path = os.path.join(dirname, base)
+            base = chunk.tag + (
+                f'_{gid:04d}'
+                if gid is not None
+                else ''
+                if not get_gid
+                else f'_o_{offset:04X}'
+            )
 
-                if path in paths:
-                    path += 'd'
-                # assert path not in paths, path
-                paths[path] = chunk
+            dirname = parent.attribs['path'] if parent else ''
+            path = os.path.join(dirname, base)
 
-                if chunk.tag == 'WRAP':
-                    _, offs = sputm.untag(chunk.data)
-                    size = len(offs.data) // 4
-                    offs = dict(
-                        zip(
-                            struct.unpack(f'<{size}I', offs.data),
-                            range(1, size + 1),
-                            strict=True,
-                        ),
-                    )
-                    wraps[path] = offs
+            if path in paths:
+                path += 'd'
+            # assert path not in paths, path
+            paths[path] = chunk
 
-                res = {'path': path, 'gid': gid}
-                return res
+            if chunk.tag == 'WRAP':
+                _, offs = sputm.untag(chunk.data)
+                size = len(offs.data) // 4
+                offs = dict(
+                    zip(
+                        struct.unpack(f'<{size}I', offs.data),
+                        range(1, size + 1),
+                        strict=True,
+                    ),
+                )
+                wraps[path] = offs
 
-            # yield from sputm(**kwargs).map_chunks(resource, extra=update_element_path)
-            yield from sputm(**kwargs, extra=update_element_path).map_chunks(resource)
+            res = {'path': path, 'gid': gid}
+            return res
+
+        # yield from sputm(**kwargs).map_chunks(resource, extra=update_element_path)
+        yield from sputm(**kwargs, extra=update_element_path).map_chunks(resource)
 
 
 def create_config(game: Game) -> GameResourceConfig:

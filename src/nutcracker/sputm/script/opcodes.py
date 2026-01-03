@@ -333,31 +333,31 @@ def realize(src: Mapping[T, R | None]) -> dict[T, R]:
 
 
 def IMBYTE(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (ByteValue.parse(stream),)
+    yield ByteValue.parse(stream)
 
 
 def IMWORD(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (WordValue.parse(stream),)
+    yield WordValue.parse(stream)
 
 
 def IMDWORD(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (DWordValue.parse(stream),)
+    yield DWordValue.parse(stream)
 
 
 def OFFSET(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (RefOffset.parse(stream),)
+    yield RefOffset.parse(stream)
 
 
 def DOFFSET(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (RefOffset.parse(stream, word_size=4),)
+    yield RefOffset.parse(stream, word_size=4)
 
 
 def MSG_OP(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (CString.parse(stream),)
+    yield CString.parse(stream)
 
 
 def MSG_OP_V8(stream: IO[bytes]) -> Iterable[ScriptArg]:
-    return (CString.parse(stream, var_size=4),)
+    yield CString.parse(stream, var_size=4)
 
 
 def makeop(
