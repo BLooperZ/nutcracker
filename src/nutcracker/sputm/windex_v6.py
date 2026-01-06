@@ -252,21 +252,29 @@ class UnconditionalJump:
 
 
 def push_str(stack, msg):
-    ops['_strings'].append(msg)
+    stack.append(msg)
 
 
 def pop_str(stack) -> Any:
     arr = stack.pop()
     if isinstance(arr.orig, str):
+        # Variable indexed access coming from o6_wordArrayIndexedRead
         return arr
-    return ops['_strings'].pop() if Value(arr.orig, signed=True).num == -1 else arr
+    assert isinstance(arr.orig, WordValue), repr(arr.orig)
+    # -1 coming from o72_getScriptString which always followed by o6_pushWord with -1
+    # otherwise it's an array from o6_pushWordVar
+    if arr.num == -1:
+        assert isinstance(arr, Value), repr(arr)
+        return stack.pop()
+    assert isinstance(arr, Variable), repr(arr)
+    return arr
 
 
 def adr(arg: RefOffset) -> str:
     return f'&[{arg.abs + 8:08d}]'
 
 
-ops = {'_strings': deque()}
+ops = {}
 
 
 def regop(op):
@@ -1129,8 +1137,8 @@ def get_ops(
             BUILD({  # o100_debugInput
                 'SO_INIT': fstack('s_debug = debug-input {0}', POP_STR),
                 'SO_COUNT': fstack('\tsize {0}', POP),
-                'SO_DEFAULT': fstack('\tdefault', POP_STR),
-                'SO_TITLE_BAR': fstack('\ttitle-bar', POP_STR),
+                'SO_DEFAULT': fstack('\tdefault {0}', POP_STR),
+                'SO_TITLE_BAR': fstack('\ttitle-bar {0}', POP_STR),
                 'SO_END': F_PUSH(fstack('s_debug')),
             }),
             # o72_debugInput
@@ -1220,7 +1228,7 @@ def get_ops(
     }
     he72_ops = {
         'o72_captureWizImage': fstack('capture-image {4} at {3},{2} to {1},{0}', *NPOP(5)),
-        'o72_traceStatus': fstack('debug {1} {0}', POP, POP_STR),
+        'o72_traceStatus': fstack('debug {1} {0}', POP_STR, POP),
         'o72_resetCutscene': fstack('override off off'),
         **GUARD(game.he_version < 90)({
             'o72_drawWizImage': F_PUSH(fstack('draw-image {3} at {2},{1} {0}', *NPOP(4))),
