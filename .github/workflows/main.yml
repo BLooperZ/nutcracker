@@ -19,7 +19,7 @@ jobs:
         - windows-latest
         - ubuntu-latest
         - macos-latest
-        - macos-13
+        - macos-15-intel
     defaults:
       run:
         shell: bash
