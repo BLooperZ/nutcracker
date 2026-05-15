@@ -3,6 +3,9 @@
 name: Release Binary
 
 on:
+  schedule:
+    # Runs at 17:05 UTC on the 15st of every month
+    - cron: '05 17 15 * *'
   push:
     branches: [ develop ]
 
