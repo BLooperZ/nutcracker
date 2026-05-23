@@ -5799,6 +5799,10 @@ def decompile_script(elem, game, verbose=False, transform=True):
     asts = deque()
     res = None
 
+    # Stack state tracking for proper control flow handling
+    # Maps jump target addresses to saved stack states
+    saved_stacks = {}
+
     # # clear local variables:
     # for key in g_vars:  # NOTE: dict key is tuple, we iterates on keys only
     #     _, var = key
@@ -5840,6 +5844,7 @@ def decompile_script(elem, game, verbose=False, transform=True):
             yield f'\tverb {entries[off + 8]} {{'
             indent = 2 * '\t'
             stack.clear()
+            saved_stacks.clear()
         if verbose:
             yield ' '.join(
                 [
@@ -5850,6 +5855,11 @@ def decompile_script(elem, game, verbose=False, transform=True):
             )
         if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
             srefs.add(off)
+
+        # Restore saved stack state at jump targets
+        if off in saved_stacks:
+            stack = deque(saved_stacks[off])
+
         stack_backup = list(stack)
         try:
             res = ops.get(stat.name, defop)(stat, stack, game)
@@ -5870,6 +5880,12 @@ def decompile_script(elem, game, verbose=False, transform=True):
             #     # '\t\t\t\t',
             #     # defop(stat, stack, bytecode),
             # )
+
+            # Save stack state for jump targets
+            if isinstance(res, (ConditionalJump, UnconditionalJump)):
+                target = res.ref.abs
+                if target not in saved_stacks:
+                    saved_stacks[target] = list(stack)
     yield from print_locals(indent)
     l_vars.clear()
     yield from print_asts(
