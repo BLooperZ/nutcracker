@@ -174,6 +174,8 @@ pres = {
     'or': 11,
 }
 
+ARITH_OPS = frozenset('+-*/%')  # self-parenthesize so each formula is one token
+
 
 class BinExpr:
     def __init__(self, op, left, right):
@@ -204,6 +206,7 @@ class BinExpr:
             or isinstance(left, Negate)
             or (
                 isinstance(left, BinExpr)
+                and left.op not in ARITH_OPS
                 and left.pre >= self.pre
                 and left.op != self.op
             )
@@ -215,11 +218,14 @@ class BinExpr:
             or isinstance(right, Negate)
             or (
                 isinstance(right, BinExpr)
+                and right.op not in ARITH_OPS
                 and right.pre >= self.pre
                 and right.op != self.op
             )
         ):
             right = f'({right})'
+        if self.op in ARITH_OPS:
+            return f'({left} {self.op} {right})'
         return f'{left} {self.op} {right}'
 
 
@@ -2406,9 +2412,10 @@ def o6_cursorCommand(op, stack, game):
         if game.he_version >= 70 or game.version >= 7:
             # TODO: Figure out object?
             return f'cursor {stack.pop()}'
-        # TODO: another pop for non HE or HE < 70 games
-        image = stack.pop()
-        return f'cursor {stack.pop()} image {image}'
+        # Non-HE / HE<70 (v6): setCursorFromImg(obj, room). ScummVM popRoomAndObj pops
+        # room first, then obj; emit obj first so this reads 'cursor image <obj> room <room>'.
+        room = stack.pop()
+        return f'cursor image {stack.pop()} room {room}'
     elif cmd.num == 0x9A:
         ypos = stack.pop()
         xpos = stack.pop()
@@ -5799,6 +5806,10 @@ def decompile_script(elem, game, verbose=False, transform=True):
     asts = deque()
     res = None
 
+    # Stack state tracking for proper control flow handling
+    # Maps jump target addresses to saved stack states
+    saved_stacks = {}
+
     # # clear local variables:
     # for key in g_vars:  # NOTE: dict key is tuple, we iterates on keys only
     #     _, var = key
@@ -5840,6 +5851,7 @@ def decompile_script(elem, game, verbose=False, transform=True):
             yield f'\tverb {entries[off + 8]} {{'
             indent = 2 * '\t'
             stack.clear()
+            saved_stacks.clear()
         if verbose:
             yield ' '.join(
                 [
@@ -5850,6 +5862,11 @@ def decompile_script(elem, game, verbose=False, transform=True):
             )
         if isinstance(res, ConditionalJump) or isinstance(res, UnconditionalJump):
             srefs.add(off)
+
+        # Restore saved stack state at jump targets
+        if off in saved_stacks:
+            stack = deque(saved_stacks[off])
+
         stack_backup = list(stack)
         try:
             res = ops.get(stat.name, defop)(stat, stack, game)
@@ -5870,6 +5887,12 @@ def decompile_script(elem, game, verbose=False, transform=True):
             #     # '\t\t\t\t',
             #     # defop(stat, stack, bytecode),
             # )
+
+            # Save stack state for jump targets
+            if isinstance(res, (ConditionalJump, UnconditionalJump)):
+                target = res.ref.abs
+                if target not in saved_stacks:
+                    saved_stacks[target] = list(stack)
     yield from print_locals(indent)
     l_vars.clear()
     yield from print_asts(
