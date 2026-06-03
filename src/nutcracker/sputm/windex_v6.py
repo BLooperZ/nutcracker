@@ -2406,9 +2406,10 @@ def o6_cursorCommand(op, stack, game):
         if game.he_version >= 70 or game.version >= 7:
             # TODO: Figure out object?
             return f'cursor {stack.pop()}'
-        # TODO: another pop for non HE or HE < 70 games
-        image = stack.pop()
-        return f'cursor {stack.pop()} image {image}'
+        # Non-HE / HE<70 (v6): setCursorFromImg(obj, room). ScummVM popRoomAndObj pops
+        # room first, then obj; emit obj first so this reads 'cursor image <obj> room <room>'.
+        room = stack.pop()
+        return f'cursor image {stack.pop()} room {room}'
     elif cmd.num == 0x9A:
         ypos = stack.pop()
         xpos = stack.pop()
