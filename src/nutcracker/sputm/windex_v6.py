@@ -174,6 +174,8 @@ pres = {
     'or': 11,
 }
 
+ARITH_OPS = frozenset('+-*/%')  # self-parenthesize so each formula is one token
+
 
 class BinExpr:
     def __init__(self, op, left, right):
@@ -204,6 +206,7 @@ class BinExpr:
             or isinstance(left, Negate)
             or (
                 isinstance(left, BinExpr)
+                and left.op not in ARITH_OPS
                 and left.pre >= self.pre
                 and left.op != self.op
             )
@@ -215,11 +218,14 @@ class BinExpr:
             or isinstance(right, Negate)
             or (
                 isinstance(right, BinExpr)
+                and right.op not in ARITH_OPS
                 and right.pre >= self.pre
                 and right.op != self.op
             )
         ):
             right = f'({right})'
+        if self.op in ARITH_OPS:
+            return f'({left} {self.op} {right})'
         return f'{left} {self.op} {right}'
 
 
